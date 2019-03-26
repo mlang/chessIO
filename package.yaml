@@ -1,0 +1,41 @@
+name:                chessIO
+version:             0.0.0.0
+github:              "mlang/chessIO"
+license:             BSD3
+author:              "Mario Lang"
+maintainer:          "mlang@blind.guru"
+copyright:           "2019 Mario Lang"
+
+description:         A simple chess move generation library
+
+dependencies:
+- base >= 4.8 && < 5
+- vector
+
+default-extensions:
+- BangPatterns
+- BinaryLiterals
+- DeriveGeneric
+- NamedFieldPuns
+- NumericUnderscores
+- TupleSections
+- ViewPatterns
+
+ghc-options:
+- -Wall
+- -O2
+
+library:
+  source-dirs: src
+  exposed-modules: Game.Chess
+
+tests:
+  perft:
+    main:                Perft.hs
+    source-dirs:         test
+    ghc-options: -threaded -rtsopts "-with-rtsopts=-N -s"
+    dependencies:
+    - chessIO
+    - directory
+    - parallel
+    - time
