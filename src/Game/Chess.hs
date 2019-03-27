@@ -15,16 +15,14 @@ to lay the ground for communicating with other programs or players, hence the
 package name chessIO.
 -}
 module Game.Chess (
-  -- * Representing chess positions
+  -- * Chess positions
   Position, startpos
-  -- * Converting from/to Forsyth-Edwards-Notation
+  -- ** Converting from/to Forsyth-Edwards-Notation
 , fromFEN, toFEN
   -- * Chess moves
 , Move
-  -- ** Converting from/to algebraic notation used by the Universal Chess Interface
-, fromUCI, toUCI
-  -- ** Validating that a move is actually legal in a given position
-, relativeTo
+  -- ** Converting from/to algebraic notation
+, fromSAN, fromUCI, toUCI
   -- ** Move generation
 , moves
   -- ** Executing moves
@@ -39,7 +37,89 @@ import Data.Maybe
 import Data.Vector.Unboxed (Vector, (!))
 import qualified Data.Vector.Unboxed as Vector
 import Data.Word
+import Text.Megaparsec
 import Text.Read
+
+import Control.Applicative.Combinators
+import Data.Functor (($>))
+import Data.Void
+import Text.Megaparsec
+import Text.Megaparsec.Char
+
+
+type Parser = Parsec Void String
+
+data From = File Int
+          | Rank Int
+          | Square Int
+          deriving (Show)
+
+san :: Parser (PieceType, Maybe From, Bool, Int, Maybe PieceType, Maybe Char)
+san = conv <$> piece
+           <*> location
+           <*> optional (optional (char '=') *> promo)
+           <*> optional (char '+' <|> char '#') where
+  conv pc (Nothing, Nothing, cap, to) = (pc, Nothing, cap, to,,)
+  conv pc (Just f, Nothing, cap, to) = (pc, Just (File f), cap, to,,)
+  conv pc (Nothing, Just r, cap, to) = (pc, Just (Rank r), cap, to,,)
+  conv pc (Just f, Just r, cap, to) = (pc, Just (Square $ r*8+f), cap, to,,)
+  piece = char 'N' $> Knight
+      <|> char 'B' $> Bishop
+      <|> char 'R' $> Rook
+      <|> char 'Q' $> Queen
+      <|> char 'K' $> King
+      <|> pure Pawn
+  location = try ((,,,) <$> (Just <$> file)
+                        <*> pure Nothing
+                        <*> capture
+                        <*> square)
+         <|> try ((,,,) <$> pure Nothing
+                        <*> (Just <$> rank)
+                        <*> capture
+                        <*> square)
+         <|> try ((,,,) <$> (Just <$> file)
+                        <*> (Just <$> rank)
+                        <*> capture
+                        <*> square)
+         <|>      (,,,) <$> pure Nothing
+                        <*> pure Nothing
+                        <*> capture
+                        <*> square
+  promo = char 'N' $> Knight
+      <|> char 'B' $> Bishop
+      <|> char 'R' $> Rook
+      <|> char 'Q' $> Queen
+  capture = option False $ char 'x' $> True
+  square = frToInt <$> file <*> rank
+  file = subtract (ord 'a') . ord <$> oneOf ['a'..'h']
+  rank = subtract (ord '1') . ord <$> oneOf ['1'..'8']
+  frToInt f r = r*8 + f
+
+fromSAN :: Position -> String -> Either String Move
+fromSAN pos s = case parse san "" s of
+  Right (pc, from, capture, to, promo, status) ->
+    case ms pc from to promo of
+      [m] -> Right m
+      [] -> Left "Illegal move"
+      _ -> Left "Ambiguous move"
+  Left err -> Left $ errorBundlePretty err
+ where
+  ms pc from to prm = filter (f from) $ moves pos where
+   f (Just (Square from)) (unpack -> (from', to', prm')) =
+     pAt pos from' == pc && from' == from && to' == to && prm' == prm
+   f (Just (File ff)) (unpack -> (from', to', prm')) =
+     pAt pos from' == pc && from' `mod` 8 == ff && to == to' && prm == prm'
+   f (Just (Rank fr)) (unpack -> (from', to', prm')) =
+     pAt pos from' == pc && from' `div` 8 == fr && to == to' && prm == prm'
+   f Nothing (unpack -> (from', to', prm')) =
+     pAt pos from' == pc && to == to' && prm == prm'
+  pAt (Position BB{wP, wN, wB, wR, wQ, wK, bP, bN, bB, bR, bQ, bK} _ _ _ _) sq
+    | (wP .|. bP) `testBit` sq = Pawn
+    | (wN .|. bN) `testBit` sq = Knight
+    | (wB .|. bB) `testBit` sq = Bishop
+    | (wR .|. bR) `testBit` sq = Rook
+    | (wQ .|. bQ) `testBit` sq = Queen
+    | otherwise                = King
 
 -- | The starting position as given by the FEN string
 --   "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1".
@@ -196,8 +276,8 @@ occupiedBy Black bb = bP bb .|. bN bb .|. bB bb .|. bR bb .|. bQ bb .|. bK bb
 occupied :: BB -> Word64
 occupied bb = occupiedBy White bb .|. occupiedBy Black bb
 
-empty :: BB -> Word64
-empty = complement . occupied
+notOccupied :: BB -> Word64
+notOccupied = complement . occupied
 
 foldBits :: (a -> Int -> a) -> a -> Word64 -> a
 foldBits _ a 0 = a
@@ -234,14 +314,15 @@ unpack (Move x) = ( fromIntegral (x .&. 0b111111)
     _ -> Nothing
 
 -- | Parse a move in the format used by the Universal Chess Interface protocol.
-fromUCI :: String -> Maybe Move
-fromUCI (fmap (splitAt 2) . splitAt 2 -> (from, (to, promo)))
+fromUCI :: Position -> String -> Maybe Move
+fromUCI pos (fmap (splitAt 2) . splitAt 2 -> (from, (to, promo)))
   | length from == 2 && length to == 2 && length promo == 0
-  = move <$> readCoord from <*> readCoord to
+  = move <$> readCoord from <*> readCoord to >>= relativeTo pos
   | length from == 2 && length to == 2 && length promo == 1
   = (\f t p -> move f t `promoteTo` p) <$> readCoord from
                                        <*> readCoord to
                                        <*> readPromo promo
+      >>= relativeTo pos
  where
   readCoord [f,r]
     | inRange ('a','h') f && inRange ('1','8') r
@@ -423,8 +504,9 @@ applyMove pos m@(unpack -> (from, to, promo))
     Black | bit from .&. rank7 .&. bP bb /= 0 && from - 16 == to -> bit (from - 8)
     _                                                            -> 0
 
+-- | Generate a list of possible moves for the given position.
 moves :: Position -> [Move]
-moves pos@Position{color} = filter (not . legal) $
+moves pos@Position{color} = filter (not . check) $
       pawnMoves pos
    <> slideMoves Bishop pos
    <> slideMoves Rook pos
@@ -432,7 +514,7 @@ moves pos@Position{color} = filter (not . legal) $
    <> knightMoves pos
    <> kingMoves pos
  where
-  legal m = let board' = board (applyMove pos m) in case color of
+  check m = let board' = board (applyMove pos m) in case color of
     White -> let kSq = bitScanForward (wK board') in
              attackedBy Black kSq board'
     Black -> let kSq = bitScanForward (bK board') in
@@ -440,9 +522,9 @@ moves pos@Position{color} = filter (not . legal) $
 
 pawnMoves :: Position -> [Move]
 pawnMoves (Position bb White flags _ _) =
-  wPawnMoves (wP bb) (empty bb) (occupiedBy Black bb .|. (flags .&. epMask))
+  wPawnMoves (wP bb) (notOccupied bb) (occupiedBy Black bb .|. (flags .&. epMask))
 pawnMoves (Position bb Black flags _ _) =
-  bPawnMoves (bP bb) (empty bb) (occupiedBy White bb .|. (flags .&. epMask))
+  bPawnMoves (bP bb) (notOccupied bb) (occupiedBy White bb .|. (flags .&. epMask))
 
 wPawnMoves :: Word64 -> Word64 -> Word64 -> [Move]
 wPawnMoves pawns empty opponentPieces =

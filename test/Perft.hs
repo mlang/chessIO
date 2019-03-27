@@ -15,7 +15,7 @@ main :: IO ()
 main = do
   start <- getCurrentTime
   exists <- doesFileExist "perftsuite.epd"
-  ok <- if exists
+  result <- if exists
     then do
       suite <- readTestSuite "perftsuite.epd"
       runTestSuite suite
@@ -23,10 +23,15 @@ main = do
       for_ [0..6] $ \n -> do
         putStrLn $ showResult n (perft n startpos)
         hFlush stdout
-      pure False
+      pure Nothing
   end <- getCurrentTime
+  case result of
+    Just PerftResult{nodes} -> putStrLn $
+       "nps: " <>
+       show (floor (realToFrac (fromIntegral nodes) / realToFrac (diffUTCTime end start)))
+    _ -> pure ()
   putStrLn $ "Time: " <> show (diffUTCTime end start)
-  exitWith $ if ok then ExitSuccess else ExitFailure 1
+  exitWith $ if isJust result then ExitSuccess else ExitFailure 1
 
 data PerftResult = PerftResult { nodes :: !Integer } deriving (Eq, Generic, Show)
 instance NFData PerftResult
@@ -48,23 +53,23 @@ perft 2 p = fold . map (perft 1) $ applyMove p <$> moves p
 perft n p = fold . withStrategy (parList rdeepseq) . map (perft $ pred n) $
             applyMove p <$> moves p
 
-runTestSuite :: [(Position, [(Int, PerftResult)])] -> IO Bool
-runTestSuite = fmap (all id) . traverse (uncurry test) where
-  test pos ((depth, expected) : more)
+runTestSuite :: [(Position, [(Int, PerftResult)])] -> IO (Maybe PerftResult)
+runTestSuite = fmap fold . traverse (uncurry (test mempty)) where
+  test sum pos ((depth, expected) : more)
     | result == expected
     = do
       putStrLn $ "OK   " <> fen <> " ;D" <> show depth <> " "
               <> show (nodes expected)
       hFlush stdout
-      test pos more
+      test (sum <> result) pos more
     | otherwise
     = do
       putStrLn $ "FAIL " <> fen <> " ;D" <> show depth <> " "
               <> show (nodes expected) <> " /= " <> show (nodes result)
-      pure False
+      pure Nothing
    where result = perft depth pos
          fen = toFEN pos
-  test _ [] = pure True
+  test sum _ [] = pure (Just sum)
 
 readTestSuite :: FilePath -> IO [(Position, [(Int, PerftResult)])]
 readTestSuite fp = do

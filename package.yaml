@@ -1,5 +1,5 @@
 name:                chessIO
-version:             0.0.0.0
+version:             0.1.0.0
 github:              "mlang/chessIO"
 license:             BSD3
 author:              "Mario Lang"
@@ -10,11 +10,14 @@ description:         A simple chess move generation library
 
 dependencies:
 - base >= 4.8 && < 5
+- megaparsec
+- parser-combinators
 - vector
 
 default-extensions:
 - BangPatterns
 - BinaryLiterals
+- BlockArguments
 - DeriveGeneric
 - NamedFieldPuns
 - NumericUnderscores
