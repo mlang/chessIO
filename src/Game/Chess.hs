@@ -16,7 +16,8 @@ package name chessIO.
 -}
 module Game.Chess (
   -- * Chess positions
-  Position, startpos
+  Color, opponent
+, Position, startpos, color
   -- ** Converting from/to Forsyth-Edwards-Notation
 , fromFEN, toFEN
   -- * Chess moves
@@ -248,7 +249,7 @@ toFEN (Position bb c flgs hm mn) = unwords [
     (r, f) = bitScanForward x `divMod` 8
   rank r = concatMap countEmpty $ groupBy (\x y -> x == y && x == ' ') $
            charAt r <$> [0..7]
-  countEmpty xs | head xs == ' ' = if length xs == 8 then "" else show (length xs)
+  countEmpty xs | head xs == ' ' = show $ length xs
                 | otherwise = xs
   charAt r f
     | wP bb `testBit` b = 'P'
@@ -286,6 +287,9 @@ bitScanForward = countTrailingZeros
 bitScanReverse = (63 -) . countLeadingZeros
 
 newtype Move = Move Word16 deriving (Eq)
+
+instance Show Move where
+  show = toUCI
 
 move :: Int -> Int -> Move
 move from to = Move $ fromIntegral from .|. fromIntegral to `unsafeShiftL` 6

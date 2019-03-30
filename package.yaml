@@ -12,9 +12,11 @@ dependencies:
 - attoparsec
 - base >= 4.8 && < 5
 - bytestring
+- extra
 - megaparsec
 - parser-combinators
 - process
+- stm
 - unordered-containers
 - vector
 

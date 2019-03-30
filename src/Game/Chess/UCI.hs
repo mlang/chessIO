@@ -1,14 +1,18 @@
 module Game.Chess.UCI (
-  Engine, name, author, options
+  Engine, name, author, options, initialPosition, history, currentPosition
 , start, start'
 , Option(..), getOption, setOptionSpinButton
+, move
 , quit, quit'
 ) where
 
 import Control.Applicative
 import Control.Concurrent
+import Control.Concurrent.STM
+import Control.Concurrent.STM.TChan
 import Control.Exception
 import Control.Monad
+import Control.Monad.Extra
 import Data.Attoparsec.Combinator
 import Data.Attoparsec.ByteString.Char8
 import Data.ByteString.Char8 (ByteString)
@@ -16,9 +20,12 @@ import qualified Data.ByteString.Char8 as BS
 import Data.Functor
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
+import Data.IORef
 import Data.Ix
+import Data.List
 import Data.Maybe
 import Data.String
+import Game.Chess
 import System.Exit
 import System.IO
 import System.Process
@@ -28,16 +35,43 @@ data Engine = Engine {
   inH :: Handle
 , outH :: Handle
 , procH :: ProcessHandle
+, infoChan :: TChan [Info]
+, infoThread :: Maybe ThreadId
 , name :: Maybe ByteString
 , author :: Maybe ByteString
 , options :: HashMap ByteString Option
+, initialPosition :: IORef Position
+, history :: IORef [Move]
 }
+
+data UCIException = SANError String deriving Show
+
+
+instance Exception UCIException
 
 data Command = Name ByteString
              | Author ByteString
              | Option ByteString Option
-             | UCIOk | ReadyOK
+             | UCIOk
+             | ReadyOK
+             | Info [Info]
+             | BestMove Move (Maybe Move)
              deriving (Show)
+
+data Info = PV [Move]
+          | Depth Int
+          | SelDepth Int
+          | Time Int
+          | MultiPV Int
+          | Score Int
+          | UpperBound
+          | LowerBound
+          | Nodes Int
+          | NPS Int
+          | TBHits Int
+          | HashFull Int
+          deriving Show
+
 
 data Option = CheckBox Bool
             | ComboBox { comboBoxValue :: ByteString, comboBoxValues :: [ByteString] }
@@ -49,8 +83,10 @@ data Option = CheckBox Bool
 instance IsString Option where
   fromString = String . BS.pack
 
-command :: Parser Command
-command = skipSpace *> choice [name, author, option, uciok, readyok] <* skipSpace
+command :: Position -> Parser Command
+command pos = skipSpace *> choice [
+    name, author, option, uciok, readyok, info, bestmove
+  ] <* skipSpace
  where
   name = fmap Name $
     "id" *> skipSpace *> "name" *> skipSpace *> takeByteString
@@ -88,6 +124,51 @@ command = skipSpace *> choice [name, author, option, uciok, readyok] <* skipSpac
   button = "button" $> Button
   uciok = "uciok" $> UCIOk
   readyok = "readyok" $> ReadyOK
+  info = do
+    "info"
+    skipSpace
+    Info <$> sepBy1 infoItem skipSpace
+  infoItem = Depth <$> ("depth" *> skipSpace *> decimal)
+         <|> SelDepth <$> ("seldepth" *> skipSpace *> decimal)
+         <|> MultiPV <$> ("multipv" *> skipSpace *> decimal)
+         <|> Score <$> ("score" *> skipSpace *> "cp" *> skipSpace *> signed decimal)
+         <|> UpperBound <$ "upperbound"
+         <|> LowerBound <$ "lowerbound"
+         <|> Nodes <$> ("nodes" *> skipSpace *> decimal)
+         <|> NPS <$> ("nps" *> skipSpace *> decimal)
+         <|> HashFull <$> ("hashfull" *> skipSpace *> decimal)
+         <|> TBHits <$> ("tbhits" *> skipSpace *> decimal)
+         <|> Time <$> ("time" *> skipSpace *> decimal)
+         <|> pv
+  pv = do
+    xs <- "pv" *> skipSpace *> sepBy mv skipSpace
+    PV . snd <$> foldM toMove (pos, []) xs
+  toMove (pos, xs) s = do
+    case fromUCI pos s of
+      Just m -> pure (applyMove pos m, xs <> [m])
+      Nothing -> fail $ "Failed to parse move " <> s
+  mv = asStr <$> satisfy f <*> satisfy r <*> satisfy f <*> satisfy r <*> optional (satisfy p) where
+    f = inRange ('a','h')
+    r = inRange ('1', '8')
+    p 'q' = True
+    p 'r' = True
+    p 'b' = True
+    p 'n' = True
+    p _ = False 
+    asStr a b c d Nothing = a:b:c:d:[]
+    asStr a b c d (Just e) = a:b:c:d:e:[]
+  bestmove = do
+    void "bestmove"
+    skipSpace
+    m <- mv
+    ponder <- optional $ skipSpace *> "ponder" *> skipSpace *> mv
+    case fromUCI pos m of
+      Just m' -> case ponder of
+        Nothing -> pure $ BestMove m' Nothing
+        Just p -> case fromUCI (applyMove pos m') p of
+          Just p' -> pure $ BestMove m' (Just p')
+          Nothing -> fail $ "Failed to parse ponder move " <> p
+      Nothing -> fail $ "Failed to parse best move " <> m
 
 start :: String -> [String] -> IO (Maybe Engine)
 start = start' 2000000
@@ -98,16 +179,22 @@ start' usec cmd args = do
       std_in = CreatePipe, std_out = CreatePipe
     }
   hSetBuffering inH LineBuffering
-  let c = Engine inH outH procH Nothing Nothing HashMap.empty
-  send "uci" c
-  timeout usec (initialise c) >>= \case
-    Just c' -> pure . Just $ c'
-    Nothing -> quit c >> pure Nothing
+  chan <- newTChanIO
+  pos <- newIORef startpos
+  ms <- newIORef []
+  let e = Engine inH outH procH chan Nothing Nothing Nothing HashMap.empty pos ms
+  send "uci" e
+  timeout usec (initialise e) >>= \case
+    Just e' -> do
+      tid <- forkIO (infoReader outH pos ms chan)
+      pure . Just $ e' { infoThread = Just tid }
+    Nothing -> quit e >> pure Nothing
 
 initialise :: Engine -> IO Engine
-initialise c@Engine{outH} = do
+initialise c@Engine{outH, initialPosition} = do
   l <- BS.hGetLine outH
-  case parseOnly (command <* endOfInput) l of
+  pos <- readIORef initialPosition
+  case parseOnly (command pos <* endOfInput) l of
     Left err -> do
       putStrLn err
       print l
@@ -116,6 +203,18 @@ initialise c@Engine{outH} = do
     Right (Author a) -> initialise (c { author = Just a })
     Right (Option name opt) -> initialise (c { options = HashMap.insert name opt $ options c })
     Right UCIOk -> pure c
+
+infoReader :: Handle -> IORef Position -> IORef [Move] -> TChan [Info] -> IO ()
+infoReader outH pos ms chan = forever $ do
+  l <- BS.hGetLine outH
+  pos <- currentPosition <$> readIORef pos <*> readIORef ms
+  case parseOnly (command pos <* endOfInput) l of
+    Left err -> do
+      putStrLn err
+      print l
+    Right (Info i) -> atomically $ writeTChan chan i
+    Right (BestMove bm _) -> atomicModifyIORef ms $ \h ->
+      (h <> [bm], ())
 
 send :: ByteString -> Engine -> IO ()
 send s Engine{inH, procH} = do
@@ -137,13 +236,44 @@ setOptionSpinButton n v c
  where
   set v opt@SpinButton{} = Just $ opt { spinButtonValue = v }
 
+currentPosition :: Position -> [Move] -> Position
+currentPosition initial history = do
+  foldl' applyMove initial history
+
+nextMove :: Engine -> IO Color
+nextMove Engine{initialPosition, history} = 
+  ifM (even . length <$> readIORef history)
+    (color <$> readIORef initialPosition)
+    (opponent . color <$> readIORef initialPosition)
+
+move :: String -> Engine -> IO ()
+move san e@Engine{initialPosition, history} = do
+  pos <- currentPosition <$> readIORef initialPosition <*> readIORef history
+  case fromSAN pos san of
+    Left err -> throwIO $ SANError err
+    Right m -> do
+      atomicModifyIORef' history \h -> (h <> [m], ())
+      sendPosition e
+
+sendPosition :: Engine -> IO ()
+sendPosition e@Engine{initialPosition, history} = do
+  pos <- readIORef initialPosition
+  ms <- readIORef history
+  BS.putStrLn (cmd pos ms)
+  send (cmd pos ms) e
+ where
+  cmd p h = "position fen " <> BS.pack (toFEN p) <> line h
+  line h
+    | null h    = ""
+    | otherwise = " moves " <> BS.unwords (BS.pack . toUCI <$> h)
+
 quit :: Engine -> IO (Maybe ExitCode)
 quit = quit' 1000000
 
 quit' :: Int -> Engine -> IO (Maybe ExitCode)
-quit' usec c@Engine{procH} = do
-  (pure . Just) `handle` do
-    send "quit" c
-    timeout usec (waitForProcess procH) >>= \case
-      Just ec -> pure $ Just ec
-      Nothing -> terminateProcess procH $> Nothing
+quit' usec c@Engine{procH, infoThread} = (pure . Just) `handle` do
+  maybe (pure ()) killThread infoThread
+  send "quit" c
+  timeout usec (waitForProcess procH) >>= \case
+    Just ec -> pure $ Just ec
+    Nothing -> terminateProcess procH $> Nothing
