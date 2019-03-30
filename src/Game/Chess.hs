@@ -29,23 +29,20 @@ module Game.Chess (
 , applyMove
 ) where
 
+import Control.Applicative.Combinators
 import Data.Bits
 import Data.Char
+import Data.Functor (($>))
 import Data.Ix
 import Data.List
 import Data.Maybe
 import Data.Vector.Unboxed (Vector, (!))
+import Data.Void
 import qualified Data.Vector.Unboxed as Vector
 import Data.Word
 import Text.Megaparsec
-import Text.Read
-
-import Control.Applicative.Combinators
-import Data.Functor (($>))
-import Data.Void
-import Text.Megaparsec
 import Text.Megaparsec.Char
-
+import Text.Read
 
 type Parser = Parsec Void String
 
@@ -229,7 +226,7 @@ rfBit (r,f) | inRange (0,7) r && inRange (0,7) f = bit $ r*8 + f
 
 -- | Convert a position to Forsyth-Edwards-Notation.
 toFEN :: Position -> String
-toFEN (Position bb c flgs hm mn) = intercalate " " [
+toFEN (Position bb c flgs hm mn) = unwords [
     intercalate "/" (rank <$> [7,6..0])
   , showColor c, showCst (flgs `clearMask` epMask), showEP (flgs .&. epMask), show hm, show mn
   ]
@@ -316,7 +313,7 @@ unpack (Move x) = ( fromIntegral (x .&. 0b111111)
 -- | Parse a move in the format used by the Universal Chess Interface protocol.
 fromUCI :: Position -> String -> Maybe Move
 fromUCI pos (fmap (splitAt 2) . splitAt 2 -> (from, (to, promo)))
-  | length from == 2 && length to == 2 && length promo == 0
+  | length from == 2 && length to == 2 && null promo
   = move <$> readCoord from <*> readCoord to >>= relativeTo pos
   | length from == 2 && length to == 2 && length promo == 1
   = (\f t p -> move f t `promoteTo` p) <$> readCoord from
@@ -338,7 +335,7 @@ fromUCI pos (fmap (splitAt 2) . splitAt 2 -> (from, (to, promo)))
 toUCI :: Move -> String
 toUCI (unpack -> (from, to, promo)) = coord from <> coord to <> p where
   coord x = let (r,f) = x `divMod` 8 in
-            chr (f + (ord 'a')) : [chr (r + (ord '1'))]
+            chr (f + ord 'a') : [chr (r + ord '1')]
   p = case promo of
     Just Queen -> "q"
     Just Rook -> "r"
@@ -348,7 +345,7 @@ toUCI (unpack -> (from, to, promo)) = coord from <> coord to <> p where
 
 -- | Validate that a certain move is legal in the given position.
 relativeTo :: Position -> Move -> Maybe Move
-relativeTo pos m | m `elem` (moves pos) = Just m
+relativeTo pos m | m `elem` moves pos = Just m
                  | otherwise = Nothing
 
 shiftN, shiftNNE, shiftNE, shiftENE, shiftE, shiftESE, shiftSE, shiftSSE, shiftS, shiftSSW, shiftSW, shiftWSW, shiftW, shiftWNW, shiftNW, shiftNNW :: Word64 -> Word64
@@ -373,28 +370,28 @@ applyMove :: Position -> Move -> Position
 applyMove pos m@(unpack -> (from, to, promo))
   | m == wKscm && flags pos `testMask` crwKs
   = pos { board = bb { wK = wK bb `xor` mask
-                     , wR = wR bb `xor` (bit (fromEnum H1) `setBit` (fromEnum F1))
+                     , wR = wR bb `xor` (bit (fromEnum H1) `setBit` fromEnum F1)
                      }
         , color = opponent (color pos)
         , flags = flags pos `clearMask` (rank1 .|. epMask)
         }
   | m == wQscm && flags pos `testMask` crwQs
   = pos { board = bb { wK = wK bb `xor` mask
-                     , wR = wR bb `xor` (bit (fromEnum A1) `setBit` (fromEnum D1))
+                     , wR = wR bb `xor` (bit (fromEnum A1) `setBit` fromEnum D1)
                      }
         , color = opponent (color pos)
         , flags = flags pos `clearMask` (rank1 .|. epMask)
         }
   | m == bKscm && flags pos `testMask` crbKs
   = pos { board = bb { bK = bK bb `xor` mask
-                     , bR = bR bb `xor` (bit (fromEnum H8) `setBit` (fromEnum F8))
+                     , bR = bR bb `xor` (bit (fromEnum H8) `setBit` fromEnum F8)
                      }
         , color = opponent (color pos)
         , flags = flags pos `clearMask` (rank8 .|. epMask)
         }
   | m == bQscm && flags pos `testMask` crbQs
   = pos { board = bb { bK = bK bb `xor` mask
-                     , bR = bR bb `xor` (bit (fromEnum A8) `setBit` (fromEnum D8))
+                     , bR = bR bb `xor` (bit (fromEnum A8) `setBit` fromEnum D8)
                      }
         , color = opponent (color pos)
         , flags = flags pos `clearMask` (rank8 .|. epMask)

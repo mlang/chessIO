@@ -9,9 +9,13 @@ copyright:           "2019 Mario Lang"
 description:         A simple chess move generation library
 
 dependencies:
+- attoparsec
 - base >= 4.8 && < 5
+- bytestring
 - megaparsec
 - parser-combinators
+- process
+- unordered-containers
 - vector
 
 default-extensions:
@@ -19,18 +23,22 @@ default-extensions:
 - BinaryLiterals
 - BlockArguments
 - DeriveGeneric
+- LambdaCase
 - NamedFieldPuns
 - NumericUnderscores
+- OverloadedStrings
 - TupleSections
 - ViewPatterns
 
 ghc-options:
 - -Wall
-- -O2
+- -O
 
 library:
   source-dirs: src
-  exposed-modules: Game.Chess
+  exposed-modules:
+  - Game.Chess
+  - Game.Chess.UCI
 
 tests:
   perft:
