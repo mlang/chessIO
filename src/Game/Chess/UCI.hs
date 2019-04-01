@@ -1,5 +1,5 @@
 module Game.Chess.UCI (
-  UCIException
+  UCIException(..)
 , Engine, name, author, options, game
 , currentPosition, readInfo, tryReadInfo, readBestMove, tryReadBestMove
 , start, start', isready
@@ -61,7 +61,9 @@ readBestMove = readTChan . bestMoveChan
 tryReadBestMove :: Engine -> STM (Maybe (Move, Maybe Move))
 tryReadBestMove = tryReadTChan . bestMoveChan
 
-data UCIException = SANError String deriving Show
+data UCIException = SANError String
+                  | IllegalMove Move
+                  deriving Show
 
 
 instance Exception UCIException
@@ -266,18 +268,25 @@ nextMove Engine{game} = do
   pure $ if even . length $ history then color initialPosition else opponent . color $ initialPosition
 
 move :: Engine -> String -> IO ()
-move e@Engine{game} san = do
+move e@Engine{game} s = do
   pos <- currentPosition e
-  case fromSAN pos san of
-    Left err -> throwIO $ SANError err
-    Right m -> do
+  case fromUCI pos s of
+    Just m -> do
       addMove e m
       sendPosition e
+    Nothing -> case fromSAN pos s of
+      Left err -> throwIO $ SANError err
+      Right m -> do
+        addMove e m
+        sendPosition e
 
 addMove :: Engine -> Move -> IO ()
-addMove e@Engine{game} m =
-  atomicModifyIORef' game \g -> (fmap (<> [m]) g, ())
-
+addMove e@Engine{game} m = do
+  pos <- currentPosition e
+  if m `elem` moves pos
+    then atomicModifyIORef' game \g -> (fmap (<> [m]) g, ())
+    else throwIO $ IllegalMove m
+    
 sendPosition :: Engine -> IO ()
 sendPosition e@Engine{game} = do
   readIORef game >>= (flip send) e . cmd

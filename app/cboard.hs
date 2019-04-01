@@ -33,8 +33,16 @@ main = getArgs >>= \case
         exitWith $ ExitFailure 2
       Just e -> do
         s <- S e Nothing <$> newIORef Nothing
-        runInputT defaultSettings chessIO `evalStateT` s
+        runInputT (setComplete (completeSAN e) defaultSettings) chessIO `evalStateT` s
         exitWith ExitSuccess
+
+completeSAN :: MonadIO m => UCI.Engine -> CompletionFunc m
+completeSAN e = completeWord Nothing "" $ \w ->
+  fmap (map mkCompletion . filter (w `isPrefixOf`)) $ do
+    pos <- liftIO $ UCI.currentPosition e
+    pure $ map toUCI $ moves pos
+ where
+  mkCompletion s = (simpleCompletion s) { isFinished = False }
 
 chessIO :: InputT (StateT S IO) ()
 chessIO = do
@@ -115,4 +123,5 @@ printPV externalPrint engine = forever $ do
   isPV _        = False
 
 printUCIException :: UCI.UCIException -> IO ()
-printUCIException e = print e
+printUCIException (UCI.SANError e) = putStrLn e
+printUCIException (UCI.IllegalMove m) = putStrLn $ "Illegal move: " <> show m
