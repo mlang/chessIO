@@ -5,6 +5,7 @@ import Control.Concurrent.STM
 import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
+import Control.Monad.State.Strict
 import Data.Char
 import Data.IORef
 import Data.List
@@ -15,50 +16,71 @@ import System.Console.Haskeline hiding (catch, handle)
 import System.Exit
 import System.Environment
 
-main = do
-  args <- getArgs
-  case args of
-    [] -> do
-      putStrLn "Please specify a UCI engine at the command line"
-      exitWith $ ExitFailure 1
-    (cmd:args) -> exitWith =<< runInputT defaultSettings (chessIO cmd args)
+data S = S {
+  engine :: UCI.Engine
+, mover :: Maybe ThreadId
+, hintRef :: IORef (Maybe Move)
+}
 
-chessIO :: String -> [String] -> InputT IO ExitCode
-chessIO cmd args = do
+main = getArgs >>= \case
+  [] -> do
+    putStrLn "Please specify a UCI engine at the command line"
+    exitWith $ ExitFailure 1
+  (cmd:args) -> do
+    UCI.start cmd args >>= \case
+      Nothing -> do
+        putStrLn "Unable to initialise engine, maybe it doesn't speak UCI?"
+        exitWith $ ExitFailure 2
+      Just e -> do
+        s <- S e Nothing <$> newIORef Nothing
+        runInputT defaultSettings chessIO `evalStateT` s
+        exitWith ExitSuccess
+
+chessIO :: InputT (StateT S IO) ()
+chessIO = do
   externalPrint <- getExternalPrint
-  me <- liftIO $ UCI.start' 1000000 externalPrint cmd args
-  case me of
-    Nothing -> do
-      outputStrLn "Unable to initialise engine, maybe it doesn't speak UCI?"
-      pure $ ExitFailure 2
-    Just engine -> do
-      liftIO . forkIO $ printPV externalPrint engine
-      loop engine
-      void . liftIO $ UCI.quit engine
-      pure ExitSuccess
+  e <- lift $ gets engine
+  hr <- lift $ gets hintRef
+  tid <- liftIO . forkIO $ doBestMove externalPrint hr e
+  lift $ modify' $ \s -> s { mover = Just tid }
+  outputBoard
+  loop
+  void . liftIO $ UCI.quit e
 
-loop :: UCI.Engine -> InputT IO ()
-loop engine = do
+outputBoard :: InputT (StateT S IO) ()
+outputBoard = do
+  e <- lift $ gets engine
   liftIO $ do
-    pos <- UCI.currentPosition engine
-    printBoard pos
-  minput <- getInputLine "> "
-  case minput of
+    pos <- UCI.currentPosition e
+    printBoard putStrLn pos
+
+loop :: InputT (StateT S IO) ()
+loop = do
+  e <- lift $ gets engine
+  getInputLine "> " >>= \case
     Nothing -> pure ()
     Just input
-      | null input -> loop engine
+      | null input -> loop
       | Just position <- fromFEN input -> do
         outputStrLn $ toFEN position
-        loop engine
+        loop
+      | input == "hint" -> do
+        lift (gets hintRef) >>= liftIO . readIORef >>= \case
+          Just hint -> outputStrLn $ "Try " <> show hint
+          Nothing -> outputStrLn "Sorry, no hint available"
+        loop
       | otherwise -> do
         liftIO $ do
           printUCIException `handle` do
-            UCI.move input engine
-            UCI.send "go wtime 10000 btime 10000" engine
-        loop engine
+            UCI.move e input
+            UCI.send "go movetime 1000" e
+        outputBoard
+        loop
 
-printBoard :: Position -> IO ()
-printBoard pos = putStr . unlines $ (map . map) pc (reverse $ chunksOf 8 [A1 .. H8]) where
+printBoard :: (String -> IO ()) -> Position -> IO ()
+printBoard externalPrint pos = externalPrint . init . unlines $
+  (map . map) pc (reverse $ chunksOf 8 [A1 .. H8])
+ where
   pc sq = (if isDark sq then toUpper else toLower) case pieceAt pos sq of
     Just (White, Pawn)   -> 'P'
     Just (White, Knight) -> 'N'
@@ -74,6 +96,14 @@ printBoard pos = putStr . unlines $ (map . map) pc (reverse $ chunksOf 8 [A1 .. 
     Just (Black, King)   -> 'J'
     Nothing | isDark sq -> '.'
             | otherwise -> ' '
+doBestMove :: (String -> IO ()) -> IORef (Maybe Move) -> UCI.Engine -> IO ()
+doBestMove externalPrint hintRef e = forever $ do
+  (bm, ponder) <- atomically . UCI.readBestMove $ e
+  UCI.addMove e bm
+  externalPrint $ "< " <> show bm
+  UCI.currentPosition e >>= printBoard externalPrint
+  writeIORef hintRef ponder
+
 printPV :: (String -> IO ()) -> UCI.Engine -> IO ()
 printPV externalPrint engine = forever $ do
   info <- atomically . UCI.readInfo $ engine

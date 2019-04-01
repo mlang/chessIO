@@ -1,12 +1,12 @@
 module Game.Chess.UCI (
   UCIException
 , Engine, name, author, options, game
-, currentPosition, readInfo, tryReadInfo
+, currentPosition, readInfo, tryReadInfo, readBestMove, tryReadBestMove
 , start, start', isready
 , Option(..), getOption, setOptionSpinButton
 , Info(..)
 , send
-, move
+, addMove, move
 , quit, quit'
 ) where
 
@@ -16,7 +16,6 @@ import Control.Concurrent.STM
 import Control.Concurrent.STM.TChan
 import Control.Exception
 import Control.Monad
-import Control.Monad.Extra
 import Data.Attoparsec.Combinator
 import Data.Attoparsec.ByteString.Char8
 import Data.ByteString.Char8 (ByteString)
@@ -88,6 +87,8 @@ data Info = PV [Move]
           | NPS Int
           | TBHits Int
           | HashFull Int
+          | CurrMove ByteString
+          | CurrMoveNumber Int
           deriving Show
 
 data Option = CheckBox Bool
@@ -157,14 +158,16 @@ command pos = skipSpace *> choice [
          <|> TBHits <$> ("tbhits" *> skipSpace *> decimal)
          <|> Time <$> ("time" *> skipSpace *> decimal)
          <|> pv
+         <|> CurrMove <$> ("currmove" *> skipSpace *> mv)
+         <|> CurrMoveNumber <$> ("currmovenumber" *> skipSpace *> decimal)
   pv = do
-    xs <- "pv" *> skipSpace *> sepBy mv skipSpace
+    xs <- (fmap . fmap) BS.unpack $ "pv" *> skipSpace *> sepBy mv skipSpace
     PV . snd <$> foldM toMove (pos, []) xs
   toMove (pos, xs) s = do
     case fromUCI pos s of
       Just m -> pure (applyMove pos m, xs <> [m])
       Nothing -> fail $ "Failed to parse move " <> s
-  mv = fmap (BS.unpack . fst) $ match $ satisfy f *> satisfy r *> satisfy f *> satisfy r *> optional (satisfy p) where
+  mv = fmap fst $ match $ satisfy f *> satisfy r *> satisfy f *> satisfy r *> optional (satisfy p) where
     f = inRange ('a','h')
     r = inRange ('1', '8')
     p 'q' = True
@@ -175,8 +178,9 @@ command pos = skipSpace *> choice [
   bestmove = do
     void "bestmove"
     skipSpace
-    m <- mv
-    ponder <- optional $ skipSpace *> "ponder" *> skipSpace *> mv
+    m <- BS.unpack <$> mv
+    ponder <- (fmap . fmap) BS.unpack $
+              optional (skipSpace *> "ponder" *> skipSpace *> mv)
     case fromUCI pos m of
       Just m' -> case ponder of
         Nothing -> pure $ BestMove (m', Nothing)
@@ -261,14 +265,18 @@ nextMove Engine{game} = do
   (initialPosition, history) <- readIORef game
   pure $ if even . length $ history then color initialPosition else opponent . color $ initialPosition
 
-move :: String -> Engine -> IO ()
-move san e@Engine{game} = do
+move :: Engine -> String -> IO ()
+move e@Engine{game} san = do
   pos <- currentPosition e
   case fromSAN pos san of
     Left err -> throwIO $ SANError err
     Right m -> do
-      atomicModifyIORef' game \g -> (fmap (<> [m]) g, ())
+      addMove e m
       sendPosition e
+
+addMove :: Engine -> Move -> IO ()
+addMove e@Engine{game} m =
+  atomicModifyIORef' game \g -> (fmap (<> [m]) g, ())
 
 sendPosition :: Engine -> IO ()
 sendPosition e@Engine{game} = do

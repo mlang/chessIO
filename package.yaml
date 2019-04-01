@@ -12,7 +12,6 @@ dependencies:
 - attoparsec
 - base >= 4.8 && < 5
 - bytestring
-- extra
 - megaparsec
 - parser-combinators
 - process
@@ -52,6 +51,7 @@ executables:
     dependencies:
     - chessIO
     - haskeline
+    - mtl
     - split
 
 tests:
