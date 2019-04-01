@@ -28,6 +28,7 @@ default-extensions:
 - LambdaCase
 - NamedFieldPuns
 - NumericUnderscores
+- RecordWildCards
 - OverloadedStrings
 - TupleSections
 - ViewPatterns
@@ -41,6 +42,17 @@ library:
   exposed-modules:
   - Game.Chess
   - Game.Chess.UCI
+
+executables:
+  chessIO:
+    main:                chessIO.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    dependencies:
+    - chessIO
+    - haskeline
+    - split
 
 tests:
   perft:

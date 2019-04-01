@@ -1,7 +1,11 @@
 module Game.Chess.UCI (
-  Engine, name, author, options, initialPosition, history, currentPosition
-, start, start'
+  UCIException
+, Engine, name, author, options, game
+, currentPosition, readInfo, tryReadInfo
+, start, start', isready
 , Option(..), getOption, setOptionSpinButton
+, Info(..)
+, send
 , move
 , quit, quit'
 ) where
@@ -35,14 +39,28 @@ data Engine = Engine {
   inH :: Handle
 , outH :: Handle
 , procH :: ProcessHandle
-, infoChan :: TChan [Info]
+, outputStrLn :: String -> IO ()
 , infoThread :: Maybe ThreadId
 , name :: Maybe ByteString
 , author :: Maybe ByteString
 , options :: HashMap ByteString Option
-, initialPosition :: IORef Position
-, history :: IORef [Move]
+, isReady :: MVar ()
+, infoChan :: TChan [Info]
+, bestMoveChan :: TChan (Move, Maybe Move)
+, game :: IORef (Position, [Move])
 }
+
+readInfo :: Engine -> STM [Info]
+readInfo = readTChan . infoChan
+
+tryReadInfo :: Engine -> STM (Maybe [Info])
+tryReadInfo = tryReadTChan . infoChan
+
+readBestMove :: Engine -> STM (Move, Maybe Move)
+readBestMove = readTChan . bestMoveChan
+
+tryReadBestMove :: Engine -> STM (Maybe (Move, Maybe Move))
+tryReadBestMove = tryReadTChan . bestMoveChan
 
 data UCIException = SANError String deriving Show
 
@@ -55,7 +73,7 @@ data Command = Name ByteString
              | UCIOk
              | ReadyOK
              | Info [Info]
-             | BestMove Move (Maybe Move)
+             | BestMove !(Move, (Maybe Move))
              deriving (Show)
 
 data Info = PV [Move]
@@ -71,7 +89,6 @@ data Info = PV [Move]
           | TBHits Int
           | HashFull Int
           deriving Show
-
 
 data Option = CheckBox Bool
             | ComboBox { comboBoxValue :: ByteString, comboBoxValues :: [ByteString] }
@@ -147,7 +164,7 @@ command pos = skipSpace *> choice [
     case fromUCI pos s of
       Just m -> pure (applyMove pos m, xs <> [m])
       Nothing -> fail $ "Failed to parse move " <> s
-  mv = asStr <$> satisfy f <*> satisfy r <*> satisfy f <*> satisfy r <*> optional (satisfy p) where
+  mv = fmap (BS.unpack . fst) $ match $ satisfy f *> satisfy r *> satisfy f *> satisfy r *> optional (satisfy p) where
     f = inRange ('a','h')
     r = inRange ('1', '8')
     p 'q' = True
@@ -155,8 +172,6 @@ command pos = skipSpace *> choice [
     p 'b' = True
     p 'n' = True
     p _ = False 
-    asStr a b c d Nothing = a:b:c:d:[]
-    asStr a b c d (Just e) = a:b:c:d:e:[]
   bestmove = do
     void "bestmove"
     skipSpace
@@ -164,58 +179,59 @@ command pos = skipSpace *> choice [
     ponder <- optional $ skipSpace *> "ponder" *> skipSpace *> mv
     case fromUCI pos m of
       Just m' -> case ponder of
-        Nothing -> pure $ BestMove m' Nothing
+        Nothing -> pure $ BestMove (m', Nothing)
         Just p -> case fromUCI (applyMove pos m') p of
-          Just p' -> pure $ BestMove m' (Just p')
+          Just p' -> pure $ BestMove (m', (Just p'))
           Nothing -> fail $ "Failed to parse ponder move " <> p
       Nothing -> fail $ "Failed to parse best move " <> m
 
 start :: String -> [String] -> IO (Maybe Engine)
-start = start' 2000000
+start = start' 2000000 putStrLn
 
-start' :: Int -> String -> [String] -> IO (Maybe Engine)
-start' usec cmd args = do
+start' :: Int -> (String -> IO ()) -> String -> [String] -> IO (Maybe Engine)
+start' usec outputStrLn cmd args = do
   (Just inH, Just outH, Nothing, procH) <- createProcess (proc cmd args) {
       std_in = CreatePipe, std_out = CreatePipe
     }
   hSetBuffering inH LineBuffering
-  chan <- newTChanIO
-  pos <- newIORef startpos
-  ms <- newIORef []
-  let e = Engine inH outH procH chan Nothing Nothing Nothing HashMap.empty pos ms
+  e <- Engine inH outH procH outputStrLn Nothing Nothing Nothing HashMap.empty <$>
+       newEmptyMVar <*> newTChanIO <*> newTChanIO <*> newIORef (startpos, [])
   send "uci" e
   timeout usec (initialise e) >>= \case
     Just e' -> do
-      tid <- forkIO (infoReader outH pos ms chan)
+      tid <- forkIO . infoReader $ e'
       pure . Just $ e' { infoThread = Just tid }
-    Nothing -> quit e >> pure Nothing
+    Nothing -> quit e $> Nothing
 
 initialise :: Engine -> IO Engine
-initialise c@Engine{outH, initialPosition} = do
+initialise c@Engine{outH, outputStrLn, game} = do
   l <- BS.hGetLine outH
-  pos <- readIORef initialPosition
-  case parseOnly (command pos <* endOfInput) l of
+  pos <- fst <$> readIORef game
+  if BS.null l then initialise c else case parseOnly (command pos <* endOfInput) l of
     Left err -> do
-      putStrLn err
-      print l
+      outputStrLn . BS.unpack $ l
       initialise c
     Right (Name n) -> initialise (c { name = Just n })
     Right (Author a) -> initialise (c { author = Just a })
     Right (Option name opt) -> initialise (c { options = HashMap.insert name opt $ options c })
     Right UCIOk -> pure c
 
-infoReader :: Handle -> IORef Position -> IORef [Move] -> TChan [Info] -> IO ()
-infoReader outH pos ms chan = forever $ do
+infoReader :: Engine -> IO ()
+infoReader e@Engine{..} = forever $ do
   l <- BS.hGetLine outH
-  pos <- currentPosition <$> readIORef pos <*> readIORef ms
+  pos <- currentPosition e
   case parseOnly (command pos <* endOfInput) l of
     Left err -> do
-      putStrLn err
-      print l
-    Right (Info i) -> atomically $ writeTChan chan i
-    Right (BestMove bm _) -> atomicModifyIORef ms $ \h ->
-      (h <> [bm], ())
+      outputStrLn $ err <> ":" <> show l
+    Right ReadyOK -> putMVar isReady ()
+    Right (Info i) -> atomically $ writeTChan infoChan i
+    Right (BestMove bm) -> atomically $ writeTChan bestMoveChan bm
 
+isready :: Engine -> IO ()
+isready e@Engine{isReady} = do
+  send "isready" e
+  takeMVar isReady
+  
 send :: ByteString -> Engine -> IO ()
 send s Engine{inH, procH} = do
   BS.hPutStrLn inH s
@@ -236,33 +252,29 @@ setOptionSpinButton n v c
  where
   set v opt@SpinButton{} = Just $ opt { spinButtonValue = v }
 
-currentPosition :: Position -> [Move] -> Position
-currentPosition initial history = do
-  foldl' applyMove initial history
+currentPosition :: Engine -> IO Position
+currentPosition Engine{game} =
+  uncurry (foldl' applyMove) <$> readIORef game
 
 nextMove :: Engine -> IO Color
-nextMove Engine{initialPosition, history} = 
-  ifM (even . length <$> readIORef history)
-    (color <$> readIORef initialPosition)
-    (opponent . color <$> readIORef initialPosition)
+nextMove Engine{game} = do
+  (initialPosition, history) <- readIORef game
+  pure $ if even . length $ history then color initialPosition else opponent . color $ initialPosition
 
 move :: String -> Engine -> IO ()
-move san e@Engine{initialPosition, history} = do
-  pos <- currentPosition <$> readIORef initialPosition <*> readIORef history
+move san e@Engine{game} = do
+  pos <- currentPosition e
   case fromSAN pos san of
     Left err -> throwIO $ SANError err
     Right m -> do
-      atomicModifyIORef' history \h -> (h <> [m], ())
+      atomicModifyIORef' game \g -> (fmap (<> [m]) g, ())
       sendPosition e
 
 sendPosition :: Engine -> IO ()
-sendPosition e@Engine{initialPosition, history} = do
-  pos <- readIORef initialPosition
-  ms <- readIORef history
-  BS.putStrLn (cmd pos ms)
-  send (cmd pos ms) e
+sendPosition e@Engine{game} = do
+  readIORef game >>= (flip send) e . cmd
  where
-  cmd p h = "position fen " <> BS.pack (toFEN p) <> line h
+  cmd (p, h) = "position fen " <> BS.pack (toFEN p) <> line h
   line h
     | null h    = ""
     | otherwise = " moves " <> BS.unwords (BS.pack . toUCI <$> h)

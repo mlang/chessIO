@@ -16,8 +16,10 @@ package name chessIO.
 -}
 module Game.Chess (
   -- * Chess positions
-  Color, opponent
-, Position, startpos, color
+  Color(..), opponent
+, Sq(..), isLight, isDark
+, PieceType(..)
+, Position, startpos, color, pieceAt
   -- ** Converting from/to Forsyth-Edwards-Notation
 , fromFEN, toFEN
   -- * Chess moves
@@ -94,6 +96,8 @@ san = conv <$> piece
   frToInt f r = r*8 + f
 
 fromSAN :: Position -> String -> Either String Move
+fromSAN Position{color, flags} "O-O" = Left "Unimplemented"
+fromSAN Position{color, flags} "O-O-O" = Left "Unimplemented"
 fromSAN pos s = case parse san "" s of
   Right (pc, from, capture, to, promo, status) ->
     case ms pc from to promo of
@@ -128,6 +132,22 @@ startpos = fromJust $
 data PieceType = Pawn | Knight | Bishop | Rook | Queen | King deriving (Eq, Show)
 data Color = White | Black deriving (Eq, Ord, Show)
 
+pieceAt :: Position -> Sq -> Maybe (Color, PieceType)
+pieceAt (board -> BB{wP, wN, wB, wR, wQ, wK, bP, bN, bB, bR, bQ, bK}) (fromEnum -> sq)
+  | wP `testBit` sq = Just (White, Pawn)
+  | wN `testBit` sq = Just (White, Knight)
+  | wB `testBit` sq = Just (White, Bishop)
+  | wR `testBit` sq = Just (White, Rook)
+  | wQ `testBit` sq = Just (White, Queen)
+  | wK `testBit` sq = Just (White, King)
+  | bP `testBit` sq = Just (Black, Pawn)
+  | bN `testBit` sq = Just (Black, Knight)
+  | bB `testBit` sq = Just (Black, Bishop)
+  | bR `testBit` sq = Just (Black, Rook)
+  | bQ `testBit` sq = Just (Black, Queen)
+  | bK `testBit` sq = Just (Black, King)
+  | otherwise       = Nothing
+
 opponent :: Color -> Color
 opponent White = Black
 opponent Black = White
@@ -144,6 +164,11 @@ data Sq = A1 | B1 | C1 | D1 | E1 | F1 | G1 | H1
         | A8 | B8 | C8 | D8 | E8 | F8 | G8 | H8
         deriving (Bounded, Enum, Eq, Show)
 
+isDark :: Sq -> Bool
+isDark (fromEnum -> sq) = (0xaa55aa55aa55aa55 :: Word64) `testBit` sq
+
+isLight :: Sq -> Bool
+isLight = not . isDark
 data Castling = Kingside | Queenside deriving (Eq, Ord, Show)
 
 data BB = BB { wP, wN, wB, wR, wQ, wK :: !Word64
