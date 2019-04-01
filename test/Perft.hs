@@ -48,10 +48,10 @@ showResult depth PerftResult{nodes} = show depth <> " " <> show nodes
 perft :: Int -> Position -> PerftResult
 perft 0 _ = PerftResult 1
 perft 1 p = PerftResult . fromIntegral . length $
-            applyMove p <$> moves p
-perft 2 p = fold . map (perft 1) $ applyMove p <$> moves p
+            unsafeApplyMove p <$> moves p
+perft 2 p = fold . map (perft 1) $ unsafeApplyMove p <$> moves p
 perft n p = fold . withStrategy (parList rdeepseq) . map (perft $ pred n) $
-            applyMove p <$> moves p
+            unsafeApplyMove p <$> moves p
 
 runTestSuite :: [(Position, [(Int, PerftResult)])] -> IO (Maybe PerftResult)
 runTestSuite = fmap fold . traverse (uncurry (test mempty)) where

@@ -29,7 +29,7 @@ module Game.Chess (
   -- ** Move generation
 , moves
   -- ** Executing moves
-, applyMove
+, applyMove, unsafeApplyMove
 ) where
 
 import Control.Applicative.Combinators
@@ -96,8 +96,18 @@ san = conv <$> piece
   frToInt f r = r*8 + f
 
 fromSAN :: Position -> String -> Either String Move
-fromSAN Position{color, flags} "O-O" = Left "Unimplemented"
-fromSAN Position{color, flags} "O-O-O" = Left "Unimplemented"
+fromSAN Position{color = White, flags} s
+  | s `elem` ["O-O", "0-0"] && flags `testMask` crwKs
+  = Right $ move (fromEnum E1) (fromEnum G1)
+fromSAN Position{color = Black, flags} s
+  | s `elem` ["O-O", "0-0"] && flags `testMask` crbKs
+  = Right $ move (fromEnum E8) (fromEnum G8)
+fromSAN Position{color = White, flags} s
+  | s `elem` ["O-O-O", "0-0-0"] && flags `testMask` crwQs
+  = Right $ move (fromEnum E1) (fromEnum C1)
+fromSAN Position{color = Black, flags} s
+  | s `elem` ["O-O-O", "0-0-0"] && flags `testMask` crbQs
+  = Right $ move (fromEnum E8) (fromEnum C8)
 fromSAN pos s = case parse san "" s of
   Right (pc, from, capture, to, promo, status) ->
     case ms pc from to promo of
@@ -130,7 +140,8 @@ startpos = fromJust $
   fromFEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
 data PieceType = Pawn | Knight | Bishop | Rook | Queen | King deriving (Eq, Show)
-data Color = White | Black deriving (Eq, Ord, Show)
+
+data Color = White | Black deriving (Eq, Show)
 
 pieceAt :: Position -> Sq -> Maybe (Color, PieceType)
 pieceAt (board -> BB{wP, wN, wB, wR, wQ, wK, bP, bN, bB, bR, bQ, bK}) (fromEnum -> sq)
@@ -359,6 +370,7 @@ fromUCI pos (fmap (splitAt 2) . splitAt 2 -> (from, (to, promo)))
   readPromo "b" = Just Bishop
   readPromo "n" = Just Knight
   readPromo _ = Nothing
+fromUCI _ _ = Nothing
 
 -- | Convert a move to the format used by the Universal Chess Interface protocol.
 toUCI :: Move -> String
@@ -396,7 +408,12 @@ shiftNW  w = w `unsafeShiftL` 7 .&. notHFile
 shiftNNW w = w `unsafeShiftL` 15 .&. notHFile
 
 applyMove :: Position -> Move -> Position
-applyMove pos m@(unpack -> (from, to, promo))
+applyMove p m
+  | m `elem` moves p = unsafeApplyMove p m
+  | otherwise        = error "Game.Chess.applyMove: Illegal move"
+
+unsafeApplyMove :: Position -> Move -> Position
+unsafeApplyMove pos m@(unpack -> (from, to, promo))
   | m == wKscm && flags pos `testMask` crwKs
   = pos { board = bb { wK = wK bb `xor` mask
                      , wR = wR bb `xor` (bit (fromEnum H1) `setBit` fromEnum F1)
@@ -540,7 +557,7 @@ moves pos@Position{color} = filter (not . check) $
    <> knightMoves pos
    <> kingMoves pos
  where
-  check m = let board' = board (applyMove pos m) in case color of
+  check m = let board' = board (unsafeApplyMove pos m) in case color of
     White -> let kSq = bitScanForward (wK board') in
              attackedBy Black kSq board'
     Black -> let kSq = bitScanForward (bK board') in
@@ -553,11 +570,11 @@ pawnMoves (Position bb Black flags _ _) =
   bPawnMoves (bP bb) (notOccupied bb) (occupiedBy White bb .|. (flags .&. epMask))
 
 wPawnMoves :: Word64 -> Word64 -> Word64 -> [Move]
-wPawnMoves pawns empty opponentPieces =
+wPawnMoves pawns emptySquares opponentPieces =
   foldBits (mkMove 9) (foldBits (mkMove 7) (foldBits (mkMove 8) (foldBits (mkMove 16) [] doublePushTargets) singlePushTargets) westCaptureTargets) eastCaptureTargets
  where
-  doublePushTargets = shiftN singlePushTargets .&. empty .&. rank4
-  singlePushTargets = shiftN pawns .&. empty
+  doublePushTargets = shiftN singlePushTargets .&. emptySquares .&. rank4
+  singlePushTargets = shiftN pawns .&. emptySquares
   eastCaptureTargets = shiftNE pawns .&. opponentPieces
   westCaptureTargets = shiftNW pawns .&. opponentPieces
   mkMove diff ms tsq
@@ -566,11 +583,11 @@ wPawnMoves pawns empty opponentPieces =
    where m = move (tsq - diff) tsq
 
 bPawnMoves :: Word64 -> Word64 -> Word64 -> [Move]
-bPawnMoves pawns empty opponentPieces =
+bPawnMoves pawns emptySquares opponentPieces =
   foldBits (mkMove 9) (foldBits (mkMove 7) (foldBits (mkMove 8) (foldBits (mkMove 16) [] doublePushTargets) singlePushTargets) eastCaptureTargets) westCaptureTargets
  where
-  doublePushTargets = shiftS singlePushTargets .&. empty .&. rank5
-  singlePushTargets = shiftS pawns .&. empty
+  doublePushTargets = shiftS singlePushTargets .&. emptySquares .&. rank5
+  singlePushTargets = shiftS pawns .&. emptySquares
   eastCaptureTargets = shiftSE pawns .&. opponentPieces
   westCaptureTargets = shiftSW pawns .&. opponentPieces
   mkMove diff ms tsq
@@ -734,6 +751,7 @@ getRayTargets sq dir occ = blocked $ attacks .&. occ where
     SW -> (bitScanReverse, attackSW)
     W  -> (bitScanReverse, attackW)
 
+attackDir :: (Word64 -> Word64) -> Vector Word64
 attackDir s = Vector.generate 64 $ \sq ->
   foldr (.|.) 0 $ take 7 $ tail $ iterate s (bit sq)
 
