@@ -1,12 +1,18 @@
-name:                chessIO
-version:             0.1.0.0
-github:              "mlang/chessIO"
-license:             BSD3
-author:              "Mario Lang"
-maintainer:          "mlang@blind.guru"
-copyright:           "2019 Mario Lang"
+name:        chessIO
+version:     0.1.0.0
+github:      "mlang/chessIO"
+license:     BSD3
+author:      "Mario Lang"
+maintainer:  "mlang@blind.guru"
+copyright:   "2019 Mario Lang"
 
-description:         A simple chess move generation library
+synopsis:    Basic chess move generation and UCI client library
+category:    Game
+description: A simple library for generating legal chess moves.
+  Also includes a module for communication with external processes that
+  speak the UCI (Universal Chess Interface) protocol.
+  On top of that, provides a console frontend program (cboard) that can be used
+  to interactively play against UCI engines.
 
 dependencies:
 - attoparsec
@@ -34,7 +40,6 @@ default-extensions:
 
 ghc-options:
 - -Wall
-- -O
 
 library:
   source-dirs: src
@@ -43,8 +48,8 @@ library:
   - Game.Chess.UCI
 
 executables:
-  chessIO:
-    main:                chessIO.hs
+  cboard:
+    main:                cboard.hs
     source-dirs:         app
     ghc-options:
     - -threaded
