@@ -1,12 +1,18 @@
 module Game.Chess.UCI (
+  -- * Exceptions
   UCIException(..)
-, Engine, name, author, options, game
-, currentPosition, readInfo, tryReadInfo, readBestMove, tryReadBestMove
-, start, start', isready
-, Option(..), getOption, setOptionSpinButton
-, Info(..)
+  -- * The Engine data type
+, Engine, name, author
+  -- * Engine options
+, Option(..), options, getOption, setOptionSpinButton
+  -- * Manipulating the current game information
+, currentPosition, setPosition, addMove, move
+  -- * Reading engine output
+, Info(..), readInfo, tryReadInfo
+, readBestMove, tryReadBestMove
+  -- * Starting and quitting a UCI engine
+, start, start'
 , send
-, addMove, move
 , quit, quit'
 ) where
 
@@ -60,6 +66,11 @@ readBestMove = readTChan . bestMoveChan
 
 tryReadBestMove :: Engine -> STM (Maybe (Move, Maybe Move))
 tryReadBestMove = tryReadTChan . bestMoveChan
+
+setPosition :: Engine -> Position -> IO ()
+setPosition e@Engine{game} p = do
+  atomicWriteIORef game (p, [])
+  sendPosition e
 
 data UCIException = SANError String
                   | IllegalMove Move

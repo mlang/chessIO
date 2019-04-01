@@ -22,6 +22,7 @@ data S = S {
 , hintRef :: IORef (Maybe Move)
 }
 
+main :: IO ()
 main = getArgs >>= \case
   [] -> do
     putStrLn "Please specify a UCI engine at the command line"
@@ -46,6 +47,15 @@ completeSAN e = completeWord Nothing "" $ \w ->
 
 chessIO :: InputT (StateT S IO) ()
 chessIO = do
+  outputStr . unlines $ [
+      ""
+    , "Enter a FEN string to set the starting position."
+    , "To make a move, enter a SAN or UCI string."
+    , "Type \"hint\" to ask for a suggestion."
+    , "Empty input will redraw the board."
+    , "Hit Ctrl-D to quit."
+    , ""
+    ]
   externalPrint <- getExternalPrint
   e <- lift $ gets engine
   hr <- lift $ gets hintRef
@@ -68,10 +78,10 @@ loop = do
   getInputLine "> " >>= \case
     Nothing -> pure ()
     Just input
-      | null input -> loop
+      | null input -> outputBoard *> loop
       | Just position <- fromFEN input -> do
-        outputStrLn $ toFEN position
-        loop
+        liftIO $ UCI.setPosition e position
+        outputBoard *> loop
       | input == "hint" -> do
         lift (gets hintRef) >>= liftIO . readIORef >>= \case
           Just hint -> outputStrLn $ "Try " <> show hint
