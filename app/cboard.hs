@@ -41,7 +41,7 @@ completeSAN :: MonadIO m => UCI.Engine -> CompletionFunc m
 completeSAN e = completeWord Nothing "" $ \w ->
   fmap (map mkCompletion . filter (w `isPrefixOf`)) $ do
     pos <- liftIO $ UCI.currentPosition e
-    pure $ map toUCI $ moves pos
+    pure $ unsafeToSAN pos <$> moves pos
  where
   mkCompletion s = (simpleCompletion s) { isFinished = False }
 
@@ -84,7 +84,9 @@ loop = do
         outputBoard *> loop
       | input == "hint" -> do
         lift (gets hintRef) >>= liftIO . readIORef >>= \case
-          Just hint -> outputStrLn $ "Try " <> show hint
+          Just hint -> do
+            pos <- liftIO $ UCI.currentPosition e
+            outputStrLn $ "Try " <> toSAN pos hint
           Nothing -> outputStrLn "Sorry, no hint available"
         loop
       | otherwise -> do
@@ -118,8 +120,9 @@ printBoard externalPrint pos = externalPrint . init . unlines $
 doBestMove :: (String -> IO ()) -> IORef (Maybe Move) -> UCI.Engine -> IO ()
 doBestMove externalPrint hintRef e = forever $ do
   (bm, ponder) <- atomically . UCI.readBestMove $ e
+  pos <- UCI.currentPosition e
+  externalPrint $ "< " <> toSAN pos bm
   UCI.addMove e bm
-  externalPrint $ "< " <> show bm
   UCI.currentPosition e >>= printBoard externalPrint
   writeIORef hintRef ponder
 

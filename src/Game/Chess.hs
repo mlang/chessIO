@@ -25,7 +25,7 @@ module Game.Chess (
   -- * Chess moves
 , Move
   -- ** Converting from/to algebraic notation
-, fromSAN, fromUCI, toUCI
+, fromSAN, toSAN, unsafeToSAN, fromUCI, toUCI
   -- ** Move generation
 , moves
   -- ** Executing moves
@@ -97,17 +97,13 @@ san = conv <$> piece
 
 fromSAN :: Position -> String -> Either String Move
 fromSAN Position{color = White, flags} s
-  | s `elem` ["O-O", "0-0"] && flags `testMask` crwKs
-  = Right $ move (fromEnum E1) (fromEnum G1)
+  | s `elem` ["O-O", "0-0"] && flags `testMask` crwKs = Right $ wKscm
 fromSAN Position{color = Black, flags} s
-  | s `elem` ["O-O", "0-0"] && flags `testMask` crbKs
-  = Right $ move (fromEnum E8) (fromEnum G8)
+  | s `elem` ["O-O", "0-0"] && flags `testMask` crbKs = Right $ bKscm
 fromSAN Position{color = White, flags} s
-  | s `elem` ["O-O-O", "0-0-0"] && flags `testMask` crwQs
-  = Right $ move (fromEnum E1) (fromEnum C1)
+  | s `elem` ["O-O-O", "0-0-0"] && flags `testMask` crwQs = Right $ wQscm
 fromSAN Position{color = Black, flags} s
-  | s `elem` ["O-O-O", "0-0-0"] && flags `testMask` crbQs
-  = Right $ move (fromEnum E8) (fromEnum C8)
+  | s `elem` ["O-O-O", "0-0-0"] && flags `testMask` crbQs = Right $ bQscm
 fromSAN pos s = case parse san "" s of
   Right (pc, from, capture, to, promo, status) ->
     case ms pc from to promo of
@@ -126,6 +122,44 @@ fromSAN pos s = case parse san "" s of
    f Nothing (unpack -> (from', to', prm')) =
      pAt from' == pc && to == to' && prm == prm'
   pAt = snd . fromJust . pieceAt pos . toEnum
+
+toSAN :: Position -> Move -> String
+toSAN pos m | m `elem` moves pos = unsafeToSAN pos m
+            | otherwise          = error "Game.Chess.toSAN: Illegal move"
+
+unsafeToSAN :: Position -> Move -> String
+unsafeToSAN pos@Position{color, flags} m@(unpack -> (from, to, promo))
+  = case piece of
+      Pawn | isCapture -> file from : target
+           | otherwise -> target
+      King | color == White && m == wKscm -> "O-O"
+           | color == White && m == wQscm -> "O-O-O"
+           | color == Black && m == bKscm -> "O-O"
+           | color == Black && m == bQscm -> "O-O-O"
+           | otherwise -> 'K' : target
+      Knight -> 'N' : source <> target
+      Bishop -> 'B' : source <> target
+      Rook   -> 'R' : source <> target
+      Queen  -> 'Q' : source <> target
+ where
+  piece = fromJust $ snd <$> pieceAt pos (toEnum from)
+  isCapture = isJust (pieceAt pos $ toEnum to) || (flags .&. epMask) `testBit` to
+  source
+    | length ms == 1              = []
+    | length (filter fEq ms) == 1 = [file from]
+    | length (filter rEq ms) == 1 = [rank from]
+    | otherwise                   = coord from
+  target | isCapture = 'x' : coord to
+         | otherwise = coord to
+  ms = filter movesTo $ moves pos
+  movesTo (unpack -> (from', to', _)) =
+    fmap snd (pieceAt pos (toEnum from')) == Just piece && to' == to
+  fEq (unpack -> (from', _, _)) = from' `mod` 8 == fromFile
+  rEq (unpack -> (from', _, _)) = from' `div` 8 == fromRank
+  (fromRank, fromFile) = from `divMod` 8
+  file i = chr $ (i `mod` 8) + ord 'a'
+  rank i = chr $ (i `div` 8) + ord '1'
+  coord i = let (r,f) = i `divMod` 8 in chr (f + ord 'a') : [chr (r + ord '1')]
 
 -- | The starting position as given by the FEN string
 --   "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1".
