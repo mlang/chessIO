@@ -40,6 +40,7 @@ default-extensions:
 
 ghc-options:
 - -Wall
+- -O2
 
 library:
   source-dirs: src
@@ -50,7 +51,7 @@ library:
 executables:
   cboard:
     main:                cboard.hs
-    source-dirs:         app
+    source-dirs:  app
     ghc-options:
     - -threaded
     dependencies:
@@ -62,7 +63,7 @@ executables:
 tests:
   perft:
     main:                Perft.hs
-    source-dirs:         test
+    source-dirs:  test
     ghc-options: -threaded -rtsopts "-with-rtsopts=-N -s"
     dependencies:
     - chessIO

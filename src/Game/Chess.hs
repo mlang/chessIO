@@ -105,7 +105,7 @@ fromSAN Position{color = White, flags} s
 fromSAN Position{color = Black, flags} s
   | s `elem` ["O-O-O", "0-0-0"] && flags `testMask` crbQs = Right $ bQscm
 fromSAN pos s = case parse san "" s of
-  Right (pc, from, capture, to, promo, status) ->
+  Right (pc, from, _, to, promo, _) ->
     case ms pc from to promo of
       [m] -> Right m
       [] -> Left "Illegal move"
@@ -128,37 +128,52 @@ toSAN pos m | m `elem` moves pos = unsafeToSAN pos m
             | otherwise          = error "Game.Chess.toSAN: Illegal move"
 
 unsafeToSAN :: Position -> Move -> String
-unsafeToSAN pos@Position{color, flags} m@(unpack -> (from, to, promo))
-  = case piece of
-      Pawn | isCapture -> file from : target
-           | otherwise -> target
-      King | color == White && m == wKscm -> "O-O"
-           | color == White && m == wQscm -> "O-O-O"
-           | color == Black && m == bKscm -> "O-O"
-           | color == Black && m == bQscm -> "O-O-O"
-           | otherwise -> 'K' : target
-      Knight -> 'N' : source <> target
-      Bishop -> 'B' : source <> target
-      Rook   -> 'R' : source <> target
-      Queen  -> 'Q' : source <> target
+unsafeToSAN pos@Position{flags} m@(unpack -> (from, to, promo)) =
+  moveStr <> status
  where
+  moveStr = case piece of
+    Pawn | isCapture -> fileChar from : target <> promotion
+         | otherwise -> target <> promotion
+    King | color pos == White && m == wKscm -> "O-O"
+         | color pos == White && m == wQscm -> "O-O-O"
+         | color pos == Black && m == bKscm -> "O-O"
+         | color pos == Black && m == bQscm -> "O-O-O"
+         | otherwise -> 'K' : target
+    Knight -> 'N' : source <> target
+    Bishop -> 'B' : source <> target
+    Rook   -> 'R' : source <> target
+    Queen  -> 'Q' : source <> target
   piece = fromJust $ snd <$> pieceAt pos (toEnum from)
   isCapture = isJust (pieceAt pos $ toEnum to) || (flags .&. epMask) `testBit` to
   source
     | length ms == 1              = []
-    | length (filter fEq ms) == 1 = [file from]
-    | length (filter rEq ms) == 1 = [rank from]
+    | length (filter fEq ms) == 1 = [fileChar from]
+    | length (filter rEq ms) == 1 = [rankChar from]
     | otherwise                   = coord from
-  target | isCapture = 'x' : coord to
-         | otherwise = coord to
+  target
+    | isCapture = 'x' : coord to
+    | otherwise = coord to
+  promotion = case promo of
+    Just Knight -> "N"
+    Just Bishop -> "B"
+    Just Rook   -> "R"
+    Just Queen  -> "Q"
+    _      -> ""
+  status | inCheck (color nextPos) nextPos && null (moves nextPos)
+         = "#"
+         | inCheck (color nextPos) nextPos
+         = "+"
+         | otherwise
+         = ""
+  nextPos = unsafeApplyMove pos m
   ms = filter movesTo $ moves pos
   movesTo (unpack -> (from', to', _)) =
     fmap snd (pieceAt pos (toEnum from')) == Just piece && to' == to
   fEq (unpack -> (from', _, _)) = from' `mod` 8 == fromFile
   rEq (unpack -> (from', _, _)) = from' `div` 8 == fromRank
   (fromRank, fromFile) = from `divMod` 8
-  file i = chr $ (i `mod` 8) + ord 'a'
-  rank i = chr $ (i `div` 8) + ord '1'
+  fileChar i = chr $ (i `mod` 8) + ord 'a'
+  rankChar i = chr $ (i `div` 8) + ord '1'
   coord i = let (r,f) = i `divMod` 8 in chr (f + ord 'a') : [chr (r + ord '1')]
 
 -- | The starting position as given by the FEN string
@@ -227,7 +242,7 @@ emptyBB = BB 0 0 0 0 0 0 0 0 0 0 0 0
 
 -- | Construct a position from Forsyth-Edwards-Notation.
 fromFEN :: String -> Maybe Position
-fromFEN s
+fromFEN fen
   | length parts /= 6
   = Nothing
   | otherwise =
@@ -237,7 +252,7 @@ fromFEN s
              <*> readMaybe (parts !! 4)
              <*> readMaybe (parts !! 5)
  where
-  parts = words s
+  parts = words fen
   readBoard = go (sqToRF A8) emptyBB where
     go rf@(r,f) bb ('r':s) = go (r, f + 1) (bb { bR = bR bb .|. rfBit rf }) s
     go rf@(r,f) bb ('n':s) = go (r, f + 1) (bb { bN = bN bb .|. rfBit rf }) s

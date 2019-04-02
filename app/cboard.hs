@@ -27,15 +27,14 @@ main = getArgs >>= \case
   [] -> do
     putStrLn "Please specify a UCI engine at the command line"
     exitWith $ ExitFailure 1
-  (cmd:args) -> do
-    UCI.start cmd args >>= \case
-      Nothing -> do
-        putStrLn "Unable to initialise engine, maybe it doesn't speak UCI?"
-        exitWith $ ExitFailure 2
-      Just e -> do
-        s <- S e Nothing <$> newIORef Nothing
-        runInputT (setComplete (completeSAN e) defaultSettings) chessIO `evalStateT` s
-        exitWith ExitSuccess
+  (cmd:args) -> UCI.start cmd args >>= \case
+    Nothing -> do
+      putStrLn "Unable to initialise engine, maybe it doesn't speak UCI?"
+      exitWith $ ExitFailure 2
+    Just e -> do
+      s <- S e Nothing <$> newIORef Nothing
+      runInputT (setComplete (completeSAN e) defaultSettings) chessIO `evalStateT` s
+      exitSuccess
 
 completeSAN :: MonadIO m => UCI.Engine -> CompletionFunc m
 completeSAN e = completeWord Nothing "" $ \w ->
@@ -90,10 +89,9 @@ loop = do
           Nothing -> outputStrLn "Sorry, no hint available"
         loop
       | otherwise -> do
-        liftIO $ do
-          printUCIException `handle` do
-            UCI.move e input
-            UCI.send "go movetime 1000" e
+        liftIO $ printUCIException `handle` do
+          UCI.move e input
+          UCI.send "go movetime 1000" e
         outputBoard
         loop
 
@@ -101,7 +99,7 @@ printBoard :: (String -> IO ()) -> Position -> IO ()
 printBoard externalPrint pos = externalPrint . init . unlines $
   (map . map) pc (reverse $ chunksOf 8 [A1 .. H8])
  where
-  pc sq = (if isDark sq then toUpper else toLower) case pieceAt pos sq of
+  pc sq = (if isDark sq then toUpper else toLower) $ case pieceAt pos sq of
     Just (White, Pawn)   -> 'P'
     Just (White, Knight) -> 'N'
     Just (White, Bishop) -> 'B'
