@@ -19,7 +19,7 @@ module Game.Chess (
   Color(..), opponent
 , Sq(..), isLight, isDark
 , PieceType(..)
-, Position, startpos, color, pieceAt
+, Position, startpos, color, pieceAt, inCheck
   -- ** Converting from/to Forsyth-Edwards-Notation
 , fromFEN, toFEN
   -- * Chess moves
@@ -450,11 +450,18 @@ shiftWNW w = w `unsafeShiftL` 6 .&. notGHFile
 shiftNW  w = w `unsafeShiftL` 7 .&. notHFile
 shiftNNW w = w `unsafeShiftL` 15 .&. notHFile
 
+-- | Apply a move to the given position.
+--
+-- This function checks if the move is actually legal and throws and error
+-- if it isn't.  See 'unsafeApplyMove' for a version that omits the legality check.
 applyMove :: Position -> Move -> Position
 applyMove p m
   | m `elem` moves p = unsafeApplyMove p m
   | otherwise        = error "Game.Chess.applyMove: Illegal move"
 
+-- | An unsafe version of 'applyMove'.  Only use this if you are sure the given move
+-- can be applied to the position.  This is useful if the move has been generated
+-- by the 'moves' function.
 unsafeApplyMove :: Position -> Move -> Position
 unsafeApplyMove pos@Position{flags} m@(unpack -> (from, to, promo))
   | m == wKscm && flags `testMask` crwKs
@@ -616,6 +623,7 @@ moves pos@Position{color, board, flags} =
   genNMoves ms sq = foldBits (mkM sq) ms ((knightAttacks ! sq) .&. notOurs)
   mkM from ms to = move from to : ms
 
+-- | Returns 'True' if 'Color' is in check in the given position.
 inCheck :: Color -> Position -> Bool
 inCheck White Position{board} = attackedBy Black (bitScanForward (wK board)) board
 inCheck Black Position{board} = attackedBy White (bitScanForward (bK board)) board

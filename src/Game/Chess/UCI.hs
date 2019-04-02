@@ -3,6 +3,10 @@ module Game.Chess.UCI (
   UCIException(..)
   -- * The Engine data type
 , Engine, name, author
+  -- * Starting and quitting a UCI engine
+, start, start'
+, send
+, quit, quit'
   -- * Engine options
 , Option(..), options, getOption, setOptionSpinButton
   -- * Manipulating the current game information
@@ -10,10 +14,6 @@ module Game.Chess.UCI (
   -- * Reading engine output
 , Info(..), readInfo, tryReadInfo
 , readBestMove, tryReadBestMove
-  -- * Starting and quitting a UCI engine
-, start, start'
-, send
-, quit, quit'
 ) where
 
 import Control.Applicative
@@ -67,6 +67,8 @@ readBestMove = readTChan . bestMoveChan
 tryReadBestMove :: Engine -> STM (Maybe (Move, Maybe Move))
 tryReadBestMove = tryReadTChan . bestMoveChan
 
+-- | Set the starting position of the current game, also clearing any
+-- pre-existing history.
 setPosition :: Engine -> Position -> IO ()
 setPosition e@Engine{game} p = do
   atomicWriteIORef game (p, [])
@@ -75,7 +77,6 @@ setPosition e@Engine{game} p = do
 data UCIException = SANError String
                   | IllegalMove Move
                   deriving Show
-
 
 instance Exception UCIException
 
@@ -202,9 +203,15 @@ command pos = skipSpace *> choice [
           Nothing -> fail $ "Failed to parse ponder move " <> p
       Nothing -> fail $ "Failed to parse best move " <> m
 
+-- | Start a UCI engine with the given executable name and command line arguments.
 start :: String -> [String] -> IO (Maybe Engine)
 start = start' 2000000 putStrLn
 
+-- | Start a UCI engine with the given timeout for initialisation.
+--
+-- If the engine takes more then the given microseconds to answer to the
+-- initialisation request, 'Nothing' is returned and the external process
+-- will be terminated.
 start' :: Int -> (String -> IO ()) -> String -> [String] -> IO (Maybe Engine)
 start' usec outputStrLn cmd args = do
   (Just inH, Just outH, Nothing, procH) <- createProcess (proc cmd args) {
@@ -244,11 +251,16 @@ infoReader e@Engine{..} = forever $ do
     Right (Info i) -> atomically $ writeTChan infoChan i
     Right (BestMove bm) -> atomically $ writeTChan bestMoveChan bm
 
+-- | Wait until the engine is ready to take more commands.
 isready :: Engine -> IO ()
 isready e@Engine{isReady} = do
   send "isready" e
   takeMVar isReady
   
+-- | Send a command to the engine.
+--
+-- This function is likely going to be removed and replaced by more specific
+-- functions in the future.
 send :: ByteString -> Engine -> IO ()
 send s Engine{inH, procH} = do
   BS.hPutStrLn inH s
@@ -259,6 +271,9 @@ send s Engine{inH, procH} = do
 getOption :: ByteString -> Engine -> Maybe Option
 getOption n = HashMap.lookup n . options
 
+-- | Set a spin option to a particular value.
+--
+-- Bounds are validated.  Make sure you don't set a value which is out of range.
 setOptionSpinButton :: ByteString -> Int -> Engine -> IO Engine
 setOptionSpinButton n v c
   | Just (SpinButton _ minValue maxValue) <- getOption n c
@@ -269,6 +284,7 @@ setOptionSpinButton n v c
  where
   set v opt@SpinButton{} = Just $ opt { spinButtonValue = v }
 
+-- | Return the final position of the currently active game.
 currentPosition :: Engine -> IO Position
 currentPosition Engine{game} =
   uncurry (foldl' applyMove) <$> readIORef game
@@ -278,6 +294,7 @@ nextMove Engine{game} = do
   (initialPosition, history) <- readIORef game
   pure $ if even . length $ history then color initialPosition else opponent . color $ initialPosition
 
+-- | Add the given move (in algebraic notation) to the current game.
 move :: Engine -> String -> IO ()
 move e@Engine{game} s = do
   pos <- currentPosition e
@@ -291,6 +308,10 @@ move e@Engine{game} s = do
         addMove e m
         sendPosition e
 
+-- | Add a 'Move' to the game history.
+--
+-- This function checks if the move is actually legal, and throws a 'UCIException'
+-- if it isn't.
 addMove :: Engine -> Move -> IO ()
 addMove e@Engine{game} m = do
   pos <- currentPosition e
@@ -307,6 +328,7 @@ sendPosition e@Engine{game} = do
     | null h    = ""
     | otherwise = " moves " <> BS.unwords (BS.pack . toUCI <$> h)
 
+-- | Quit the engine.
 quit :: Engine -> IO (Maybe ExitCode)
 quit = quit' 1000000
 
