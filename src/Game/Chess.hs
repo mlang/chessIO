@@ -118,20 +118,14 @@ fromSAN pos s = case parse san "" s of
  where
   ms pc from to prm = filter (f from) $ moves pos where
    f (Just (Square from)) (unpack -> (from', to', prm')) =
-     pAt pos from' == pc && from' == from && to' == to && prm' == prm
+     pAt from' == pc && from' == from && to' == to && prm' == prm
    f (Just (File ff)) (unpack -> (from', to', prm')) =
-     pAt pos from' == pc && from' `mod` 8 == ff && to == to' && prm == prm'
+     pAt from' == pc && from' `mod` 8 == ff && to == to' && prm == prm'
    f (Just (Rank fr)) (unpack -> (from', to', prm')) =
-     pAt pos from' == pc && from' `div` 8 == fr && to == to' && prm == prm'
+     pAt from' == pc && from' `div` 8 == fr && to == to' && prm == prm'
    f Nothing (unpack -> (from', to', prm')) =
-     pAt pos from' == pc && to == to' && prm == prm'
-  pAt (Position BB{wP, wN, wB, wR, wQ, wK, bP, bN, bB, bR, bQ, bK} _ _ _ _) sq
-    | (wP .|. bP) `testBit` sq = Pawn
-    | (wN .|. bN) `testBit` sq = Knight
-    | (wB .|. bB) `testBit` sq = Bishop
-    | (wR .|. bR) `testBit` sq = Rook
-    | (wQ .|. bQ) `testBit` sq = Queen
-    | otherwise                = King
+     pAt from' == pc && to == to' && prm == prm'
+  pAt = snd . fromJust . pieceAt pos . toEnum
 
 -- | The starting position as given by the FEN string
 --   "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1".
@@ -315,7 +309,7 @@ notOccupied = complement . occupied
 
 foldBits :: (a -> Int -> a) -> a -> Word64 -> a
 foldBits _ a 0 = a
-foldBits f !a n = foldBits f (f a lsb) (n `clearBit` lsb) where
+foldBits f !a n = foldBits f (f a lsb) (n `xor` (1 `unsafeShiftL` lsb)) where
   !lsb = countTrailingZeros n
 
 bitScanForward, bitScanReverse :: Word64 -> Int
@@ -413,34 +407,34 @@ applyMove p m
   | otherwise        = error "Game.Chess.applyMove: Illegal move"
 
 unsafeApplyMove :: Position -> Move -> Position
-unsafeApplyMove pos m@(unpack -> (from, to, promo))
-  | m == wKscm && flags pos `testMask` crwKs
+unsafeApplyMove pos@Position{flags} m@(unpack -> (from, to, promo))
+  | m == wKscm && flags `testMask` crwKs
   = pos { board = bb { wK = wK bb `xor` mask
                      , wR = wR bb `xor` (bit (fromEnum H1) `setBit` fromEnum F1)
                      }
         , color = opponent (color pos)
-        , flags = flags pos `clearMask` (rank1 .|. epMask)
+        , flags = flags `clearMask` (rank1 .|. epMask)
         }
-  | m == wQscm && flags pos `testMask` crwQs
+  | m == wQscm && flags `testMask` crwQs
   = pos { board = bb { wK = wK bb `xor` mask
                      , wR = wR bb `xor` (bit (fromEnum A1) `setBit` fromEnum D1)
                      }
         , color = opponent (color pos)
-        , flags = flags pos `clearMask` (rank1 .|. epMask)
+        , flags = flags `clearMask` (rank1 .|. epMask)
         }
-  | m == bKscm && flags pos `testMask` crbKs
+  | m == bKscm && flags `testMask` crbKs
   = pos { board = bb { bK = bK bb `xor` mask
                      , bR = bR bb `xor` (bit (fromEnum H8) `setBit` fromEnum F8)
                      }
         , color = opponent (color pos)
-        , flags = flags pos `clearMask` (rank8 .|. epMask)
+        , flags = flags `clearMask` (rank8 .|. epMask)
         }
-  | m == bQscm && flags pos `testMask` crbQs
+  | m == bQscm && flags `testMask` crbQs
   = pos { board = bb { bK = bK bb `xor` mask
                      , bR = bR bb `xor` (bit (fromEnum A8) `setBit` fromEnum D8)
                      }
         , color = opponent (color pos)
-        , flags = flags pos `clearMask` (rank8 .|. epMask)
+        , flags = flags `clearMask` (rank8 .|. epMask)
         }
   | Just Queen <- promo
   , color pos == White
@@ -448,7 +442,7 @@ unsafeApplyMove pos m@(unpack -> (from, to, promo))
                          , wQ = wQ bb `setBit` to
                          }
         , color = opponent (color pos)
-        , flags = flags pos `clearMask` (epMask .|. bit to)
+        , flags = flags `clearMask` (epMask .|. bit to)
         }
   | Just Rook <- promo
   , color pos == White
@@ -456,7 +450,7 @@ unsafeApplyMove pos m@(unpack -> (from, to, promo))
                          , wR = wR bb `setBit` to
                          }
         , color = opponent (color pos)
-        , flags = flags pos `clearMask` (epMask .|. bit to)
+        , flags = flags `clearMask` (epMask .|. bit to)
         }
   | Just Bishop <- promo
   , color pos == White
@@ -464,7 +458,7 @@ unsafeApplyMove pos m@(unpack -> (from, to, promo))
                          , wB = wB bb `setBit` to
                          }
         , color = opponent (color pos)
-        , flags = flags pos `clearMask` (epMask .|. bit to)
+        , flags = flags `clearMask` (epMask .|. bit to)
         }
   | Just Knight <- promo
   , color pos == White
@@ -472,7 +466,7 @@ unsafeApplyMove pos m@(unpack -> (from, to, promo))
                          , wN = wN bb `setBit` to
                          }
         , color = opponent (color pos)
-        , flags = flags pos `clearMask` (epMask .|. bit to)
+        , flags = flags `clearMask` (epMask .|. bit to)
         }
   | Just Queen <- promo
   , color pos == Black
@@ -480,7 +474,7 @@ unsafeApplyMove pos m@(unpack -> (from, to, promo))
                          , bQ = bQ bb `setBit` to
                          }
         , color = opponent (color pos)
-        , flags = flags pos `clearMask` (epMask .|. bit to)
+        , flags = flags `clearMask` (epMask .|. bit to)
         }  
   | Just Rook <- promo
   , color pos == Black
@@ -488,7 +482,7 @@ unsafeApplyMove pos m@(unpack -> (from, to, promo))
                          , bR = bR bb `setBit` to
                          }
         , color = opponent (color pos)
-        , flags = flags pos `clearMask` (epMask .|. bit to)
+        , flags = flags `clearMask` (epMask .|. bit to)
         }
   | Just Bishop <- promo
   , color pos == Black
@@ -496,7 +490,7 @@ unsafeApplyMove pos m@(unpack -> (from, to, promo))
                          , bB = bB bb `setBit` to
                          }
         , color = opponent (color pos)
-        , flags = flags pos `clearMask` (epMask .|. bit to)
+        , flags = flags `clearMask` (epMask .|. bit to)
         }
   | Just Knight <- promo
   , color pos == Black
@@ -504,74 +498,85 @@ unsafeApplyMove pos m@(unpack -> (from, to, promo))
                          , bN = bN bb `setBit` to
                          }
         , color = opponent (color pos)
-        , flags = flags pos `clearMask` (epMask .|. bit to)
+        , flags = flags `clearMask` (epMask .|. bit to)
         }
   | otherwise
   = pos { board = newBoard
         , color = opponent (color pos)
-        , flags = (flags pos `clearMask` (epMask .|. mask)) .|. dpp }
+        , flags = (flags `clearMask` (epMask .|. mask)) .|. dpp }
  where
   !bb = board pos
   epBit = case color pos of
-    White | bit from .&. wP bb /= 0 -> shiftS $ flags pos .&. rank6 .&. bit to
-    Black | bit from .&. bP bb /= 0 -> shiftN $ flags pos .&. rank3 .&. bit to
+    White | wP bb `testMask` fromMask -> shiftS $ flags .&. rank6 .&. toMask
+    Black | bP bb `testMask` fromMask -> shiftN $ flags .&. rank3 .&. toMask
     _ -> 0
-  clearW = bb { wP = wP bb `clearBit` to `clearMask` epBit
-              , wN = wN bb `clearBit` to
-              , wB = wB bb `clearBit` to
-              , wR = wR bb `clearBit` to
-              , wQ = wQ bb `clearBit` to
+  clearW = bb { wP = wP bb `clearMask` (toMask .|. epBit)
+              , wN = wN bb `clearMask` toMask
+              , wB = wB bb `clearMask` toMask
+              , wR = wR bb `clearMask` toMask
+              , wQ = wQ bb `clearMask` toMask
               }
-  clearB = bb { bP = bP bb `clearBit` to `clearMask` epBit
-              , bN = bN bb `clearBit` to
-              , bB = bB bb `clearBit` to
-              , bR = bR bb `clearBit` to
-              , bQ = bQ bb `clearBit` to
+  clearB = bb { bP = bP bb `clearMask` (toMask .|. epBit)
+              , bN = bN bb `clearMask` toMask
+              , bB = bB bb `clearMask` toMask
+              , bR = bR bb `clearMask` toMask
+              , bQ = bQ bb `clearMask` toMask
               }
-  !mask = bit from `setBit` to
+  !fromMask = 1 `unsafeShiftL` from
+  !toMask = 1 `unsafeShiftL` to
+  !mask = fromMask .|. toMask
   newBoard = case color pos of
-    White | wP bb `testBit` from -> clearB { wP = wP bb `xor` mask }
-          | wN bb `testBit` from -> clearB { wN = wN bb `xor` mask }
-          | wB bb `testBit` from -> clearB { wB = wB bb `xor` mask }
-          | wR bb `testBit` from -> clearB { wR = wR bb `xor` mask }
-          | wQ bb `testBit` from -> clearB { wQ = wQ bb `xor` mask }
+    White | wP bb `testMask` fromMask -> clearB { wP = wP bb `xor` mask }
+          | wN bb `testMask` fromMask -> clearB { wN = wN bb `xor` mask }
+          | wB bb `testMask` fromMask -> clearB { wB = wB bb `xor` mask }
+          | wR bb `testMask` fromMask -> clearB { wR = wR bb `xor` mask }
+          | wQ bb `testMask` fromMask -> clearB { wQ = wQ bb `xor` mask }
           | otherwise -> clearB { wK = wK bb `xor` mask }
-    Black | bP bb `testBit` from -> clearW { bP = bP bb `xor` mask }
-          | bN bb `testBit` from -> clearW { bN = bN bb `xor` mask }
-          | bB bb `testBit` from -> clearW { bB = bB bb `xor` mask }
-          | bR bb `testBit` from -> clearW { bR = bR bb `xor` mask }
-          | bQ bb `testBit` from -> clearW { bQ = bQ bb `xor` mask }
+    Black | bP bb `testMask` fromMask -> clearW { bP = bP bb `xor` mask }
+          | bN bb `testMask` fromMask -> clearW { bN = bN bb `xor` mask }
+          | bB bb `testMask` fromMask -> clearW { bB = bB bb `xor` mask }
+          | bR bb `testMask` fromMask -> clearW { bR = bR bb `xor` mask }
+          | bQ bb `testMask` fromMask -> clearW { bQ = bQ bb `xor` mask }
           | otherwise -> clearW { bK = bK bb `xor` mask }
   dpp = case color pos of
-    White | bit from .&. rank2 .&. wP bb /= 0 && from + 16 == to -> bit (from + 8)
-    Black | bit from .&. rank7 .&. bP bb /= 0 && from - 16 == to -> bit (from - 8)
+    White | fromMask .&. rank2 .&. wP bb /= 0 && from + 16 == to -> bit (from + 8)
+    Black | fromMask .&. rank7 .&. bP bb /= 0 && from - 16 == to -> bit (from - 8)
     _                                                            -> 0
 
 -- | Generate a list of possible moves for the given position.
 moves :: Position -> [Move]
-moves pos@Position{color} = filter (not . check) $
-      pawnMoves pos
-   <> slideMoves Bishop pos
-   <> slideMoves Rook pos
-   <> slideMoves Queen pos
-   <> knightMoves pos
-   <> kingMoves pos
+moves pos@Position{color, board, flags} =
+  filter (not . inCheck color . unsafeApplyMove pos) $
+      kingMoves pos notOurs
+    . knightMoves
+    . slideMoves Queen pos ours notOurs
+    . slideMoves Rook pos ours notOurs
+    . slideMoves Bishop pos ours notOurs
+    . pawnMoves
+    $ []
  where
-  check m = let board' = board (unsafeApplyMove pos m) in case color of
-    White -> let kSq = bitScanForward (wK board') in
-             attackedBy Black kSq board'
-    Black -> let kSq = bitScanForward (bK board') in
-             attackedBy White kSq board'
+  ours = occupiedBy color board 
+  notOurs = complement ours
+  (!pawnMoves, !knightMoves) = case color of
+    White ->
+      ( wPawnMoves (wP board) (notOccupied board) (occupiedBy Black board .|. (flags .&. epMask))
+      , flip (foldBits genNMoves) (wN board))
+    Black ->
+      ( bPawnMoves (bP board) (notOccupied board) (occupiedBy White board .|. (flags .&. epMask))
+      , flip (foldBits genNMoves) (bN board))
+  genNMoves ms sq = foldBits (mkM sq) ms ((knightAttacks ! sq) .&. notOurs)
+  mkM from ms to = move from to : ms
 
-pawnMoves :: Position -> [Move]
-pawnMoves (Position bb White flags _ _) =
-  wPawnMoves (wP bb) (notOccupied bb) (occupiedBy Black bb .|. (flags .&. epMask))
-pawnMoves (Position bb Black flags _ _) =
-  bPawnMoves (bP bb) (notOccupied bb) (occupiedBy White bb .|. (flags .&. epMask))
+inCheck :: Color -> Position -> Bool
+inCheck White Position{board} = attackedBy Black (bitScanForward (wK board)) board
+inCheck Black Position{board} = attackedBy White (bitScanForward (bK board)) board
 
-wPawnMoves :: Word64 -> Word64 -> Word64 -> [Move]
+wPawnMoves :: Word64 -> Word64 -> Word64 -> [Move] -> [Move]
 wPawnMoves pawns emptySquares opponentPieces =
-  foldBits (mkMove 9) (foldBits (mkMove 7) (foldBits (mkMove 8) (foldBits (mkMove 16) [] doublePushTargets) singlePushTargets) westCaptureTargets) eastCaptureTargets
+    flip (foldBits $ mkMove 9) eastCaptureTargets
+  . flip (foldBits $ mkMove 7) westCaptureTargets
+  . flip (foldBits $ mkMove 8) singlePushTargets
+  . flip (foldBits $ mkMove 16) doublePushTargets
  where
   doublePushTargets = shiftN singlePushTargets .&. emptySquares .&. rank4
   singlePushTargets = shiftN pawns .&. emptySquares
@@ -582,9 +587,12 @@ wPawnMoves pawns emptySquares opponentPieces =
     | otherwise = m : ms
    where m = move (tsq - diff) tsq
 
-bPawnMoves :: Word64 -> Word64 -> Word64 -> [Move]
+bPawnMoves :: Word64 -> Word64 -> Word64 -> [Move] -> [Move]
 bPawnMoves pawns emptySquares opponentPieces =
-  foldBits (mkMove 9) (foldBits (mkMove 7) (foldBits (mkMove 8) (foldBits (mkMove 16) [] doublePushTargets) singlePushTargets) eastCaptureTargets) westCaptureTargets
+    flip (foldBits $ mkMove 9) westCaptureTargets
+  . flip (foldBits $ mkMove 7) eastCaptureTargets
+  . flip (foldBits $ mkMove 8) singlePushTargets
+  . flip (foldBits $ mkMove 16) doublePushTargets
  where
   doublePushTargets = shiftS singlePushTargets .&. emptySquares .&. rank5
   singlePushTargets = shiftS pawns .&. emptySquares
@@ -595,9 +603,9 @@ bPawnMoves pawns emptySquares opponentPieces =
     | otherwise = m : ms
    where m = move (tsq + diff) tsq
 
-slideMoves :: PieceType -> Position -> [Move]
-slideMoves piece (Position bb c _ _ _) =
-  foldBits gen mempty pieces
+slideMoves :: PieceType -> Position -> Word64 -> Word64 -> [Move] -> [Move]
+slideMoves piece (Position bb c _ _ _) ours notOurs =
+  flip (foldBits gen) pieces
  where
   gen ms from = foldBits (mkMove from) ms (targets from)
   mkMove from ms to = move from to : ms
@@ -606,8 +614,6 @@ slideMoves piece (Position bb c _ _ _) =
     Bishop -> bishopTargets sq occ .&. notOurs
     Queen -> queenTargets sq occ .&. notOurs
     _ -> error "Not a sliding piece"
-  ours = occupiedBy c bb
-  notOurs = complement ours
   occ = ours .|. occupiedBy (opponent c) bb
   pieces = case (c, piece) of
     (White, Bishop) -> wB bb
@@ -618,48 +624,38 @@ slideMoves piece (Position bb c _ _ _) =
     (Black, Queen)  -> bQ bb
     _ -> 0
 
-knightMoves, kingMoves :: Position -> [Move]
-knightMoves Position{board, color} = case color of
-  White -> nMoves (wN board)
-  Black -> nMoves (bN board)
+kingMoves :: Position -> Word64 -> [Move] -> [Move]
+kingMoves pos@Position{board, color} notOurs ml = case color of
+  White -> kMoves (wK board) . wCastleMoves pos $ ml
+  Black -> kMoves (bK board) . bCastleMoves pos $ ml
  where
-  nMoves = foldBits gen mempty
-  gen ms sq = foldBits (mkMove sq) ms ((knightAttacks ! sq) .&. notOurs)
-  mkMove from ms to = move from to : ms
-  notOurs = complement $ occupiedBy color board
-
-kingMoves pos@Position{board, color} = case color of
-  White -> kMoves (wK board) <> wCastleMoves pos
-  Black -> kMoves (bK board) <> bCastleMoves pos
- where
-  kMoves = foldBits gen mempty
+  kMoves = flip (foldBits gen)
   gen ms sq = foldBits (mkMove sq) ms ((kingAttacks ! sq) .&. notOurs)
   mkMove from ms to = move from to : ms
-  notOurs = complement $ occupiedBy color board
 
-wCastleMoves, bCastleMoves :: Position -> [Move]
-wCastleMoves (Position board _ flags _ _) = short <> long where
-  short | flags `testMask` crwKs && occupied board .&. crwKe == 0 &&
-          not (attackedBy Black (fromEnum E1) board) &&
-          not (attackedBy Black (fromEnum F1) board)
-        = [wKscm]
-        | otherwise = []
-  long  | flags `testMask` crwQs && occupied board .&. crwQe == 0 &&
-          not (attackedBy Black (fromEnum E1) board) &&
-          not (attackedBy Black (fromEnum D1) board)
-        = [wQscm]
-        | otherwise = []
-bCastleMoves (Position board _ flags _ _) = short <> long where
-  short | flags `testMask` crbKs && occupied board .&. crbKe == 0 &&
-          not (attackedBy White (fromEnum E8) board) &&
-          not (attackedBy White (fromEnum F8) board)
-        = [bKscm]
-        | otherwise = []
-  long  | flags `testMask` crbQs && occupied board .&. crbQe == 0 &&
-          not (attackedBy White (fromEnum E8) board) &&
-          not (attackedBy White (fromEnum D8) board)
-        = [bQscm]
-        | otherwise = []
+wCastleMoves, bCastleMoves :: Position -> [Move] -> [Move]
+wCastleMoves (Position board _ flags _ _) = short . long where
+  short ml | flags `testMask` crwKs && occupied board .&. crwKe == 0 &&
+             not (attackedBy Black (fromEnum E1) board) &&
+             not (attackedBy Black (fromEnum F1) board)
+           = wKscm : ml
+           | otherwise = ml
+  long ml  | flags `testMask` crwQs && occupied board .&. crwQe == 0 &&
+             not (attackedBy Black (fromEnum E1) board) &&
+             not (attackedBy Black (fromEnum D1) board)
+           = wQscm : ml
+           | otherwise = ml
+bCastleMoves (Position board _ flags _ _) = short . long where
+  short ml | flags `testMask` crbKs && occupied board .&. crbKe == 0 &&
+             not (attackedBy White (fromEnum E8) board) &&
+             not (attackedBy White (fromEnum F8) board)
+           = bKscm : ml
+           | otherwise = ml
+  long ml  | flags `testMask` crbQs && occupied board .&. crbQe == 0 &&
+             not (attackedBy White (fromEnum E8) board) &&
+             not (attackedBy White (fromEnum D8) board)
+           = bQscm : ml
+           | otherwise = ml
 
 wKscm, wQscm, bKscm, bQscm :: Move
 wKscm = move (fromEnum E1) (fromEnum G1)
@@ -774,9 +770,7 @@ testMask a b = a .&. b == b
 {-# INLINE clearMask #-}
 {-# INLINE attackedBy #-}
 {-# INLINE kingMoves #-}
-{-# INLINE knightMoves #-}
 {-# INLINE slideMoves #-}
-{-# INLINE pawnMoves #-}
 {-# INLINE wPawnMoves #-}
 {-# INLINE bPawnMoves #-}
 {-# INLINE unpack #-}

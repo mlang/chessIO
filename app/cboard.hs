@@ -114,6 +114,7 @@ printBoard externalPrint pos = externalPrint . init . unlines $
     Just (Black, King)   -> 'J'
     Nothing | isDark sq -> '.'
             | otherwise -> ' '
+
 doBestMove :: (String -> IO ()) -> IORef (Maybe Move) -> UCI.Engine -> IO ()
 doBestMove externalPrint hintRef e = forever $ do
   (bm, ponder) <- atomically . UCI.readBestMove $ e
