@@ -55,14 +55,9 @@ chessIO = do
     , "Hit Ctrl-D to quit."
     , ""
     ]
-  externalPrint <- getExternalPrint
-  e <- lift $ gets engine
-  hr <- lift $ gets hintRef
-  tid <- liftIO . forkIO $ doBestMove externalPrint hr e
-  lift $ modify' $ \s -> s { mover = Just tid }
   outputBoard
   loop
-  void . liftIO $ UCI.quit e
+  lift (gets engine) >>= void . liftIO . UCI.quit
 
 outputBoard :: InputT (StateT S IO) ()
 outputBoard = do
@@ -89,9 +84,12 @@ loop = do
           Nothing -> outputStrLn "Sorry, no hint available"
         loop
       | otherwise -> do
-        liftIO $ printUCIException `handle` do
-          UCI.move e input
-          UCI.send "go movetime 1000" e
+        liftIO $ printUCIException `handle` UCI.move e input
+        (bmc, ic) <- liftIO $ UCI.go e ["movetime", "1000"]
+        hr <- lift $ gets hintRef
+        externalPrint <- getExternalPrint
+        tid <- liftIO . forkIO $ doBestMove externalPrint hr bmc e
+        lift $ modify' $ \s -> s { mover = Just tid }
         outputBoard
         loop
 
@@ -115,9 +113,9 @@ printBoard externalPrint pos = externalPrint . init . unlines $
     Nothing | isDark sq -> '.'
             | otherwise -> ' '
 
-doBestMove :: (String -> IO ()) -> IORef (Maybe Move) -> UCI.Engine -> IO ()
-doBestMove externalPrint hintRef e = forever $ do
-  (bm, ponder) <- atomically . UCI.readBestMove $ e
+doBestMove :: (String -> IO ()) -> IORef (Maybe Move) -> TChan (Move, Maybe Move) -> UCI.Engine -> IO ()
+doBestMove externalPrint hintRef bmc e = do
+  (bm, ponder) <- atomically . readTChan $ bmc
   pos <- UCI.currentPosition e
   externalPrint $ "< " <> toSAN pos bm
   UCI.addMove e bm

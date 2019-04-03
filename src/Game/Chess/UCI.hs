@@ -5,7 +5,7 @@ module Game.Chess.UCI (
 , Engine, name, author
   -- * Starting and quitting a UCI engine
 , start, start'
-, send
+, go
 , quit, quit'
   -- * Engine options
 , Option(..), options, getOption, setOptionSpinButton
@@ -219,8 +219,9 @@ start' usec outputStrLn cmd args = do
     }
   hSetBuffering inH LineBuffering
   e <- Engine inH outH procH outputStrLn Nothing Nothing Nothing HashMap.empty <$>
-       newEmptyMVar <*> newTChanIO <*> newTChanIO <*> newIORef (startpos, [])
-  send "uci" e
+       newEmptyMVar <*> newBroadcastTChanIO <*> newBroadcastTChanIO <*>
+       newIORef (startpos, [])
+  send e "uci"
   timeout usec (initialise e) >>= \case
     Just e' -> do
       tid <- forkIO . infoReader $ e'
@@ -254,19 +255,25 @@ infoReader e@Engine{..} = forever $ do
 -- | Wait until the engine is ready to take more commands.
 isready :: Engine -> IO ()
 isready e@Engine{isReady} = do
-  send "isready" e
+  send e "isready"
   takeMVar isReady
   
 -- | Send a command to the engine.
 --
 -- This function is likely going to be removed and replaced by more specific
 -- functions in the future.
-send :: ByteString -> Engine -> IO ()
-send s Engine{inH, procH} = do
+send :: Engine -> ByteString -> IO ()
+send Engine{inH, procH} s = do
   BS.hPutStrLn inH s
   getProcessExitCode procH >>= \case
     Nothing -> pure ()
     Just ec -> throwIO ec
+
+go :: Engine -> [ByteString] -> IO (TChan (Move, Maybe Move), TChan [Info])
+go e args = do
+  chans <- atomically $ (,) <$> dupTChan (bestMoveChan e) <*> dupTChan (infoChan e)
+  send e . BS.unwords $ "go":args
+  pure chans
 
 getOption :: ByteString -> Engine -> Maybe Option
 getOption n = HashMap.lookup n . options
@@ -279,7 +286,7 @@ setOptionSpinButton n v c
   | Just (SpinButton _ minValue maxValue) <- getOption n c
   , inRange (minValue, maxValue) v
   = do
-    send ("setoption name " <> n <> " value " <> BS.pack (show v)) c
+    send c $ "setoption name " <> n <> " value " <> BS.pack (show v)
     pure $ c { options = HashMap.update (set v) n $ options c }
  where
   set v opt@SpinButton{} = Just $ opt { spinButtonValue = v }
@@ -321,7 +328,7 @@ addMove e@Engine{game} m = do
     
 sendPosition :: Engine -> IO ()
 sendPosition e@Engine{game} = do
-  readIORef game >>= (flip send) e . cmd
+  readIORef game >>= send e . cmd
  where
   cmd (p, h) = "position fen " <> BS.pack (toFEN p) <> line h
   line h
@@ -333,9 +340,9 @@ quit :: Engine -> IO (Maybe ExitCode)
 quit = quit' 1000000
 
 quit' :: Int -> Engine -> IO (Maybe ExitCode)
-quit' usec c@Engine{procH, infoThread} = (pure . Just) `handle` do
+quit' usec e@Engine{procH, infoThread} = (pure . Just) `handle` do
   maybe (pure ()) killThread infoThread
-  send "quit" c
+  send e "quit"
   timeout usec (waitForProcess procH) >>= \case
     Just ec -> pure $ Just ec
     Nothing -> terminateProcess procH $> Nothing
