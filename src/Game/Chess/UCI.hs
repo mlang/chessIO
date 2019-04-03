@@ -22,6 +22,7 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Exception
 import Control.Monad
+import Control.Monad.IO.Class
 import Data.Attoparsec.Combinator
 import Data.Attoparsec.ByteString.Char8
 import Data.ByteString.Char8 (ByteString)
@@ -55,22 +56,10 @@ data Engine = Engine {
 , game :: IORef (Position, [Move])
 }
 
-readInfo :: Engine -> STM [Info]
-readInfo = readTChan . infoChan
-
-tryReadInfo :: Engine -> STM (Maybe [Info])
-tryReadInfo = tryReadTChan . infoChan
-
-readBestMove :: Engine -> STM (Move, Maybe Move)
-readBestMove = readTChan . bestMoveChan
-
-tryReadBestMove :: Engine -> STM (Maybe (Move, Maybe Move))
-tryReadBestMove = tryReadTChan . bestMoveChan
-
 -- | Set the starting position of the current game, also clearing any
 -- pre-existing history.
-setPosition :: Engine -> Position -> IO ()
-setPosition e@Engine{game} p = do
+setPosition :: MonadIO m => Engine -> Position -> m ()
+setPosition e@Engine{game} p = liftIO $ do
   atomicWriteIORef game (p, [])
   sendPosition e
 
@@ -270,15 +259,15 @@ send Engine{inH, procH} s = do
     Just ec -> throwIO ec
 
 -- | Instruct the engine to begin searching.
-go :: Engine -> [ByteString] -> IO (TChan (Move, Maybe Move), TChan [Info])
-go e args = do
+go :: MonadIO m => Engine -> [ByteString] -> m (TChan (Move, Maybe Move), TChan [Info])
+go e args = liftIO $ do
   chans <- atomically $ (,) <$> dupTChan (bestMoveChan e) <*> dupTChan (infoChan e)
   send e . BS.unwords $ "go":args
   pure chans
 
 -- | Stop a search in progress.
-stop :: Engine -> IO ()
-stop e = send e "stop"
+stop :: MonadIO m => Engine -> m ()
+stop e = liftIO $ send e "stop"
 
 getOption :: ByteString -> Engine -> Maybe Option
 getOption n = HashMap.lookup n . options
@@ -286,20 +275,20 @@ getOption n = HashMap.lookup n . options
 -- | Set a spin option to a particular value.
 --
 -- Bounds are validated.  Make sure you don't set a value which is out of range.
-setOptionSpinButton :: ByteString -> Int -> Engine -> IO Engine
+setOptionSpinButton :: MonadIO m => ByteString -> Int -> Engine -> m Engine
 setOptionSpinButton n v c
   | Just (SpinButton _ minValue maxValue) <- getOption n c
   , inRange (minValue, maxValue) v
-  = do
+  = liftIO $ do
     send c $ "setoption name " <> n <> " value " <> BS.pack (show v)
     pure $ c { options = HashMap.update (set v) n $ options c }
  where
   set v opt@SpinButton{} = Just $ opt { spinButtonValue = v }
 
 -- | Return the final position of the currently active game.
-currentPosition :: Engine -> IO Position
+currentPosition :: MonadIO m => Engine -> m Position
 currentPosition Engine{game} =
-  uncurry (foldl' applyMove) <$> readIORef game
+  liftIO $ uncurry (foldl' applyMove) <$> readIORef game
 
 nextMove :: Engine -> IO Color
 nextMove Engine{game} = do
@@ -307,8 +296,8 @@ nextMove Engine{game} = do
   pure $ if even . length $ history then color initialPosition else opponent . color $ initialPosition
 
 -- | Add the given move (in algebraic notation) to the current game.
-move :: Engine -> String -> IO ()
-move e s = do
+move :: MonadIO m => Engine -> String -> m ()
+move e s = liftIO $ do
   pos <- currentPosition e
   case fromUCI pos s of
     Just m -> do
@@ -322,8 +311,8 @@ move e s = do
 --
 -- This function checks if the move is actually legal, and throws a 'UCIException'
 -- if it isn't.
-addMove :: Engine -> Move -> IO ()
-addMove e@Engine{game} m = do
+addMove :: MonadIO m => Engine -> Move -> m ()
+addMove e@Engine{game} m = liftIO $ do
   pos <- currentPosition e
   if m `elem` moves pos
     then do
@@ -341,11 +330,11 @@ sendPosition e@Engine{game} = do
     | otherwise = " moves " <> BS.unwords (BS.pack . toUCI <$> h)
 
 -- | Quit the engine.
-quit :: Engine -> IO (Maybe ExitCode)
+quit :: MonadIO m => Engine -> m (Maybe ExitCode)
 quit = quit' 1000000
 
-quit' :: Int -> Engine -> IO (Maybe ExitCode)
-quit' usec e@Engine{procH, infoThread} = (pure . Just) `handle` do
+quit' :: MonadIO m => Int -> Engine -> m (Maybe ExitCode)
+quit' usec e@Engine{procH, infoThread} = liftIO $ (pure . Just) `handle` do
   maybe (pure ()) killThread infoThread
   send e "quit"
   timeout usec (waitForProcess procH) >>= \case

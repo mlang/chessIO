@@ -40,7 +40,7 @@ main = getArgs >>= \case
 completeSAN :: MonadIO m => UCI.Engine -> CompletionFunc m
 completeSAN e = completeWord Nothing "" $ \w ->
   fmap (map mkCompletion . filter (w `isPrefixOf`)) $ do
-    pos <- liftIO $ UCI.currentPosition e
+    pos <- UCI.currentPosition e
     pure $ unsafeToSAN pos <$> moves pos
  where
   mkCompletion s = (simpleCompletion s) { isFinished = False }
@@ -58,7 +58,7 @@ chessIO = do
     ]
   outputBoard
   loop
-  lift (gets engine) >>= void . liftIO . UCI.quit
+  lift (gets engine) >>= void . UCI.quit
 
 outputBoard :: InputT (StateT S IO) ()
 outputBoard = do
@@ -75,25 +75,29 @@ loop = do
     Just input
       | null input -> outputBoard *> loop
       | Just position <- fromFEN input -> do
-        liftIO $ UCI.setPosition e position
-        outputBoard *> loop
+        UCI.setPosition e position
+        outputBoard
+        loop
       | input == "hint" -> do
         lift (gets hintRef) >>= liftIO . readIORef >>= \case
           Just hint -> do
-            pos <- liftIO $ UCI.currentPosition e
+            pos <- UCI.currentPosition e
             outputStrLn $ "Try " <> toSAN pos hint
           Nothing -> outputStrLn "Sorry, no hint available"
         loop
       | ("go", map BS.pack . words -> args) <- splitAt 2 input -> do
-        (bmc, _) <- liftIO $ UCI.go e args
+        (bmc, _) <- UCI.go e args
         hr <- lift $ gets hintRef
         externalPrint <- getExternalPrint
         tid <- liftIO . forkIO $ doBestMove externalPrint hr bmc e
         lift $ modify' $ \s -> s { mover = Just tid }
         loop
+      | input == "stop" -> do
+        UCI.stop e
+        loop
       | otherwise -> do
         liftIO $ printUCIException `handle` UCI.move e input
-        (bmc, _) <- liftIO $ UCI.go e ["movetime", "1000"]
+        (bmc, _) <- UCI.go e []
         hr <- lift $ gets hintRef
         externalPrint <- getExternalPrint
         tid <- liftIO . forkIO $ doBestMove externalPrint hr bmc e
