@@ -52,6 +52,7 @@ chessIO = do
     , "Enter a FEN string to set the starting position."
     , "To make a move, enter a SAN or UCI string."
     , "Type \"hint\" to ask for a suggestion."
+    , "Type \"go\" to let the engine make the next move, \"stop\" to end the search."
     , "Empty input will redraw the board."
     , "Hit Ctrl-D to quit."
     , ""
@@ -96,14 +97,23 @@ loop = do
         UCI.stop e
         loop
       | otherwise -> do
-        liftIO $ printUCIException `handle` UCI.move e input
-        (bmc, _) <- UCI.go e []
-        hr <- lift $ gets hintRef
-        externalPrint <- getExternalPrint
-        tid <- liftIO . forkIO $ doBestMove externalPrint hr bmc e
-        lift $ modify' $ \s -> s { mover = Just tid }
-        outputBoard
+        pos <- UCI.currentPosition e
+        case parseMove pos input of
+          Left err -> outputStrLn err
+          Right m -> do
+            UCI.addMove e m
+            (bmc, _) <- UCI.go e []
+            hr <- lift $ gets hintRef
+            externalPrint <- getExternalPrint
+            tid <- liftIO . forkIO $ doBestMove externalPrint hr bmc e
+            lift $ modify' $ \s -> s { mover = Just tid }
+            outputBoard
         loop
+
+parseMove :: Position -> String -> Either String Move
+parseMove pos s = case fromUCI pos s of
+  Just m -> pure m
+  Nothing -> fromSAN pos s
 
 printBoard :: (String -> IO ()) -> Position -> IO ()
 printBoard externalPrint pos = externalPrint . init . unlines $
@@ -143,7 +153,3 @@ printPV externalPrint ic engine = forever $ do
  where
   isPV UCI.PV{} = True
   isPV _        = False
-
-printUCIException :: UCI.UCIException -> IO ()
-printUCIException (UCI.SANError e) = putStrLn e
-printUCIException (UCI.IllegalMove m) = putStrLn $ "Illegal move: " <> show m

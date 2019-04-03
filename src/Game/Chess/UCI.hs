@@ -8,7 +8,7 @@ module Game.Chess.UCI (
   -- * Engine options
 , Option(..), options, getOption, setOptionSpinButton
   -- * Manipulating the current game information
-, currentPosition, setPosition, addMove, move
+, currentPosition, setPosition, addMove
   -- * The Info data type
 , Info(..)
   -- * Searching
@@ -63,9 +63,7 @@ setPosition e@Engine{game} p = liftIO $ do
   atomicWriteIORef game (p, [])
   sendPosition e
 
-data UCIException = SANError String
-                  | IllegalMove Move
-                  deriving Show
+data UCIException = IllegalMove Move deriving Show
 
 instance Exception UCIException
 
@@ -294,18 +292,6 @@ nextMove :: Engine -> IO Color
 nextMove Engine{game} = do
   (initialPosition, history) <- readIORef game
   pure $ if even . length $ history then color initialPosition else opponent . color $ initialPosition
-
--- | Add the given move (in algebraic notation) to the current game.
-move :: MonadIO m => Engine -> String -> m ()
-move e s = liftIO $ do
-  pos <- currentPosition e
-  case fromUCI pos s of
-    Just m -> do
-      addMove e m
-    Nothing -> case fromSAN pos s of
-      Left err -> throwIO $ SANError err
-      Right m -> do
-        addMove e m
 
 -- | Add a 'Move' to the game history.
 --
