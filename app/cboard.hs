@@ -6,6 +6,7 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.State.Strict
+import qualified Data.ByteString.Char8 as BS
 import Data.Char
 import Data.IORef
 import Data.List
@@ -83,9 +84,16 @@ loop = do
             outputStrLn $ "Try " <> toSAN pos hint
           Nothing -> outputStrLn "Sorry, no hint available"
         loop
+      | ("go", map BS.pack . words -> args) <- splitAt 2 input -> do
+        (bmc, _) <- liftIO $ UCI.go e args
+        hr <- lift $ gets hintRef
+        externalPrint <- getExternalPrint
+        tid <- liftIO . forkIO $ doBestMove externalPrint hr bmc e
+        lift $ modify' $ \s -> s { mover = Just tid }
+        loop
       | otherwise -> do
         liftIO $ printUCIException `handle` UCI.move e input
-        (bmc, ic) <- liftIO $ UCI.go e ["movetime", "1000"]
+        (bmc, _) <- liftIO $ UCI.go e ["movetime", "1000"]
         hr <- lift $ gets hintRef
         externalPrint <- getExternalPrint
         tid <- liftIO . forkIO $ doBestMove externalPrint hr bmc e

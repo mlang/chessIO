@@ -20,7 +20,6 @@ module Game.Chess.UCI (
 import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.STM
-import Control.Concurrent.STM.TChan
 import Control.Exception
 import Control.Monad
 import Data.Attoparsec.Combinator
@@ -34,9 +33,9 @@ import Data.IORef
 import Data.Ix
 import Data.List
 import Data.Maybe
-import Data.String
+import Data.String (IsString(..))
 import Game.Chess
-import System.Exit
+import System.Exit (ExitCode)
 import System.IO
 import System.Process
 import System.Timeout (timeout)
@@ -309,17 +308,15 @@ nextMove Engine{game} = do
 
 -- | Add the given move (in algebraic notation) to the current game.
 move :: Engine -> String -> IO ()
-move e@Engine{game} s = do
+move e s = do
   pos <- currentPosition e
   case fromUCI pos s of
     Just m -> do
       addMove e m
-      sendPosition e
     Nothing -> case fromSAN pos s of
       Left err -> throwIO $ SANError err
       Right m -> do
         addMove e m
-        sendPosition e
 
 -- | Add a 'Move' to the game history.
 --
@@ -329,7 +326,9 @@ addMove :: Engine -> Move -> IO ()
 addMove e@Engine{game} m = do
   pos <- currentPosition e
   if m `elem` moves pos
-    then atomicModifyIORef' game \g -> (fmap (<> [m]) g, ())
+    then do
+      atomicModifyIORef' game \g -> (fmap (<> [m]) g, ())
+      sendPosition e
     else throwIO $ IllegalMove m
     
 sendPosition :: Engine -> IO ()
