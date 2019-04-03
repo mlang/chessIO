@@ -62,7 +62,7 @@ san = conv <$> piece
   conv pc (Nothing, Nothing, cap, to) = (pc, Nothing, cap, to,,)
   conv pc (Just f, Nothing, cap, to) = (pc, Just (File f), cap, to,,)
   conv pc (Nothing, Just r, cap, to) = (pc, Just (Rank r), cap, to,,)
-  conv pc (Just f, Just r, cap, to) = (pc, Just (Square $ r*8+f), cap, to,,)
+  conv pc (Just f, Just r, cap, to) = (pc, Just (Square (r*8+f)), cap, to,,)
   piece = char 'N' $> Knight
       <|> char 'B' $> Bishop
       <|> char 'R' $> Rook
@@ -97,13 +97,13 @@ san = conv <$> piece
 
 fromSAN :: Position -> String -> Either String Move
 fromSAN Position{color = White, flags} s
-  | s `elem` ["O-O", "0-0"] && flags `testMask` crwKs = Right $ wKscm
+  | s `elem` ["O-O", "0-0"] && flags `testMask` crwKs = Right wKscm
 fromSAN Position{color = Black, flags} s
-  | s `elem` ["O-O", "0-0"] && flags `testMask` crbKs = Right $ bKscm
+  | s `elem` ["O-O", "0-0"] && flags `testMask` crbKs = Right bKscm
 fromSAN Position{color = White, flags} s
-  | s `elem` ["O-O-O", "0-0-0"] && flags `testMask` crwQs = Right $ wQscm
+  | s `elem` ["O-O-O", "0-0-0"] && flags `testMask` crwQs = Right wQscm
 fromSAN Position{color = Black, flags} s
-  | s `elem` ["O-O-O", "0-0-0"] && flags `testMask` crbQs = Right $ bQscm
+  | s `elem` ["O-O-O", "0-0-0"] && flags `testMask` crbQs = Right bQscm
 fromSAN pos s = case parse san "" s of
   Right (pc, from, _, to, promo, _) ->
     case ms pc from to promo of
