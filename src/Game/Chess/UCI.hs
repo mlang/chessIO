@@ -3,17 +3,18 @@ module Game.Chess.UCI (
   UCIException(..)
   -- * The Engine data type
 , Engine, name, author
-  -- * Starting and quitting a UCI engine
+  -- * Starting a UCI engine
 , start, start'
-, go
-, quit, quit'
   -- * Engine options
 , Option(..), options, getOption, setOptionSpinButton
   -- * Manipulating the current game information
 , currentPosition, setPosition, addMove, move
-  -- * Reading engine output
-, Info(..), readInfo, tryReadInfo
-, readBestMove, tryReadBestMove
+  -- * The Info data type
+, Info(..)
+  -- * Searching
+, go, stop
+  -- * Quitting
+, quit, quit'
 ) where
 
 import Control.Applicative
@@ -269,11 +270,16 @@ send Engine{inH, procH} s = do
     Nothing -> pure ()
     Just ec -> throwIO ec
 
+-- | Instruct the engine to begin searching.
 go :: Engine -> [ByteString] -> IO (TChan (Move, Maybe Move), TChan [Info])
 go e args = do
   chans <- atomically $ (,) <$> dupTChan (bestMoveChan e) <*> dupTChan (infoChan e)
   send e . BS.unwords $ "go":args
   pure chans
+
+-- | Stop a search in progress.
+stop :: Engine -> IO ()
+stop e = send e "stop"
 
 getOption :: ByteString -> Engine -> Maybe Option
 getOption n = HashMap.lookup n . options

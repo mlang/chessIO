@@ -122,9 +122,9 @@ doBestMove externalPrint hintRef bmc e = do
   UCI.currentPosition e >>= printBoard externalPrint
   writeIORef hintRef ponder
 
-printPV :: (String -> IO ()) -> UCI.Engine -> IO ()
-printPV externalPrint engine = forever $ do
-  info <- atomically . UCI.readInfo $ engine
+printPV :: (String -> IO ()) -> TChan [UCI.Info] -> UCI.Engine -> IO ()
+printPV externalPrint ic engine = forever $ do
+  info <- atomically . readTChan $ ic
   case find isPV info of
     Just pv -> externalPrint $ show pv
     Nothing -> pure ()
