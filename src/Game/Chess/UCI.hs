@@ -12,7 +12,8 @@ module Game.Chess.UCI (
   -- * The Info data type
 , Info(..)
   -- * Searching
-, go, stop
+, SearchParam(..)
+, isThinking, go, stop
   -- * Quitting
 , quit, quit'
 ) where
@@ -25,8 +26,10 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Data.Attoparsec.Combinator
 import Data.Attoparsec.ByteString.Char8
+import Data.ByteString.Builder
 import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as BS
+import Data.Foldable
 import Data.Functor
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
@@ -36,6 +39,7 @@ import Data.List
 import Data.Maybe
 import Data.String (IsString(..))
 import Game.Chess
+import Numeric.Natural
 import System.Exit (ExitCode)
 import System.IO
 import System.Process
@@ -51,6 +55,7 @@ data Engine = Engine {
 , author :: Maybe ByteString
 , options :: HashMap ByteString Option
 , isReady :: MVar ()
+, isSearching :: IORef Bool
 , infoChan :: TChan [Info]
 , bestMoveChan :: TChan (Move, Maybe Move)
 , game :: IORef (Position, [Move])
@@ -90,7 +95,7 @@ data Info = PV [Move]
           | HashFull Int
           | CurrMove ByteString
           | CurrMoveNumber Int
-          deriving Show
+          deriving (Eq, Show)
 
 data Option = CheckBox Bool
             | ComboBox { comboBoxValue :: ByteString, comboBoxValues :: [ByteString] }
@@ -206,7 +211,8 @@ start' usec outputStrLn cmd args = do
     }
   hSetBuffering inH LineBuffering
   e <- Engine inH outH procH outputStrLn Nothing Nothing Nothing HashMap.empty <$>
-       newEmptyMVar <*> newBroadcastTChanIO <*> newBroadcastTChanIO <*>
+       newEmptyMVar <*> newIORef False <*>
+       newBroadcastTChanIO <*> newBroadcastTChanIO <*>
        newIORef (startpos, [])
   send e "uci"
   timeout usec (initialise e) >>= \case
@@ -237,7 +243,9 @@ infoReader e@Engine{..} = forever $ do
       outputStrLn $ err <> ":" <> show l
     Right ReadyOK -> putMVar isReady ()
     Right (Info i) -> atomically $ writeTChan infoChan i
-    Right (BestMove bm) -> atomically $ writeTChan bestMoveChan bm
+    Right (BestMove bm) -> do
+      writeIORef isSearching False
+      atomically $ writeTChan bestMoveChan bm
 
 -- | Wait until the engine is ready to take more commands.
 isready :: Engine -> IO ()
@@ -245,23 +253,52 @@ isready e@Engine{isReady} = do
   send e "isready"
   takeMVar isReady
   
--- | Send a command to the engine.
---
--- This function is likely going to be removed and replaced by more specific
--- functions in the future.
-send :: Engine -> ByteString -> IO ()
-send Engine{inH, procH} s = do
-  BS.hPutStrLn inH s
+send :: Engine -> Builder -> IO ()
+send Engine{inH, procH} b = do
+  hPutBuilder inH (b <> "\n")
   getProcessExitCode procH >>= \case
     Nothing -> pure ()
     Just ec -> throwIO ec
 
+data SearchParam = SearchMoves [Move]
+                -- ^ restrict search to the specified moves only
+                 | TimeLeft Color Natural
+                -- ^ time (in milliseconds) left on the clock
+                 | TimeIncrement Color Natural
+                -- ^ time increment per move in milliseconds
+                 | MovesToGo Natural
+                -- ^ number of moves to the next time control
+                 | MoveTime Natural
+                 | MaxNodes Natural
+                 | MaxDepth Natural
+                 | Infinite
+                -- ^ search until 'stop' gets called
+                 deriving (Eq, Show)
+ 
+isThinking :: MonadIO m => Engine -> m Bool
+isThinking Engine{isSearching} = liftIO $ readIORef isSearching
+
 -- | Instruct the engine to begin searching.
-go :: MonadIO m => Engine -> [ByteString] -> m (TChan (Move, Maybe Move), TChan [Info])
-go e args = liftIO $ do
-  chans <- atomically $ (,) <$> dupTChan (bestMoveChan e) <*> dupTChan (infoChan e)
-  send e . BS.unwords $ "go":args
+go :: MonadIO m
+   => Engine -> [SearchParam]
+   -> m (TChan (Move, Maybe Move), TChan [Info])
+go e params = liftIO $ do
+  chans <- atomically $ (,) <$> dupTChan (bestMoveChan e)
+                            <*> dupTChan (infoChan e)
+  send e . fold . intersperse " " $ "go" : foldr build mempty params
   pure chans
+ where
+  build (SearchMoves ms) xs = "searchmoves" : (fromString . toUCI <$> ms) <> xs
+  build (TimeLeft White x) xs = "wtime" : naturalDec x : xs
+  build (TimeLeft Black x) xs = "btime" : naturalDec x : xs
+  build (TimeIncrement White x) xs = "winc" : naturalDec x : xs
+  build (TimeIncrement Black x) xs = "binc" : naturalDec x : xs
+  build (MovesToGo x) xs = "movestogo" : naturalDec x : xs
+  build (MoveTime x) xs = "movetime" : naturalDec x : xs
+  build (MaxNodes x) xs = "nodes" : naturalDec x : xs
+  build (MaxDepth x) xs = "depth" : naturalDec x : xs
+  build Infinite xs = "infinite" : xs
+  naturalDec = integerDec . toInteger
 
 -- | Stop a search in progress.
 stop :: MonadIO m => Engine -> m ()
@@ -278,15 +315,15 @@ setOptionSpinButton n v c
   | Just (SpinButton _ minValue maxValue) <- getOption n c
   , inRange (minValue, maxValue) v
   = liftIO $ do
-    send c $ "setoption name " <> n <> " value " <> BS.pack (show v)
+    send c $ "setoption name " <> byteString n <> " value " <> intDec v
     pure $ c { options = HashMap.update (set v) n $ options c }
  where
   set v opt@SpinButton{} = Just $ opt { spinButtonValue = v }
 
 -- | Return the final position of the currently active game.
 currentPosition :: MonadIO m => Engine -> m Position
-currentPosition Engine{game} =
-  liftIO $ uncurry (foldl' applyMove) <$> readIORef game
+currentPosition Engine{game} = liftIO $
+  uncurry (foldl' applyMove) <$> readIORef game
 
 nextMove :: Engine -> IO Color
 nextMove Engine{game} = do
@@ -300,20 +337,18 @@ nextMove Engine{game} = do
 addMove :: MonadIO m => Engine -> Move -> m ()
 addMove e@Engine{game} m = liftIO $ do
   pos <- currentPosition e
-  if m `elem` moves pos
-    then do
-      atomicModifyIORef' game \g -> (fmap (<> [m]) g, ())
-      sendPosition e
-    else throwIO $ IllegalMove m
-    
+  if m `notElem` moves pos then throwIO $ IllegalMove m else do
+    atomicModifyIORef' game \g -> (fmap (<> [m]) g, ())
+    sendPosition e
+ 
 sendPosition :: Engine -> IO ()
 sendPosition e@Engine{game} = do
   readIORef game >>= send e . cmd
  where
-  cmd (p, h) = "position fen " <> BS.pack (toFEN p) <> line h
+  cmd (p, h) = "position fen " <> fromString (toFEN p) <> line h
   line h
     | null h    = ""
-    | otherwise = " moves " <> BS.unwords (BS.pack . toUCI <$> h)
+    | otherwise = " moves " <> fold (intersperse " " (fromString . toUCI <$> h))
 
 -- | Quit the engine.
 quit :: MonadIO m => Engine -> m (Maybe ExitCode)

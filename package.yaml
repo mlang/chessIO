@@ -59,9 +59,9 @@ executables:
     - -threaded
     dependencies:
     - chessIO
+    - extra
     - haskeline
     - mtl
-    - split
 
 tests:
   perft:

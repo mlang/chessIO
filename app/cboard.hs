@@ -1,24 +1,26 @@
 module Main where
 
+import Control.Arrow ((&&&))
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Exception
 import Control.Monad
+import Control.Monad.Extra hiding (loop)
 import Control.Monad.IO.Class
 import Control.Monad.State.Strict
 import qualified Data.ByteString.Char8 as BS
 import Data.Char
 import Data.IORef
 import Data.List
-import Data.List.Split
+import Data.List.Extra
 import Game.Chess
-import qualified Game.Chess.UCI as UCI
+import Game.Chess.UCI
 import System.Console.Haskeline hiding (catch, handle)
 import System.Exit
 import System.Environment
 
 data S = S {
-  engine :: UCI.Engine
+  engine :: Engine
 , mover :: Maybe ThreadId
 , hintRef :: IORef (Maybe Move)
 }
@@ -28,7 +30,7 @@ main = getArgs >>= \case
   [] -> do
     putStrLn "Please specify a UCI engine at the command line"
     exitWith $ ExitFailure 1
-  (cmd:args) -> UCI.start cmd args >>= \case
+  (cmd:args) -> start cmd args >>= \case
     Nothing -> do
       putStrLn "Unable to initialise engine, maybe it doesn't speak UCI?"
       exitWith $ ExitFailure 2
@@ -37,10 +39,10 @@ main = getArgs >>= \case
       runInputT (setComplete (completeSAN e) defaultSettings) chessIO `evalStateT` s
       exitSuccess
 
-completeSAN :: MonadIO m => UCI.Engine -> CompletionFunc m
+completeSAN :: MonadIO m => Engine -> CompletionFunc m
 completeSAN e = completeWord Nothing "" $ \w ->
   fmap (map mkCompletion . filter (w `isPrefixOf`)) $ do
-    pos <- UCI.currentPosition e
+    pos <- currentPosition e
     pure $ unsafeToSAN pos <$> moves pos
  where
   mkCompletion s = (simpleCompletion s) { isFinished = False }
@@ -52,20 +54,20 @@ chessIO = do
     , "Enter a FEN string to set the starting position."
     , "To make a move, enter a SAN or UCI string."
     , "Type \"hint\" to ask for a suggestion."
-    , "Type \"go\" to let the engine make the next move, \"stop\" to end the search."
+    , "Type \"pass\" to let the engine make the next move, \"stop\" to end the search."
     , "Empty input will redraw the board."
     , "Hit Ctrl-D to quit."
     , ""
     ]
   outputBoard
   loop
-  lift (gets engine) >>= void . UCI.quit
+  lift (gets engine) >>= void . quit
 
 outputBoard :: InputT (StateT S IO) ()
 outputBoard = do
   e <- lift $ gets engine
   liftIO $ do
-    pos <- UCI.currentPosition e
+    pos <- currentPosition e
     printBoard putStrLn pos
 
 loop :: InputT (StateT S IO) ()
@@ -76,39 +78,62 @@ loop = do
     Just input
       | null input -> outputBoard *> loop
       | Just position <- fromFEN input -> do
-        UCI.setPosition e position
+        setPosition e position
         outputBoard
         loop
-      | input == "hint" -> do
+      | "hint" == input -> do
         lift (gets hintRef) >>= liftIO . readIORef >>= \case
           Just hint -> do
-            pos <- UCI.currentPosition e
+            pos <- currentPosition e
             outputStrLn $ "Try " <> toSAN pos hint
           Nothing -> outputStrLn "Sorry, no hint available"
         loop
-      | ("go", map BS.pack . words -> args) <- splitAt 2 input -> do
-        (bmc, _) <- UCI.go e args
-        hr <- lift $ gets hintRef
-        externalPrint <- getExternalPrint
-        tid <- liftIO . forkIO $ doBestMove externalPrint hr bmc e
-        lift $ modify' $ \s -> s { mover = Just tid }
+      | "pass" == input -> do
+        unlessM (isThinking e) $ do
+          (bmc, _) <- go e []
+          hr <- lift $ gets hintRef
+          externalPrint <- getExternalPrint
+          tid <- liftIO . forkIO $ doBestMove externalPrint hr bmc e
+          lift $ modify' $ \s -> s { mover = Just tid }
         loop
-      | input == "stop" -> do
-        UCI.stop e
+      | input `elem` ["analyze", "analyse"] -> do
+        unlessM (isThinking e) $ do
+          pos <- currentPosition e
+          (bmc, ic) <- go e [Infinite]
+          externalPrint <- getExternalPrint
+          itid <- liftIO . forkIO . forever $ do
+            info <- atomically . readTChan $ ic
+            case (find isScore &&& find isPV) info of
+              (Just (Score cp), Just (PV pv))
+                | LowerBound `notElem` info && UpperBound `notElem` info ->
+                  externalPrint $ show cp <> ":" <> unwords (varToSAN pos pv)
+              _ -> pure ()
+          tid <- liftIO . forkIO $ do
+            (bm, ponder) <- atomically . readTChan $ bmc
+            killThread itid
+            pos <- currentPosition e
+            externalPrint $ "Best move: " <> toSAN pos bm
+          lift $ modify' $ \s -> s { mover = Just tid }
+        loop
+      | "stop" == input -> do
+        stop e
         loop
       | otherwise -> do
-        pos <- UCI.currentPosition e
+        pos <- currentPosition e
         case parseMove pos input of
           Left err -> outputStrLn err
           Right m -> do
-            UCI.addMove e m
-            (bmc, _) <- UCI.go e []
+            addMove e m
+            outputBoard
+            (bmc, _) <- go e []
             hr <- lift $ gets hintRef
             externalPrint <- getExternalPrint
             tid <- liftIO . forkIO $ doBestMove externalPrint hr bmc e
             lift $ modify' $ \s -> s { mover = Just tid }
-            outputBoard
         loop
+
+varToSAN :: Position -> [Move] -> [String]
+varToSAN pos = snd . mapAccumL (curry (uncurry applyMove &&& uncurry toSAN)) pos
 
 parseMove :: Position -> String -> Either String Move
 parseMove pos s = case fromUCI pos s of
@@ -135,21 +160,28 @@ printBoard externalPrint pos = externalPrint . init . unlines $
     Nothing | isDark sq -> '.'
             | otherwise -> ' '
 
-doBestMove :: (String -> IO ()) -> IORef (Maybe Move) -> TChan (Move, Maybe Move) -> UCI.Engine -> IO ()
+doBestMove :: (String -> IO ())
+           -> IORef (Maybe Move)
+           -> TChan (Move, Maybe Move)
+           -> Engine
+           -> IO ()
 doBestMove externalPrint hintRef bmc e = do
   (bm, ponder) <- atomically . readTChan $ bmc
-  pos <- UCI.currentPosition e
+  pos <- currentPosition e
   externalPrint $ "< " <> toSAN pos bm
-  UCI.addMove e bm
-  UCI.currentPosition e >>= printBoard externalPrint
+  addMove e bm
+  currentPosition e >>= printBoard externalPrint
   writeIORef hintRef ponder
 
-printPV :: (String -> IO ()) -> TChan [UCI.Info] -> UCI.Engine -> IO ()
+printPV :: (String -> IO ()) -> TChan [Info] -> Engine -> IO ()
 printPV externalPrint ic engine = forever $ do
   info <- atomically . readTChan $ ic
   case find isPV info of
     Just pv -> externalPrint $ show pv
     Nothing -> pure ()
- where
-  isPV UCI.PV{} = True
-  isPV _        = False
+
+isPV, isScore :: Info -> Bool
+isPV PV{}       = True
+isPV _          = False
+isScore Score{} = True
+isScore _       = False
