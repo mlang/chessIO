@@ -312,10 +312,11 @@ searching Engine{isSearching} = liftIO $ readIORef isSearching
 search :: MonadIO m
        => Engine -> [SearchParam]
        -> m (TChan (Move, Maybe Move), TChan [Info])
-search e params = liftIO $ do
+search e@Engine{isSearching} params = liftIO $ do
   chans <- atomically $ (,) <$> dupTChan (bestMoveChan e)
                             <*> dupTChan (infoChan e)
   send e . fold . intersperse " " $ "go" : foldr build mempty params
+  writeIORef isSearching True
   pure chans
  where
   build (SearchMoves ms) xs = "searchmoves" : (fromString . toUCI <$> ms) <> xs
