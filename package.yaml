@@ -19,6 +19,7 @@ dependencies:
 - base >= 4.8 && < 5
 - bytestring
 - megaparsec
+- o-clock
 - parser-combinators
 - process
 - stm
@@ -30,12 +31,14 @@ default-extensions:
 - BinaryLiterals
 - BlockArguments
 - DeriveGeneric
+- FlexibleContexts
 - LambdaCase
 - NamedFieldPuns
 - NumericUnderscores
 - RecordWildCards
 - OverloadedStrings
 - TupleSections
+- TypeApplications
 - ViewPatterns
 
 extra-source-files:

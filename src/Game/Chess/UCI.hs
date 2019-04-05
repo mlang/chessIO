@@ -12,7 +12,9 @@ module Game.Chess.UCI (
   -- * The Info data type
 , Info(..)
   -- * Searching
-, SearchParam(..)
+, SearchParam
+, searchmoves, timeleft, timeincrement, movestogo, movetime, nodes, depth
+, infinite
 , isThinking, go, stop
   -- * Quitting
 , quit, quit'
@@ -43,7 +45,8 @@ import Numeric.Natural
 import System.Exit (ExitCode)
 import System.IO
 import System.Process
-import System.Timeout (timeout)
+import Time.Rational
+import Time.Units
 
 data Engine = Engine {
   inH :: Handle
@@ -162,7 +165,7 @@ command pos = skipSpace *> choice [
          <|> NPS <$> ("nps" *> skipSpace *> decimal)
          <|> HashFull <$> ("hashfull" *> skipSpace *> decimal)
          <|> TBHits <$> ("tbhits" *> skipSpace *> decimal)
-         <|> Time <$> ("time" *> skipSpace *> decimal)
+         <|> Game.Chess.UCI.Time <$> ("time" *> skipSpace *> decimal)
          <|> pv
          <|> currMove
          <|> CurrMoveNumber <$> ("currmovenumber" *> skipSpace *> decimal)
@@ -203,15 +206,15 @@ command pos = skipSpace *> choice [
 
 -- | Start a UCI engine with the given executable name and command line arguments.
 start :: String -> [String] -> IO (Maybe Engine)
-start = start' 2000000 putStrLn
+start = start' (sec 2) putStrLn
 
 -- | Start a UCI engine with the given timeout for initialisation.
 --
 -- If the engine takes more then the given microseconds to answer to the
 -- initialisation request, 'Nothing' is returned and the external process
 -- will be terminated.
-start' :: Int -> (String -> IO ()) -> String -> [String] -> IO (Maybe Engine)
-start' usec outputStrLn cmd args = do
+start' :: KnownDivRat unit Microsecond => Time unit -> (String -> IO ()) -> String -> [String] -> IO (Maybe Engine)
+start' tout outputStrLn cmd args = do
   (Just inH, Just outH, Nothing, procH) <- createProcess (proc cmd args) {
       std_in = CreatePipe, std_out = CreatePipe
     }
@@ -221,7 +224,7 @@ start' usec outputStrLn cmd args = do
        newBroadcastTChanIO <*> newBroadcastTChanIO <*>
        newIORef (startpos, [])
   send e "uci"
-  timeout usec (initialise e) >>= \case
+  timeout tout (initialise e) >>= \case
     Just e' -> do
       tid <- forkIO . infoReader $ e'
       pure . Just $ e' { infoThread = Just tid }
@@ -268,19 +271,40 @@ send Engine{inH, procH} b = do
 
 data SearchParam = SearchMoves [Move]
                 -- ^ restrict search to the specified moves only
-                 | TimeLeft Color Natural
+                 | TimeLeft Color (Time Millisecond)
                 -- ^ time (in milliseconds) left on the clock
-                 | TimeIncrement Color Natural
+                 | TimeIncrement Color (Time Millisecond)
                 -- ^ time increment per move in milliseconds
                  | MovesToGo Natural
                 -- ^ number of moves to the next time control
-                 | MoveTime Natural
+                 | MoveTime (Time Millisecond)
                  | MaxNodes Natural
                  | MaxDepth Natural
                  | Infinite
                 -- ^ search until 'stop' gets called
                  deriving (Eq, Show)
  
+searchmoves :: [Move] -> SearchParam
+searchmoves = SearchMoves
+
+timeleft, timeincrement :: KnownDivRat unit Millisecond
+                        => Color -> Time unit -> SearchParam
+timeleft c = TimeLeft c . toUnit
+timeincrement c = TimeIncrement c . toUnit
+
+movestogo :: Natural -> SearchParam
+movestogo = MovesToGo
+
+movetime :: KnownDivRat unit Millisecond => Time unit -> SearchParam
+movetime = MoveTime . toUnit
+
+nodes, depth :: Natural -> SearchParam
+nodes = MaxNodes
+depth = MaxDepth
+
+infinite :: SearchParam
+infinite = Infinite
+
 isThinking :: MonadIO m => Engine -> m Bool
 isThinking Engine{isSearching} = liftIO $ readIORef isSearching
 
@@ -295,12 +319,12 @@ go e params = liftIO $ do
   pure chans
  where
   build (SearchMoves ms) xs = "searchmoves" : (fromString . toUCI <$> ms) <> xs
-  build (TimeLeft White x) xs = "wtime" : naturalDec x : xs
-  build (TimeLeft Black x) xs = "btime" : naturalDec x : xs
-  build (TimeIncrement White x) xs = "winc" : naturalDec x : xs
-  build (TimeIncrement Black x) xs = "binc" : naturalDec x : xs
+  build (TimeLeft White (floor . unTime -> x)) xs = "wtime" : integerDec x : xs
+  build (TimeLeft Black (floor . unTime -> x)) xs = "btime" : integerDec x : xs
+  build (TimeIncrement White (floor . unTime -> x)) xs = "winc" : integerDec x : xs
+  build (TimeIncrement Black (floor . unTime -> x)) xs = "binc" : integerDec x : xs
   build (MovesToGo x) xs = "movestogo" : naturalDec x : xs
-  build (MoveTime x) xs = "movetime" : naturalDec x : xs
+  build (MoveTime (floor . unTime -> x)) xs = "movetime" : integerDec x : xs
   build (MaxNodes x) xs = "nodes" : naturalDec x : xs
   build (MaxDepth x) xs = "depth" : naturalDec x : xs
   build Infinite xs = "infinite" : xs
@@ -358,12 +382,13 @@ sendPosition e@Engine{game} = do
 
 -- | Quit the engine.
 quit :: MonadIO m => Engine -> m (Maybe ExitCode)
-quit = quit' 1000000
+quit = quit' (sec 1)
 
-quit' :: MonadIO m => Int -> Engine -> m (Maybe ExitCode)
-quit' usec e@Engine{procH, infoThread} = liftIO $ (pure . Just) `handle` do
+quit' :: (KnownDivRat unit Microsecond, MonadIO m)
+      => Time unit -> Engine -> m (Maybe ExitCode)
+quit' t e@Engine{procH, infoThread} = liftIO $ (pure . Just) `handle` do
   maybe (pure ()) killThread infoThread
   send e "quit"
-  timeout usec (waitForProcess procH) >>= \case
+  timeout t (waitForProcess procH) >>= \case
     Just ec -> pure $ Just ec
     Nothing -> terminateProcess procH $> Nothing

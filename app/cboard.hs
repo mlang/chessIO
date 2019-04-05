@@ -18,6 +18,7 @@ import Game.Chess.UCI
 import System.Console.Haskeline hiding (catch, handle)
 import System.Exit
 import System.Environment
+import Time.Units
 
 data S = S {
   engine :: Engine
@@ -90,7 +91,7 @@ loop = do
         loop
       | "pass" == input -> do
         unlessM (isThinking e) $ do
-          (bmc, _) <- go e []
+          (bmc, _) <- go e [movetime (sec 2)]
           hr <- lift $ gets hintRef
           externalPrint <- getExternalPrint
           tid <- liftIO . forkIO $ doBestMove externalPrint hr bmc e
@@ -99,7 +100,7 @@ loop = do
       | input `elem` ["analyze", "analyse"] -> do
         unlessM (isThinking e) $ do
           pos <- currentPosition e
-          (bmc, ic) <- go e [Infinite]
+          (bmc, ic) <- go e [infinite]
           externalPrint <- getExternalPrint
           itid <- liftIO . forkIO . forever $ do
             info <- atomically . readTChan $ ic
@@ -125,7 +126,7 @@ loop = do
           Right m -> do
             addMove e m
             outputBoard
-            (bmc, _) <- go e []
+            (bmc, _) <- go e [movetime (sec 1)]
             hr <- lift $ gets hintRef
             externalPrint <- getExternalPrint
             tid <- liftIO . forkIO $ doBestMove externalPrint hr bmc e
