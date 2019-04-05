@@ -106,7 +106,7 @@ loop = do
             case (find isScore &&& find isPV) info of
               (Just (Score cp), Just (PV pv))
                 | LowerBound `notElem` info && UpperBound `notElem` info ->
-                  externalPrint $ show cp <> ":" <> unwords (varToSAN pos pv)
+                  externalPrint $ show cp <> ": " <> varToString pos pv
               _ -> pure ()
           tid <- liftIO . forkIO $ do
             (bm, ponder) <- atomically . readTChan $ bmc
@@ -132,8 +132,21 @@ loop = do
             lift $ modify' $ \s -> s { mover = Just tid }
         loop
 
-varToSAN :: Position -> [Move] -> [String]
-varToSAN pos = snd . mapAccumL (curry (uncurry applyMove &&& uncurry toSAN)) pos
+varToSANList :: Position -> [Move] -> [String]
+varToSANList pos = snd . mapAccumL (curry (uncurry applyMove &&& uncurry toSAN)) pos
+
+varToString :: Position -> [Move] -> String
+varToString _ [] = ""
+varToString pos ms
+  | color pos == Black && length ms == 1
+  = show (moveNumber pos) <> "..." <> toSAN pos (head ms)
+  | color pos == Black
+  = show (moveNumber pos) <> "..." <> toSAN pos (head ms) <> " " <> fromWhite (applyMove pos (head ms)) (tail ms)
+  | otherwise
+  = fromWhite pos ms
+ where
+  fromWhite pos ms = unwords . concat . zipWith f [moveNumber pos ..] . chunksOf 2 $ varToSANList pos ms
+  f n (x:xs) = (show n <> "." <> x):xs
 
 parseMove :: Position -> String -> Either String Move
 parseMove pos s = case fromUCI pos s of

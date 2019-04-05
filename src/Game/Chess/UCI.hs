@@ -93,7 +93,7 @@ data Info = PV [Move]
           | NPS Int
           | TBHits Int
           | HashFull Int
-          | CurrMove ByteString
+          | CurrMove Move
           | CurrMoveNumber Int
           deriving (Eq, Show)
 
@@ -164,7 +164,7 @@ command pos = skipSpace *> choice [
          <|> TBHits <$> ("tbhits" *> skipSpace *> decimal)
          <|> Time <$> ("time" *> skipSpace *> decimal)
          <|> pv
-         <|> CurrMove <$> ("currmove" *> skipSpace *> mv)
+         <|> currMove
          <|> CurrMoveNumber <$> ("currmovenumber" *> skipSpace *> decimal)
   pv = do
     xs <- (fmap . fmap) BS.unpack $ "pv" *> skipSpace *> sepBy mv skipSpace
@@ -173,6 +173,12 @@ command pos = skipSpace *> choice [
     case fromUCI pos s of
       Just m -> pure (applyMove pos m, xs <> [m])
       Nothing -> fail $ "Failed to parse move " <> s
+  currMove = do
+    s <- fmap BS.unpack $ "currmove" *> skipSpace *> mv
+    case fromUCI pos s of
+      Just m -> pure $ CurrMove m
+      Nothing -> fail $ "Failed to parse move " <> s
+
   mv = fmap fst $ match $ satisfy f *> satisfy r *> satisfy f *> satisfy r *> optional (satisfy p) where
     f = inRange ('a','h')
     r = inRange ('1', '8')

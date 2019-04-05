@@ -19,7 +19,7 @@ module Game.Chess (
   Color(..), opponent
 , Sq(..), isLight, isDark
 , PieceType(..)
-, Position, startpos, color, pieceAt, inCheck
+, Position, startpos, color, moveNumber, pieceAt, inCheck
   -- ** Converting from/to Forsyth-Edwards-Notation
 , fromFEN, toFEN
   -- * Chess moves
@@ -232,9 +232,11 @@ data BB = BB { wP, wN, wB, wR, wQ, wK :: !Word64
 data Position = Position {
   board :: !BB
 , color :: !Color
+  -- ^ active color
 , flags :: !Word64
 , halfMoveClock :: !Int
 , moveNumber :: !Int
+  -- ^ number of the full move
 } deriving (Eq)
 
 emptyBB :: BB
@@ -463,13 +465,14 @@ applyMove p m
 -- can be applied to the position.  This is useful if the move has been generated
 -- by the 'moves' function.
 unsafeApplyMove :: Position -> Move -> Position
-unsafeApplyMove pos@Position{flags} m@(unpack -> (from, to, promo))
+unsafeApplyMove pos@Position{flags, moveNumber} m@(unpack -> (from, to, promo))
   | m == wKscm && flags `testMask` crwKs
   = pos { board = bb { wK = wK bb `xor` mask
                      , wR = wR bb `xor` (bit (fromEnum H1) `setBit` fromEnum F1)
                      }
         , color = opponent (color pos)
         , flags = flags `clearMask` (rank1 .|. epMask)
+        , moveNumber = updateMoveNumber moveNumber
         }
   | m == wQscm && flags `testMask` crwQs
   = pos { board = bb { wK = wK bb `xor` mask
@@ -477,6 +480,7 @@ unsafeApplyMove pos@Position{flags} m@(unpack -> (from, to, promo))
                      }
         , color = opponent (color pos)
         , flags = flags `clearMask` (rank1 .|. epMask)
+        , moveNumber = updateMoveNumber moveNumber
         }
   | m == bKscm && flags `testMask` crbKs
   = pos { board = bb { bK = bK bb `xor` mask
@@ -484,6 +488,7 @@ unsafeApplyMove pos@Position{flags} m@(unpack -> (from, to, promo))
                      }
         , color = opponent (color pos)
         , flags = flags `clearMask` (rank8 .|. epMask)
+        , moveNumber = updateMoveNumber moveNumber
         }
   | m == bQscm && flags `testMask` crbQs
   = pos { board = bb { bK = bK bb `xor` mask
@@ -491,6 +496,7 @@ unsafeApplyMove pos@Position{flags} m@(unpack -> (from, to, promo))
                      }
         , color = opponent (color pos)
         , flags = flags `clearMask` (rank8 .|. epMask)
+        , moveNumber = updateMoveNumber moveNumber
         }
   | Just Queen <- promo
   , color pos == White
@@ -499,6 +505,7 @@ unsafeApplyMove pos@Position{flags} m@(unpack -> (from, to, promo))
                          }
         , color = opponent (color pos)
         , flags = flags `clearMask` (epMask .|. bit to)
+        , moveNumber = updateMoveNumber moveNumber
         }
   | Just Rook <- promo
   , color pos == White
@@ -507,6 +514,7 @@ unsafeApplyMove pos@Position{flags} m@(unpack -> (from, to, promo))
                          }
         , color = opponent (color pos)
         , flags = flags `clearMask` (epMask .|. bit to)
+        , moveNumber = updateMoveNumber moveNumber
         }
   | Just Bishop <- promo
   , color pos == White
@@ -515,6 +523,7 @@ unsafeApplyMove pos@Position{flags} m@(unpack -> (from, to, promo))
                          }
         , color = opponent (color pos)
         , flags = flags `clearMask` (epMask .|. bit to)
+        , moveNumber = updateMoveNumber moveNumber
         }
   | Just Knight <- promo
   , color pos == White
@@ -523,6 +532,7 @@ unsafeApplyMove pos@Position{flags} m@(unpack -> (from, to, promo))
                          }
         , color = opponent (color pos)
         , flags = flags `clearMask` (epMask .|. bit to)
+        , moveNumber = updateMoveNumber moveNumber
         }
   | Just Queen <- promo
   , color pos == Black
@@ -531,6 +541,7 @@ unsafeApplyMove pos@Position{flags} m@(unpack -> (from, to, promo))
                          }
         , color = opponent (color pos)
         , flags = flags `clearMask` (epMask .|. bit to)
+        , moveNumber = updateMoveNumber moveNumber
         }  
   | Just Rook <- promo
   , color pos == Black
@@ -539,6 +550,7 @@ unsafeApplyMove pos@Position{flags} m@(unpack -> (from, to, promo))
                          }
         , color = opponent (color pos)
         , flags = flags `clearMask` (epMask .|. bit to)
+        , moveNumber = updateMoveNumber moveNumber
         }
   | Just Bishop <- promo
   , color pos == Black
@@ -547,6 +559,7 @@ unsafeApplyMove pos@Position{flags} m@(unpack -> (from, to, promo))
                          }
         , color = opponent (color pos)
         , flags = flags `clearMask` (epMask .|. bit to)
+        , moveNumber = updateMoveNumber moveNumber
         }
   | Just Knight <- promo
   , color pos == Black
@@ -555,11 +568,14 @@ unsafeApplyMove pos@Position{flags} m@(unpack -> (from, to, promo))
                          }
         , color = opponent (color pos)
         , flags = flags `clearMask` (epMask .|. bit to)
+        , moveNumber = updateMoveNumber moveNumber
         }
   | otherwise
   = pos { board = newBoard
         , color = opponent (color pos)
-        , flags = (flags `clearMask` (epMask .|. mask)) .|. dpp }
+        , flags = (flags `clearMask` (epMask .|. mask)) .|. dpp
+        , moveNumber = updateMoveNumber moveNumber
+        }
  where
   !bb = board pos
   epBit = case color pos of
@@ -598,6 +614,8 @@ unsafeApplyMove pos@Position{flags} m@(unpack -> (from, to, promo))
     White | fromMask .&. rank2 .&. wP bb /= 0 && from + 16 == to -> bit (from + 8)
     Black | fromMask .&. rank7 .&. bP bb /= 0 && from - 16 == to -> bit (from - 8)
     _                                                            -> 0
+  updateMoveNumber x | color pos == Black = x + 1
+                     | otherwise          = x
 
 -- | Generate a list of possible moves for the given position.
 moves :: Position -> [Move]
