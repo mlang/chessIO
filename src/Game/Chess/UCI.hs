@@ -15,7 +15,7 @@ module Game.Chess.UCI (
 , SearchParam
 , searchmoves, timeleft, timeincrement, movestogo, movetime, nodes, depth
 , infinite
-, isThinking, go, stop
+, searching, search, stop
   -- * Quitting
 , quit, quit'
 ) where
@@ -305,14 +305,14 @@ depth = MaxDepth
 infinite :: SearchParam
 infinite = Infinite
 
-isThinking :: MonadIO m => Engine -> m Bool
-isThinking Engine{isSearching} = liftIO $ readIORef isSearching
+searching :: MonadIO m => Engine -> m Bool
+searching Engine{isSearching} = liftIO $ readIORef isSearching
 
 -- | Instruct the engine to begin searching.
-go :: MonadIO m
-   => Engine -> [SearchParam]
-   -> m (TChan (Move, Maybe Move), TChan [Info])
-go e params = liftIO $ do
+search :: MonadIO m
+       => Engine -> [SearchParam]
+       -> m (TChan (Move, Maybe Move), TChan [Info])
+search e params = liftIO $ do
   chans <- atomically $ (,) <$> dupTChan (bestMoveChan e)
                             <*> dupTChan (infoChan e)
   send e . fold . intersperse " " $ "go" : foldr build mempty params

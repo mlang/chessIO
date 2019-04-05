@@ -90,17 +90,17 @@ loop = do
           Nothing -> outputStrLn "Sorry, no hint available"
         loop
       | "pass" == input -> do
-        unlessM (isThinking e) $ do
-          (bmc, _) <- go e [movetime (sec 2)]
+        unlessM (searching e) $ do
+          (bmc, _) <- search e [movetime (sec 2)]
           hr <- lift $ gets hintRef
           externalPrint <- getExternalPrint
           tid <- liftIO . forkIO $ doBestMove externalPrint hr bmc e
           lift $ modify' $ \s -> s { mover = Just tid }
         loop
       | input `elem` ["analyze", "analyse"] -> do
-        unlessM (isThinking e) $ do
+        unlessM (searching e) $ do
           pos <- currentPosition e
-          (bmc, ic) <- go e [infinite]
+          (bmc, ic) <- search e [infinite]
           externalPrint <- getExternalPrint
           itid <- liftIO . forkIO . forever $ do
             info <- atomically . readTChan $ ic
@@ -123,10 +123,10 @@ loop = do
         pos <- currentPosition e
         case parseMove pos input of
           Left err -> outputStrLn err
-          Right m -> do
+          Right m -> ifM (searching e) (outputStrLn "Not your move") $ do
             addMove e m
             outputBoard
-            (bmc, _) <- go e [movetime (sec 1)]
+            (bmc, _) <- search e [movetime (sec 1)]
             hr <- lift $ gets hintRef
             externalPrint <- getExternalPrint
             tid <- liftIO . forkIO $ doBestMove externalPrint hr bmc e
