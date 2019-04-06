@@ -105,9 +105,8 @@ loop = do
           itid <- liftIO . forkIO . forever $ do
             info <- atomically . readTChan $ ic
             case (find isScore &&& find isPV) info of
-              (Just (Score cp), Just (PV pv))
-                | LowerBound `notElem` info && UpperBound `notElem` info ->
-                  externalPrint $ show cp <> ": " <> varToString pos pv
+              (Just (Score s Nothing), Just (PV pv)) ->
+                externalPrint $ show s <> ": " <> varToString pos pv
               _ -> pure ()
           tid <- liftIO . forkIO $ do
             (bm, ponder) <- atomically . readTChan $ bmc

@@ -10,7 +10,7 @@ module Game.Chess.UCI (
   -- * Manipulating the current game information
 , currentPosition, setPosition, addMove
   -- * The Info data type
-, Info(..)
+, Info(..), Score(..), Bounds(..)
   -- * Searching
 , SearchParam
 , searchmoves, timeleft, timeincrement, movestogo, movetime, nodes, depth
@@ -66,10 +66,14 @@ data Engine = Engine {
 
 -- | Set the starting position of the current game, also clearing any
 -- pre-existing history.
-setPosition :: MonadIO m => Engine -> Position -> m ()
+setPosition :: MonadIO m
+            => Engine -> Position
+            -> m (Position, [Move])
+              -- ^ the game previously in progress
 setPosition e@Engine{game} p = liftIO $ do
-  atomicWriteIORef game (p, [])
+  oldGame <- atomicModifyIORef' game ((p, []),)
   sendPosition e
+  pure oldGame
 
 data UCIException = IllegalMove Move deriving Show
 
@@ -81,17 +85,15 @@ data Command = Name ByteString
              | UCIOk
              | ReadyOK
              | Info [Info]
-             | BestMove !(Move, (Maybe Move))
+             | BestMove !(Move, Maybe Move)
              deriving (Show)
 
 data Info = PV [Move]
           | Depth Int
           | SelDepth Int
-          | Time Int
+          | Elapsed (Time Millisecond)
           | MultiPV Int
-          | Score Int
-          | UpperBound
-          | LowerBound
+          | Score Score (Maybe Bounds)
           | Nodes Int
           | NPS Int
           | TBHits Int
@@ -99,6 +101,13 @@ data Info = PV [Move]
           | CurrMove Move
           | CurrMoveNumber Int
           deriving (Eq, Show)
+
+data Score = CentiPawns Int
+           | MateIn Int
+           deriving (Eq, Ord, Show)
+           
+data Bounds = UpperBound | LowerBound deriving (Eq, Show)
+
 
 data Option = CheckBox Bool
             | ComboBox { comboBoxValue :: ByteString, comboBoxValues :: [ByteString] }
@@ -112,16 +121,18 @@ instance IsString Option where
 
 command :: Position -> Parser Command
 command pos = skipSpace *> choice [
-    name, author, option, uciok, readyok, info, bestmove
+    "id" `kv` name
+  , "id" `kv` author
+  , "option" `kv` option
+  , "uciok" $> UCIOk
+  , "readyok" $> ReadyOK
+  , "info" `kv` fmap Info (sepBy1 infoItem skipSpace)
+  , "bestmove" `kv` bestmove
   ] <* skipSpace
  where
-  name = fmap Name $
-    "id" *> skipSpace *> "name" *> skipSpace *> takeByteString
-  author = fmap Author $
-    "id" *> skipSpace *> "author" *> skipSpace *> takeByteString
+  name = Name <$> kv "name" takeByteString
+  author = Author <$> kv "author" takeByteString
   option = do
-    void "option"
-    skipSpace
     void "name"
     skipSpace
     optName <- BS.pack <$> manyTill anyChar (skipSpace *> "type")
@@ -149,60 +160,51 @@ command pos = skipSpace *> choice [
   str = fmap String $
     "string" *> skipSpace *> "default" *> skipSpace *> takeByteString
   button = "button" $> Button
-  uciok = "uciok" $> UCIOk
-  readyok = "readyok" $> ReadyOK
-  info = do
-    "info"
-    skipSpace
-    Info <$> sepBy1 infoItem skipSpace
-  infoItem = Depth <$> ("depth" *> skipSpace *> decimal)
-         <|> SelDepth <$> ("seldepth" *> skipSpace *> decimal)
-         <|> MultiPV <$> ("multipv" *> skipSpace *> decimal)
-         <|> Score <$> ("score" *> skipSpace *> "cp" *> skipSpace *> signed decimal)
-         <|> UpperBound <$ "upperbound"
-         <|> LowerBound <$ "lowerbound"
-         <|> Nodes <$> ("nodes" *> skipSpace *> decimal)
-         <|> NPS <$> ("nps" *> skipSpace *> decimal)
-         <|> HashFull <$> ("hashfull" *> skipSpace *> decimal)
-         <|> TBHits <$> ("tbhits" *> skipSpace *> decimal)
-         <|> Game.Chess.UCI.Time <$> ("time" *> skipSpace *> decimal)
-         <|> pv
-         <|> currMove
-         <|> CurrMoveNumber <$> ("currmovenumber" *> skipSpace *> decimal)
-  pv = do
-    xs <- (fmap . fmap) BS.unpack $ "pv" *> skipSpace *> sepBy mv skipSpace
-    PV . snd <$> foldM toMove (pos, []) xs
-  toMove (pos, xs) s = do
-    case fromUCI pos s of
-      Just m -> pure (applyMove pos m, xs <> [m])
-      Nothing -> fail $ "Failed to parse move " <> s
-  currMove = do
-    s <- fmap BS.unpack $ "currmove" *> skipSpace *> mv
-    case fromUCI pos s of
-      Just m -> pure $ CurrMove m
-      Nothing -> fail $ "Failed to parse move " <> s
+  infoItem = Depth <$> kv "depth" decimal
+         <|> SelDepth <$> kv "seldepth" decimal
+         <|> MultiPV <$> kv "multipv" decimal
+         <|> kv "score" score
+         <|> Nodes <$> kv "nodes" decimal
+         <|> NPS <$> kv "nps" decimal
+         <|> HashFull <$> kv "hashfull" decimal
+         <|> TBHits <$> kv "tbhits" decimal
+         <|> Elapsed . ms . fromIntegral <$> kv "time" decimal
+         <|> kv "pv" pv
+         <|> kv "currmove" currmove
+         <|> CurrMoveNumber <$> kv "currmovenumber" decimal
+  score = do
+    s <- CentiPawns <$> ("cp" *> skipSpace *> signed decimal)
+     <|> MateIn <$> ("mate" *> skipSpace *> signed decimal)
+    b <- optional $ skipSpace *> (  UpperBound <$ "upperbound"
+                                <|> LowerBound <$ "lowerbound"
+                                 )
+    pure $ Score s b
+  pv = fmap (PV . snd) $ foldM toMove (pos, []) =<< sepBy mv skipSpace
+  toMove (pos, xs) s = case fromUCI pos s of
+    Just m -> pure (applyMove pos m, xs <> [m])
+    Nothing -> fail $ "Failed to parse move " <> s
+  currmove = fmap (fromUCI pos) mv >>= \case
+    Just m -> pure $ CurrMove m
+    Nothing -> fail "Failed to parse move"
 
-  mv = fmap fst $ match $ satisfy f *> satisfy r *> satisfy f *> satisfy r *> optional (satisfy p) where
-    f = inRange ('a','h')
-    r = inRange ('1', '8')
+  mv = BS.unpack . fst <$> match (sq *> sq *> optional (satisfy p)) where
+    sq = satisfy (inRange ('a', 'h')) *> satisfy (inRange ('1', '8'))
     p 'q' = True
     p 'r' = True
     p 'b' = True
     p 'n' = True
     p _ = False 
   bestmove = do
-    void "bestmove"
-    skipSpace
-    m <- BS.unpack <$> mv
-    ponder <- (fmap . fmap) BS.unpack $
-              optional (skipSpace *> "ponder" *> skipSpace *> mv)
+    m <- mv
+    ponder <- optional (skipSpace *> kv "ponder" mv)
     case fromUCI pos m of
       Just m' -> case ponder of
         Nothing -> pure $ BestMove (m', Nothing)
         Just p -> case fromUCI (applyMove pos m') p of
-          Just p' -> pure $ BestMove (m', (Just p'))
+          Just p' -> pure $ BestMove (m', Just p')
           Nothing -> fail $ "Failed to parse ponder move " <> p
       Nothing -> fail $ "Failed to parse best move " <> m
+  kv k v = k *> skipSpace *> v
 
 -- | Start a UCI engine with the given executable name and command line arguments.
 start :: String -> [String] -> IO (Maybe Engine)
@@ -248,8 +250,7 @@ infoReader e@Engine{..} = forever $ do
   l <- BS.hGetLine outH
   pos <- currentPosition e
   case parseOnly (command pos <* endOfInput) l of
-    Left err -> do
-      outputStrLn $ err <> ":" <> show l
+    Left err -> outputStrLn $ err <> ":" <> show l
     Right ReadyOK -> putMVar isReady ()
     Right (Info i) -> atomically $ writeTChan infoChan i
     Right (BestMove bm) -> do
@@ -369,13 +370,11 @@ addMove :: MonadIO m => Engine -> Move -> m ()
 addMove e@Engine{game} m = liftIO $ do
   pos <- currentPosition e
   if m `notElem` moves pos then throwIO $ IllegalMove m else do
-    atomicModifyIORef' game \g -> (fmap (<> [m]) g, ())
+    atomicModifyIORef' game $ \g -> (fmap (<> [m]) g, ())
     sendPosition e
  
 sendPosition :: Engine -> IO ()
-sendPosition e@Engine{game} = do
-  readIORef game >>= send e . cmd
- where
+sendPosition e@Engine{game} = readIORef game >>= send e . cmd where
   cmd (p, h) = "position fen " <> fromString (toFEN p) <> line h
   line h
     | null h    = ""
