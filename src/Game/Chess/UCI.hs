@@ -12,10 +12,10 @@ module Game.Chess.UCI (
   -- * The Info data type
 , Info(..), Score(..), Bounds(..)
   -- * Searching
+, search, searching
 , SearchParam
-, searchmoves, timeleft, timeincrement, movestogo, movetime, nodes, depth
-, infinite
-, searching, search, stop
+, searchmoves, timeleft, timeincrement, movestogo, movetime, nodes, depth, infinite
+, stop
   -- * Quitting
 , quit, quit'
 ) where
@@ -120,8 +120,8 @@ instance IsString Option where
   fromString = String . BS.pack
 
 command :: Position -> Parser Command
-command pos = skipSpace *> choice [
-    "id" `kv` name
+command pos = skipSpace *> choice
+  [ "id" `kv` name
   , "id" `kv` author
   , "option" `kv` option
   , "uciok" $> UCIOk
@@ -173,8 +173,8 @@ command pos = skipSpace *> choice [
          <|> kv "currmove" currmove
          <|> CurrMoveNumber <$> kv "currmovenumber" decimal
   score = do
-    s <- CentiPawns <$> ("cp" *> skipSpace *> signed decimal)
-     <|> MateIn <$> ("mate" *> skipSpace *> signed decimal)
+    s <- kv "cp" (CentiPawns <$> signed decimal)
+     <|> kv "mate" (MateIn <$> signed decimal)
     b <- optional $ skipSpace *> (  UpperBound <$ "upperbound"
                                 <|> LowerBound <$ "lowerbound"
                                  )
@@ -375,10 +375,10 @@ addMove e@Engine{game} m = liftIO $ do
  
 sendPosition :: Engine -> IO ()
 sendPosition e@Engine{game} = readIORef game >>= send e . cmd where
-  cmd (p, h) = "position fen " <> fromString (toFEN p) <> line h
-  line h
-    | null h    = ""
-    | otherwise = " moves " <> fold (intersperse " " (fromString . toUCI <$> h))
+  cmd (p, h) = fold . intersperse " " $
+    "position" : "fen" : fromString (toFEN p) : line h
+  line [] = []
+  line h = "moves" : (fromString . toUCI <$> h)
 
 -- | Quit the engine.
 quit :: MonadIO m => Engine -> m (Maybe ExitCode)

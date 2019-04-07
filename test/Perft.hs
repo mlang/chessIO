@@ -3,6 +3,7 @@ module Main where
 import Control.Parallel.Strategies
 import Data.Foldable
 import Data.Maybe
+import Data.Monoid
 import Data.Time.Clock
 import Data.Traversable
 import Game.Chess
@@ -47,14 +48,15 @@ showResult depth PerftResult{nodes} = show depth <> " " <> show nodes
 
 perft :: Int -> Position -> PerftResult
 perft 0 _ = PerftResult 1
-perft 1 p = PerftResult . fromIntegral . length $
-            unsafeApplyMove p <$> moves p
-perft 2 p = fold . map (perft 1) $ unsafeApplyMove p <$> moves p
-perft n p = fold . withStrategy (parList rdeepseq) . map (perft $ pred n) $
-            unsafeApplyMove p <$> moves p
+perft 1 p = PerftResult . fromIntegral . length $ moves p
+perft n p
+  | n < 4
+  = foldMap (perft (pred n) . unsafeApplyMove p) $ moves p
+  | otherwise
+  = fold . parMap rdeepseq (perft (pred n) . unsafeApplyMove p) $ moves p
 
 runTestSuite :: [(Position, [(Int, PerftResult)])] -> IO (Maybe PerftResult)
-runTestSuite = fmap fold . traverse (uncurry (test mempty)) where
+runTestSuite = fmap (getAp . foldMap Ap) . traverse (uncurry (test mempty)) where
   test sum pos ((depth, expected) : more)
     | result == expected
     = do
