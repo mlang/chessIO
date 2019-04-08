@@ -18,8 +18,9 @@ module Game.Chess (
   -- * Chess positions
   Color(..), opponent
 , Sq(..), isLight, isDark
-, PieceType(..)
+, PieceType(..), Castle(..)
 , Position, startpos, color, moveNumber, pieceAt, inCheck
+, castlingRights, canCastleKingside, canCastleQueenside
   -- ** Converting from/to Forsyth-Edwards-Notation
 , fromFEN, toFEN
   -- * Chess moves
@@ -33,6 +34,7 @@ module Game.Chess (
 ) where
 
 import Control.Applicative.Combinators
+import Data.Binary
 import Data.Bits
 import Data.Char
 import Data.Functor (($>))
@@ -186,9 +188,9 @@ startpos :: Position
 startpos = fromJust $
   fromFEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
-data PieceType = Pawn | Knight | Bishop | Rook | Queen | King deriving (Eq, Show)
+data PieceType = Pawn | Knight | Bishop | Rook | Queen | King deriving (Eq, Ix, Ord, Show)
 
-data Color = White | Black deriving (Eq, Show)
+data Color = Black | White deriving (Eq, Ix, Ord, Show)
 
 pieceAt :: Position -> Sq -> Maybe (Color, PieceType)
 pieceAt (board -> BB{wP, wN, wB, wR, wQ, wK, bP, bN, bB, bR, bQ, bK}) (fromEnum -> sq)
@@ -220,15 +222,13 @@ data Sq = A1 | B1 | C1 | D1 | E1 | F1 | G1 | H1
         | A6 | B6 | C6 | D6 | E6 | F6 | G6 | H6
         | A7 | B7 | C7 | D7 | E7 | F7 | G7 | H7
         | A8 | B8 | C8 | D8 | E8 | F8 | G8 | H8
-        deriving (Bounded, Enum, Eq, Show)
+        deriving (Bounded, Enum, Eq, Ix, Ord, Show)
 
 isDark :: Sq -> Bool
 isDark (fromEnum -> sq) = (0xaa55aa55aa55aa55 :: Word64) `testBit` sq
 
 isLight :: Sq -> Bool
 isLight = not . isDark
-data Castling = Kingside | Queenside deriving (Eq, Ord, Show)
-
 data BB = BB { wP, wN, wB, wR, wQ, wK :: !Word64
              , bP, bN, bB, bR, bQ, bK :: !Word64
              } deriving (Eq, Show)
@@ -371,13 +371,13 @@ bitScanForward, bitScanReverse :: Word64 -> Int
 bitScanForward = countTrailingZeros
 bitScanReverse = (63 -) . countLeadingZeros
 
-newtype Move = Move Word16 deriving (Eq)
+newtype Move = Move Word16 deriving (Binary, Eq)
 
 instance Show Move where
   show = toUCI
 
 move :: Int -> Int -> Move
-move from to = Move $ fromIntegral from .|. fromIntegral to `unsafeShiftL` 6
+move from to = Move $ fromIntegral to .|. fromIntegral from `unsafeShiftL` 6
 
 promoteTo :: Move -> PieceType -> Move
 promoteTo (Move x) = Move . set where
@@ -388,8 +388,8 @@ promoteTo (Move x) = Move . set where
   set _      = x
 
 unpack :: Move -> (Int, Int, Maybe PieceType)
-unpack (Move x) = ( fromIntegral (x .&. 0b111111)
-                  , fromIntegral ((x `unsafeShiftR` 6) .&. 0b111111)
+unpack (Move x) = ( fromIntegral ((x `unsafeShiftR` 6) .&. 0b111111)
+                  , fromIntegral (x .&. 0b111111)
                   , piece)
  where
   !piece = case x `unsafeShiftR` 12 of
@@ -551,7 +551,7 @@ unsafeApplyMove' pos@Position{board, flags} m@(unpack -> (from, to, promo))
         , flags = (flags `clearMask` (epMask .|. mask)) .|. dpp
         }
  where
-  epBit = case color pos of
+  !epBit = case color pos of
     White | wP board `testMask` fromMask -> shiftS $ flags .&. rank6 .&. toMask
     Black | bP board `testMask` fromMask -> shiftN $ flags .&. rank3 .&. toMask
     _ -> 0
@@ -590,8 +590,7 @@ unsafeApplyMove' pos@Position{board, flags} m@(unpack -> (from, to, promo))
 
 -- | Generate a list of possible moves for the given position.
 moves :: Position -> [Move]
-moves pos@Position{color, board, flags} =
-  filter (not . inCheck color . unsafeApplyMove' pos) $
+moves pos@Position{color, board, flags} = filter legalMove $
       kingMoves
     . knightMoves
     . slideMoves Queen pos ours notOurs occ
@@ -600,6 +599,7 @@ moves pos@Position{color, board, flags} =
     . pawnMoves
     $ []
  where
+  legalMove = not . inCheck color . unsafeApplyMove' pos
   !ours = occupiedBy color board
   !them = occupiedBy (opponent color) board
   !notOurs = complement ours
@@ -681,6 +681,19 @@ slideMoves piece (Position bb c _ _ _) !ours !notOurs !occ =
     (White, Queen)  -> wQ bb
     (Black, Queen)  -> bQ bb
     _ -> 0
+
+data Castle = Kingside | Queenside deriving (Eq, Ix, Ord, Show)
+
+castlingRights :: Position -> [(Color, Castle)]
+castlingRights Position{flags} = wks . wqs . bks . bqs $ [] where
+  wks xs | flags `testMask` crwKs = (White, Kingside):xs
+         | otherwise              = xs
+  wqs xs | flags `testMask` crwQs = (White, Queenside):xs
+         | otherwise              = xs
+  bks xs | flags `testMask` crbKs = (Black, Kingside):xs
+         | otherwise              = xs
+  bqs xs | flags `testMask` crbQs = (Black, Queenside):xs
+         | otherwise              = xs
 
 canCastleKingside, canCastleQueenside :: Position -> Bool
 canCastleKingside !pos@Position{board} = canCastleKingside' pos (occupied board)

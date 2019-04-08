@@ -132,9 +132,6 @@ loop = do
             lift $ modify' $ \s -> s { mover = Just tid }
         loop
 
-varToSANList :: Position -> [Move] -> [String]
-varToSANList pos = snd . mapAccumL (curry (uncurry applyMove &&& uncurry toSAN)) pos
-
 varToString :: Position -> [Move] -> String
 varToString _ [] = ""
 varToString pos ms
@@ -145,7 +142,9 @@ varToString pos ms
   | otherwise
   = fromWhite pos ms
  where
-  fromWhite pos ms = unwords . concat . zipWith f [moveNumber pos ..] . chunksOf 2 $ varToSANList pos ms
+  fromWhite pos = unwords . concat
+                . zipWith f [moveNumber pos ..] . chunksOf 2 . snd
+                . mapAccumL (curry (uncurry applyMove &&& uncurry toSAN)) pos
   f n (x:xs) = (show n <> "." <> x):xs
 
 parseMove :: Position -> String -> Either String Move
