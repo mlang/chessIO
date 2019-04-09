@@ -10,7 +10,6 @@ import qualified Data.Vector as Vector
 import qualified Data.Vector.Unboxed as Unboxed
 import Data.Ix
 import Game.Chess
-import Numeric.Search
 
 data BookEntry = BookEntry {
   key :: Word64
@@ -34,12 +33,17 @@ readPolyglotFile :: FilePath -> IO PolyglotBook
 readPolyglotFile = decodeFile 
 
 bookPlies :: PolyglotBook -> Position -> [Move]
-bookPlies (Book v) pos = fromMaybe [] $ ms <$> ranges where
-  ms Range{loVal, hiVal} =
-    move <$> Vector.toList (Vector.slice loVal (hiVal - loVal) v)
-  ranges = lookupRanges hash $
-    search (fromTo 0 (Vector.length v - 1)) divForever (key . (v Vector.!))
+bookPlies (Book v) pos = fmap move $ Vector.toList $
+  Vector.takeWhile ((hash ==) . key) $ Vector.unsafeDrop (lowerBound v hash) v
+ where
   hash = hashPosition pos
+  lowerBound v = bsearch (key . Vector.unsafeIndex v) (0, Vector.length v - 1)
+  bsearch :: (Integral a, Ord b) => (a -> b) -> (a, a) -> b -> a
+  bsearch f (lo, hi) v
+    | lo >= hi   = lo
+    | v <= f mid = bsearch f (lo, mid) v
+    | otherwise  = bsearch f (mid + 1, hi) v
+   where mid = (lo + hi) `div` 2
 
 hashPosition :: Position -> Word64
 hashPosition pos = piece `xor` castling `xor` ep `xor` turn where

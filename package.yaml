@@ -18,7 +18,6 @@ dependencies:
 - attoparsec
 - base >= 4.8 && < 5
 - binary
-- binary-search
 - bytestring
 - megaparsec
 - o-clock
