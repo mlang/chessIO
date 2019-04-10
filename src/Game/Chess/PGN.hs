@@ -10,13 +10,6 @@ import Data.Functor
 import Data.Tree
 import Game.Chess
 
-data Token = String ByteString
-           | Integer Int
-           | Period
-           | NAG Int
-           | Symbol ByteString
-           deriving (Eq, Show)
-
 whiteSpace = many $ void space <|> void endOfLine <|> void comment where
   comment = char ';' *> void (manyTill anyChar endOfLine)
          <|> char '{' *> many (notChar '}') *> void (char '}')
@@ -33,39 +26,40 @@ tagPair = do
 
 tagList = sepBy tagPair whiteSpace
 
-data GameTerminationMarker = Win Color
-                           | Draw
-                           | Undecided
-                           deriving (Show)
-gametermination = string "1-0" $> Win White
-               <|> string "0-1" $> Win Black
-               <|> string "1/2-1/2" $> Draw
-               <|> char '*' $> Undecided
+data Outcome = Win Color
+             | Draw
+             | Undecided
+             deriving (Eq, Show)
+data PlyData = PlyData {
+  prefixNAG :: ![Int]
+, ply :: !Move
+, suffixNAG :: ![Int]
+} deriving Show
 
-data PlyData = PlyData { prefixNAG :: [Int], ply :: Move, suffixNAG :: [Int] } deriving Show
-
-mtext :: Position -> Parser (GameTerminationMarker, Forest PlyData)
-mtext pos = (,[]) <$> endOfGame <|> main pos where
+movetext :: Position -> Parser (Outcome, Forest PlyData)
+movetext pos = (,[]) <$> endOfGame <|> main pos where
   main p = do
     pnags <- nag `sepBy'` whiteSpace
     whiteSpace
     validateMoveNumber p
     whiteSpace
-    Symbol s <- symbol
+    s <- symbol
     whiteSpace
     snags <- nag `sepBy'` whiteSpace
     whiteSpace
     rav <- concat <$> (char '(' *> whiteSpace *> var p) `sepBy'` whiteSpace
     whiteSpace
     case fromSAN p (BS.unpack s) of
-      Right m -> fmap (\xs -> Node (PlyData pnags m snags) xs:rav) <$> mtext (unsafeApplyMove p m)
+      Right m ->
+        (fmap . fmap) (\xs -> Node (PlyData pnags m snags) xs:rav) $
+        movetext (unsafeApplyMove p m)
       Left e -> fail e
   var p = do
     pnags <- nag `sepBy'` whiteSpace
     whiteSpace
     validateMoveNumber p
     whiteSpace
-    Symbol s <- symbol
+    s <- symbol
     whiteSpace
     snags <- nag `sepBy'` whiteSpace
     whiteSpace
@@ -82,30 +76,28 @@ mtext pos = (,[]) <$> endOfGame <|> main pos where
         fail $ "Invalid move number: " <> show n <> " /= " <> show (moveNumber p)
       _ -> pure ()
 
-data Annotation = NumericAnn Int deriving Show
-
-
 pgn = whiteSpace *> sepBy' game whiteSpace <* whiteSpace <* endOfInput
 game = do
   tl <- tagList
   whiteSpace
-  pos <- case lookup (Symbol "FEN") tl of
+  pos <- case lookup "FEN" tl of
     Nothing -> pure startpos
-    Just (String fen) -> case fromFEN (BS.unpack fen) of
+    Just fen -> case fromFEN (BS.unpack fen) of
       Just p -> pure p
-      Nothing -> fail "Illegal FEN string"
-  mt <- mtext pos
+      Nothing -> fail "Invalid FEN"
+  mt <- movetext pos
   pure $ (tl, mt)
   
-endOfGame =
-      char '*' $> Undecided
- <|> string "1/2-1/2" $> Draw
- <|> string "1-0" $> Win White
- <|> string "0-1" $> Win Black
+endOfGame = char '*' $> Undecided
+        <|> string "1/2-1/2" $> Draw
+        <|> string "1-0" $> Win White
+        <|> string "0-1" $> Win Black
 
-str = fmap (String . BS.pack) $ "\"" *> many ch <* "\"" where
+str = p <?> "string" where
+  p = fmap fst $ "\"" *> match (many ch) <* "\""
   ch = char '\\' *> (char '\\' $> '\\' <|> char '"' $> '"') <|> notChar '"'
 
-symbol = fmap (Symbol . fst) . match $ do
-  letter_ascii <|> digit
-  many $ letter_ascii <|> digit <|> satisfy (`elem` ['_','+','#','=',':','-'])    
+symbol = p <?> "symbol" where
+  p = fmap fst . match $ do
+    void $ letter_ascii <|> digit
+    many $ letter_ascii <|> digit <|> satisfy (`elem` ['_','+','#','=',':','-'])    
