@@ -98,18 +98,18 @@ san = conv <$> piece
   frToInt f r = r*8 + f
 
 fromSAN :: Position -> String -> Either String Move
-fromSAN pos@Position{color} (splitAt 3 -> (s, _)) | s `elem` ["O-O", "0-0"] =
-  if canCastleKingside pos
-  then Right $ case color of
-    White -> wKscm
-    Black -> bKscm
-  else Left $ show color <> " can't castle on kingside"
 fromSAN pos@Position{color} (splitAt 5 -> (s, _)) | s `elem` ["O-O-O", "0-0-0"] =
   if canCastleQueenside pos
   then Right $ case color of
     White -> wQscm
     Black -> bQscm
   else Left $ show color <> " can't castle on queenside"
+fromSAN pos@Position{color} (splitAt 3 -> (s, _)) | s `elem` ["O-O", "0-0"] =
+  if canCastleKingside pos
+  then Right $ case color of
+    White -> wKscm
+    Black -> bKscm
+  else Left $ show color <> " can't castle on kingside"
 fromSAN pos s = case parse san "" s of
   Right (pc, from, _, to, promo, _) ->
     case ms pc from to promo of

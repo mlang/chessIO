@@ -19,6 +19,7 @@ dependencies:
 - base >= 4.8 && < 5
 - binary
 - bytestring
+- containers
 - megaparsec
 - o-clock
 - parser-combinators
@@ -54,6 +55,8 @@ library:
   source-dirs: src
   exposed-modules:
   - Game.Chess
+  - Game.Chess.Opening.Polyglot
+  - Game.Chess.PGN
   - Game.Chess.UCI
 
 executables:
