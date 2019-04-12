@@ -11,13 +11,13 @@ import Game.Chess.PGN.Types
 
 type RAVOrder a = (Forest PlyData -> a) -> Forest PlyData -> [a]
 
-bf, df :: RAVOrder a
-bf _ [] = []
-bf f ts = pure $ f ts
-df f = fmap $ f . pure
+breadthFirst, depthFirst :: RAVOrder a
+breadthFirst _ [] = []
+breadthFirst f ts = pure $ f ts
+depthFirst f = fmap $ f . pure
 
 pgnDoc :: RAVOrder (Doc ann) -> PGN -> Doc ann
-pgnDoc ro = concatWith (\x y -> x <> line <> line <> y) . fmap (gameDoc ro)
+pgnDoc ro = vsep . fmap (gameDoc ro)
 
 gameDoc :: RAVOrder (Doc ann) -> ([(ByteString, String)], (Outcome, Forest PlyData)) -> Doc ann
 gameDoc ro (tl, mt)
@@ -32,7 +32,7 @@ tagsDoc = vsep . fmap tagpair where
   tagpair (k, v) = brackets $ pretty (BS.unpack k) <+> dquotes (pretty v)
 
 moveDoc :: RAVOrder (Doc ann) -> Position -> (Outcome, Forest PlyData) -> Doc ann
-moveDoc ro pos (o,ts) = fillSep $ go pos True ts <> [outcome o] where
+moveDoc ro pos (o,ts) = fillSep (go pos True ts <> [outcome o]) <> line where
   go _ _ [] = []
   go pos pmn (t:ts)
     | color pos == White || pmn
