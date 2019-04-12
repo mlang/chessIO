@@ -23,6 +23,7 @@ dependencies:
 - megaparsec
 - o-clock
 - parser-combinators
+- prettyprinter
 - process
 - stm
 - unordered-containers
