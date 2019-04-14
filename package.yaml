@@ -26,6 +26,7 @@ dependencies:
 - prettyprinter
 - process
 - stm
+- text
 - unordered-containers
 - vector
 
@@ -71,6 +72,11 @@ executables:
     - extra
     - haskeline
     - mtl
+  pgnio:
+    main:                pgnio.hs
+    source-dirs:  app
+    dependencies:
+    - chessIO
 
 tests:
   perft:

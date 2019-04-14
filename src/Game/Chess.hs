@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances, TypeSynonymInstances, GADTs, ScopedTypeVariables #-}
 {-|
 Module      : Game.Chess
 Description : Basic data types and functions related to the game of chess
@@ -26,119 +27,259 @@ module Game.Chess (
   -- * Chess moves
 , Move
   -- ** Converting from/to algebraic notation
-, fromSAN, toSAN, unsafeToSAN, fromUCI, toUCI
+, strictSAN, relaxedSAN, fromSAN, toSAN, unsafeToSAN, fromUCI, toUCI
   -- ** Move generation
 , moves
   -- ** Executing moves
 , applyMove, unsafeApplyMove
 ) where
 
+import Control.Applicative
 import Control.Applicative.Combinators
+import Control.Monad
 import Data.Binary
 import Data.Bits
+import qualified Data.ByteString as Strict (ByteString)
+import qualified Data.ByteString.Lazy as Lazy (ByteString)
 import Data.Char
 import Data.Functor (($>))
 import Data.Ix
 import Data.List
 import Data.Maybe
+import Data.Ord (Down(..))
+import Data.Proxy
+import Data.String
+import qualified Data.Text as Strict (Text)
+import qualified Data.Text.Lazy as Lazy (Text)
 import Data.Vector.Unboxed (Vector, (!))
 import Data.Void
 import qualified Data.Vector.Unboxed as Vector
 import Data.Word
 import Text.Megaparsec
 import Text.Megaparsec.Char
-import Text.Read
+import Text.Read (readMaybe)
+import Data.Tree
+import Data.Tuple
 
-type Parser = Parsec Void String
+positionTree :: Position -> Tree Position
+positionTree pos = Node pos $ positionForest pos
+positionForest pos = positionTree . unsafeApplyMove pos <$> moves pos
+plyForest :: Position -> Forest Move
+plyForest pos = plyTree pos <$> moves pos
+plyTree pos ply = Node ply . plyForest $ unsafeApplyMove pos ply
+
+type Parser s = Parsec Void s
+
+castling :: (Stream s, IsString (Tokens s))
+         => Position -> Parser s Move
+castling pos
+  | ccks && ccqs = queenside <|> kingside
+  | ccks = kingside
+  | ccqs = queenside
+  | otherwise = empty
+ where
+  ccks = canCastleKingside pos
+  ccqs = canCastleQueenside pos
+  kingside = chunk "O-O" $> castleMove Kingside
+  queenside = chunk "O-O-O" $> castleMove Queenside
+  castleMove Kingside | color pos == White = wKscm
+                      | otherwise          = bKscm
+  castleMove Queenside | color pos == White = wQscm
+                       | otherwise          = bQscm
 
 data From = File Int
           | Rank Int
           | Square Int
           deriving (Show)
 
-san :: Parser (PieceType, Maybe From, Bool, Int, Maybe PieceType, Maybe Char)
-san = conv <$> piece
-           <*> location
-           <*> optional (optional (char '=') *> promo)
-           <*> optional (char '+' <|> char '#') where
-  conv pc (Nothing, Nothing, cap, to) = (pc, Nothing, cap, to,,)
-  conv pc (Just f, Nothing, cap, to) = (pc, Just (File f), cap, to,,)
-  conv pc (Nothing, Just r, cap, to) = (pc, Just (Rank r), cap, to,,)
-  conv pc (Just f, Just r, cap, to) = (pc, Just (Square (r*8+f)), cap, to,,)
-  piece = char 'N' $> Knight
-      <|> char 'B' $> Bishop
-      <|> char 'R' $> Rook
-      <|> char 'Q' $> Queen
-      <|> char 'K' $> King
-      <|> pure Pawn
-  location = try ((,,,) <$> (Just <$> file)
-                        <*> pure Nothing
-                        <*> capture
-                        <*> square)
-         <|> try ((,,,) <$> pure Nothing
-                        <*> (Just <$> rank)
-                        <*> capture
-                        <*> square)
-         <|> try ((,,,) <$> (Just <$> file)
-                        <*> (Just <$> rank)
-                        <*> capture
-                        <*> square)
-         <|>      (,,,) <$> pure Nothing
-                        <*> pure Nothing
-                        <*> capture
-                        <*> square
-  promo = char 'N' $> Knight
-      <|> char 'B' $> Bishop
-      <|> char 'R' $> Rook
-      <|> char 'Q' $> Queen
-  capture = option False $ char 'x' $> True
-  square = frToInt <$> file <*> rank
-  file = subtract (ord 'a') . ord <$> oneOf ['a'..'h']
-  rank = subtract (ord '1') . ord <$> oneOf ['1'..'8']
-  frToInt f r = r*8 + f
+capturing :: Position -> Move -> Maybe PieceType
+capturing pos@Position{flags} (unpack -> (_, to, _))
+  | (flags .&. epMask) `testBit` to = Just Pawn
+  | otherwise = snd <$> pieceAt pos to
 
-fromSAN :: Position -> String -> Either String Move
-fromSAN pos@Position{color} (splitAt 5 -> (s, _)) | s `elem` ["O-O-O", "0-0-0"] =
-  if canCastleQueenside pos
-  then Right $ case color of
-    White -> wQscm
-    Black -> bQscm
-  else Left $ show color <> " can't castle on queenside"
-fromSAN pos@Position{color} (splitAt 3 -> (s, _)) | s `elem` ["O-O", "0-0"] =
-  if canCastleKingside pos
-  then Right $ case color of
-    White -> wKscm
-    Black -> bKscm
-  else Left $ show color <> " can't castle on kingside"
-fromSAN pos s = case parse san "" s of
-  Right (pc, from, _, to, promo, _) ->
-    case ms pc from to promo of
-      [m] -> Right m
-      [] -> Left "Illegal move"
-      _ -> Left "Ambiguous move"
-  Left err -> Left $ errorBundlePretty err
+isCapture :: Position -> Move -> Bool
+isCapture pos = isJust . capturing pos
+
+data SANStatus = Check | Checkmate deriving (Eq, Read, Show)
+
+class SANToken a where
+  sanPieceToken :: a -> Maybe PieceType
+  fileToken :: a -> Maybe Int
+  rankToken :: a -> Maybe Int
+  promotionPieceToken :: a -> Maybe PieceType
+  statusToken :: a -> Maybe SANStatus
+
+sanPiece :: (Stream s, SANToken (Token s)) => Parser s PieceType
+sanPiece = token sanPieceToken mempty <?> "piece"
+
+fileP, rankP, squareP :: (Stream s, SANToken (Token s)) => Parser s Int
+fileP = token fileToken mempty <?> "file"
+rankP = token rankToken mempty <?> "rank"
+squareP = liftA2 (\f r -> r*8+f) fileP rankP <?> "square"
+
+promotionPiece :: (Stream s, SANToken (Token s)) => Parser s PieceType
+promotionPiece = token promotionPieceToken mempty <?> "Q, R, B, N"
+
+sanStatus :: (Stream s, SANToken (Token s)) => Parser s SANStatus
+sanStatus = token statusToken mempty <?> "+, #"
+
+instance SANToken Char where
+  sanPieceToken = \case
+    'N' -> Just Knight
+    'B' -> Just Bishop
+    'R' -> Just Rook
+    'Q' -> Just Queen
+    'K' -> Just King
+    _ -> Nothing
+  fileToken c | c >= 'a' && c <= 'h' = Just $ ord c - ord 'a'
+              | otherwise  = Nothing
+  rankToken c | c >= '1' && c <= '8' = Just $ ord c - ord '1'
+              | otherwise  = Nothing
+  promotionPieceToken = \case
+    'N' -> Just Knight
+    'B' -> Just Bishop
+    'R' -> Just Rook
+    'Q' -> Just Queen
+    _ -> Nothing
+  statusToken = \case
+    '+' -> Just Check
+    '#' -> Just Checkmate
+    _ -> Nothing
+
+instance SANToken Word8 where
+  sanPieceToken = \case
+    78 -> Just Knight
+    66 -> Just Bishop
+    82 -> Just Rook
+    81 -> Just Queen
+    75 -> Just King
+    _ -> Nothing
+  rankToken c | c >= 49 && c <= 56 = Just . fromIntegral $ c - 49
+              | otherwise  = Nothing
+  fileToken c | c >= 97 && c <= 104 = Just . fromIntegral $ c - 97
+              | otherwise  = Nothing
+  promotionPieceToken = \case
+    78 -> Just Knight
+    66 -> Just Bishop
+    82 -> Just Rook
+    81 -> Just Queen
+    _ -> Nothing
+  statusToken = \case
+    43 -> Just Check
+    35 -> Just Checkmate
+    _ -> Nothing
+
+strictSAN :: forall s. (Stream s, SANToken (Token s), IsString (Tokens s))
+          => Position -> Parser s Move
+strictSAN pos@Position{flags} = case moves pos of
+  [] -> fail $ "No legal moves in this position"
+  ms -> (castling pos <|> normal ms) >>= checkStatus
  where
-  ms pc from to prm = filter (f from) $ moves pos where
-   f (Just (Square from)) (unpack -> (from', to', prm')) =
-     pAt from' == pc && from' == from && to' == to && prm' == prm
-   f (Just (File ff)) (unpack -> (from', to', prm')) =
-     pAt from' == pc && from' `mod` 8 == ff && to == to' && prm == prm'
-   f (Just (Rank fr)) (unpack -> (from', to', prm')) =
-     pAt from' == pc && from' `div` 8 == fr && to == to' && prm == prm'
-   f Nothing (unpack -> (from', to', prm')) =
-     pAt from' == pc && to == to' && prm == prm'
-  pAt = snd . fromJust . pieceAt pos . toEnum
+  normal ms = do
+    p <- sanPiece <|> pure Pawn
+    case filter (pieceFrom p) ms of
+      [] -> fail $ show (color pos) <> " has no " <> show p <> " which could be moved"
+      ms' -> target p ms'
+  pieceFrom p (moveFrom -> from) = p == snd (fromJust (pieceAt pos from))
+  moveFrom (unpack -> (from, _, _)) = from
+  target p ms = coords p ms >>= \m@(unpack -> (_, to, _)) -> case p of
+    Pawn | lastRank to -> promoteTo m <$> promotion
+    _ -> pure m
+  coords p ms = choice $ fmap (uncurry (<$) . fmap chunk) $
+    sortOn (Down . chunkLength (Proxy :: Proxy s) . snd) $
+    (\m -> (m, sanCoords pos (p,ms) m)) <$> ms
+  promotion = chunk "=" *> promotionPiece
+  lastRank i = i >= 56 || i <= 7
+  checkStatus m
+    | inCheck (color nextPos) nextPos && null (moves nextPos)
+    = chunk "#" $> m
+    | inCheck (color nextPos) nextPos
+    = chunk "+" $> m
+    | otherwise
+    = pure m
+   where
+    nextPos = unsafeApplyMove pos m
+
+relaxedSAN :: (Stream s, SANToken (Token s), IsString (Tokens s))
+           => Position -> Parser s Move
+relaxedSAN pos = (castling pos <|> normal) <* optional sanStatus where
+  normal = do
+    pc <- sanPiece <|> pure Pawn
+    (from, cap, to) <- conv <$> location
+    prm <- optional $ optional (chunk "=") *> promotionPiece
+    case possible pc from to prm of
+      [m] -> pure m
+      [] -> fail "Illegal move"
+      _ -> fail "Ambiguous move"
+  conv (Nothing, Nothing, cap, to) = (Nothing, cap, to)
+  conv (Just f, Nothing, cap, to) = (Just (File f), cap, to)
+  conv (Nothing, Just r, cap, to) = (Just (Rank r), cap, to)
+  conv (Just f, Just r, cap, to) = (Just (Square (r*8+f)), cap, to)
+  location = try ((,Nothing,,) <$> (Just <$> fileP) <*> capture <*> squareP)
+         <|> try ((Nothing,,,) <$> (Just <$> rankP) <*> capture <*> squareP)
+         <|> try ((,,,) <$> (Just <$> fileP) <*> (Just <$> rankP)
+                        <*> capture <*> squareP)
+         <|>      (Nothing,Nothing,,) <$> capture <*> squareP
+  capture = option False $ chunk "x" $> True
+  ms = moves pos
+  possible pc from to prm = filter (f from) ms where
+    f (Just (Square from)) (unpack -> (from', to', prm')) =
+      pAt from' == pc && from' == from && to' == to && prm' == prm
+    f (Just (File ff)) (unpack -> (from', to', prm')) =
+      pAt from' == pc && from' `mod` 8 == ff && to == to' && prm == prm'
+    f (Just (Rank fr)) (unpack -> (from', to', prm')) =
+      pAt from' == pc && from' `div` 8 == fr && to == to' && prm == prm'
+    f Nothing (unpack -> (from', to', prm')) =
+      pAt from' == pc && to == to' && prm == prm'
+  pAt = snd . fromJust . pieceAt pos
+
+fromSAN :: (Stream s, SANToken (Token s), IsString (Tokens s))
+        => Position -> s -> Either String Move
+fromSAN pos s = case parse (relaxedSAN pos) "" s of
+  Right m -> Right m
+  Left err -> Left $ errorBundlePretty err
 
 toSAN :: Position -> Move -> String
 toSAN pos m | m `elem` moves pos = unsafeToSAN pos m
             | otherwise          = error "Game.Chess.toSAN: Illegal move"
+
+sanCoords :: IsString s => Position -> (PieceType, [Move]) -> Move -> s
+sanCoords pos@Position{flags} (pc,lms) m@(unpack -> (from, to, _)) =
+  fromString $ source <> target
+ where
+  capture = isCapture pos m
+  source
+    | pc == Pawn && capture
+    = [fileChar from]
+    | pc == Pawn
+    = []
+    | length ms == 1
+    = []
+    | length (filter fEq ms) == 1
+    = [fileChar from]
+    | length (filter rEq ms) == 1
+    = [rankChar from]
+    | otherwise
+    = coord from
+  target
+    | capture = 'x' : coord to
+    | otherwise = coord to
+  ms = filter (isMoveTo to) $ lms
+  isMoveTo to (unpack -> (_, to', _)) = to == to'
+  fEq (unpack -> (from', _, _)) = from' `mod` 8 == fromFile
+  rEq (unpack -> (from', _, _)) = from' `div` 8 == fromRank
+  (fromRank, fromFile) = toRF from
+  fileChar i = chr $ (i `mod` 8) + ord 'a'
+  rankChar i = chr $ (i `div` 8) + ord '1'
+  coord i = let (r,f) = toRF i
+            in [chr (f + ord 'a'), chr (r + ord '1')]
 
 unsafeToSAN :: Position -> Move -> String
 unsafeToSAN pos@Position{flags} m@(unpack -> (from, to, promo)) =
   moveStr <> status
  where
   moveStr = case piece of
-    Pawn | isCapture -> fileChar from : target <> promotion
+    Pawn | capture -> fileChar from : target <> promotion
          | otherwise -> target <> promotion
     King | color pos == White && m == wKscm -> "O-O"
          | color pos == White && m == wQscm -> "O-O-O"
@@ -149,15 +290,15 @@ unsafeToSAN pos@Position{flags} m@(unpack -> (from, to, promo)) =
     Bishop -> 'B' : source <> target
     Rook   -> 'R' : source <> target
     Queen  -> 'Q' : source <> target
-  piece = fromJust $ snd <$> pieceAt pos (toEnum from)
-  isCapture = isJust (pieceAt pos $ toEnum to) || (flags .&. epMask) `testBit` to
+  piece = fromJust $ snd <$> pieceAt pos from
+  capture = isCapture pos m
   source
     | length ms == 1              = []
     | length (filter fEq ms) == 1 = [fileChar from]
     | length (filter rEq ms) == 1 = [rankChar from]
     | otherwise                   = coord from
   target
-    | isCapture = 'x' : coord to
+    | capture = 'x' : coord to
     | otherwise = coord to
   promotion = case promo of
     Just Knight -> "N"
@@ -174,13 +315,13 @@ unsafeToSAN pos@Position{flags} m@(unpack -> (from, to, promo)) =
   nextPos = unsafeApplyMove pos m
   ms = filter movesTo $ moves pos
   movesTo (unpack -> (from', to', _)) =
-    fmap snd (pieceAt pos (toEnum from')) == Just piece && to' == to
+    fmap snd (pieceAt pos from') == Just piece && to' == to
   fEq (unpack -> (from', _, _)) = from' `mod` 8 == fromFile
   rEq (unpack -> (from', _, _)) = from' `div` 8 == fromRank
-  (fromRank, fromFile) = from `divMod` 8
+  (fromRank, fromFile) = toRF from
   fileChar i = chr $ (i `mod` 8) + ord 'a'
   rankChar i = chr $ (i `div` 8) + ord '1'
-  coord i = let (r,f) = i `divMod` 8 in chr (f + ord 'a') : [chr (r + ord '1')]
+  coord i = let (r,f) = toRF i in chr (f + ord 'a') : [chr (r + ord '1')]
 
 -- | The starting position as given by the FEN string
 --   "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1".
@@ -192,8 +333,8 @@ data PieceType = Pawn | Knight | Bishop | Rook | Queen | King deriving (Eq, Ix, 
 
 data Color = Black | White deriving (Eq, Ix, Ord, Show)
 
-pieceAt :: Position -> Sq -> Maybe (Color, PieceType)
-pieceAt (board -> BB{wP, wN, wB, wR, wQ, wK, bP, bN, bB, bR, bQ, bK}) (fromEnum -> sq)
+pieceAt :: IsSquare sq => Position -> sq -> Maybe (Color, PieceType)
+pieceAt (board -> BB{wP, wN, wB, wR, wQ, wK, bP, bN, bB, bR, bQ, bK}) (toIndex -> sq)
   | wP `testBit` sq = Just (White, Pawn)
   | wN `testBit` sq = Just (White, Knight)
   | wB `testBit` sq = Just (White, Bishop)
@@ -224,11 +365,24 @@ data Sq = A1 | B1 | C1 | D1 | E1 | F1 | G1 | H1
         | A8 | B8 | C8 | D8 | E8 | F8 | G8 | H8
         deriving (Bounded, Enum, Eq, Ix, Ord, Show)
 
-isDark :: Sq -> Bool
-isDark (fromEnum -> sq) = (0xaa55aa55aa55aa55 :: Word64) `testBit` sq
+class IsSquare sq where
+  toIndex :: sq -> Int
 
-isLight :: Sq -> Bool
+toRF :: IsSquare sq => sq -> (Int, Int)
+toRF sq = toIndex sq `divMod` 8
+
+instance IsSquare Sq where
+  toIndex = fromEnum
+
+instance IsSquare Int where
+  toIndex = id
+
+isDark :: IsSquare sq => sq -> Bool
+isDark (toIndex -> sq) = (0xaa55aa55aa55aa55 :: Word64) `testBit` sq
+
+isLight :: IsSquare sq => sq -> Bool
 isLight = not . isDark
+
 data BB = BB { wP, wN, wB, wR, wQ, wK :: !Word64
              , bP, bN, bB, bR, bQ, bK :: !Word64
              } deriving (Eq, Show)
@@ -241,7 +395,10 @@ data Position = Position {
 , halfMoveClock :: !Int
 , moveNumber :: !Int
   -- ^ number of the full move
-} deriving (Eq)
+}
+
+instance Eq Position where
+  a == b = board a == board b && color a == color b && flags a == flags b
 
 emptyBB :: BB
 emptyBB = BB 0 0 0 0 0 0 0 0 0 0 0 0
@@ -259,7 +416,7 @@ fromFEN fen
              <*> readMaybe (parts !! 5)
  where
   parts = words fen
-  readBoard = go (sqToRF A8) emptyBB where
+  readBoard = go (toRF A8) emptyBB where
     go rf@(r,f) bb ('r':s) = go (r, f + 1) (bb { bR = bR bb .|. rfBit rf }) s
     go rf@(r,f) bb ('n':s) = go (r, f + 1) (bb { bN = bN bb .|. rfBit rf }) s
     go rf@(r,f) bb ('b':s) = go (r, f + 1) (bb { bB = bB bb .|. rfBit rf }) s
@@ -303,9 +460,6 @@ fromFEN fen
       = Just $ bit ((ord r - ord '1') * 8 + (ord f - ord 'a'))
     readEP _ = Nothing
 
-sqToRF :: Sq -> (Int, Int)
-sqToRF sq = fromEnum sq `divMod` 8
-
 rfBit :: Bits bits => (Int, Int) -> bits
 rfBit (r,f) | inRange (0,7) r && inRange (0,7) f = bit $ r*8 + f
             | otherwise = error $ "Out of range: " <> show r <> " " <> show f
@@ -331,7 +485,7 @@ toFEN (Position bb c flgs hm mn) = unwords [
                 | otherwise          = (v, xs)
   showEP 0 = "-"
   showEP x = chr (f + ord 'a') : [chr (r + ord '1')] where
-    (r, f) = bitScanForward x `divMod` 8
+    (r, f) = toRF $ bitScanForward x
   rank r = concatMap countEmpty $ groupBy (\x y -> x == y && x == ' ') $
            charAt r <$> [0..7]
   countEmpty xs | head xs == ' ' = show $ length xs
@@ -376,8 +530,9 @@ newtype Move = Move Word16 deriving (Binary, Eq)
 instance Show Move where
   show = toUCI
 
-move :: Int -> Int -> Move
-move from to = Move $ fromIntegral to .|. fromIntegral from `unsafeShiftL` 6
+move :: (IsSquare from, IsSquare to) => from -> to -> Move
+move (toIndex -> from) (toIndex -> to) =
+  Move $ fromIntegral to .|. fromIntegral from `unsafeShiftL` 6
 
 promoteTo :: Move -> PieceType -> Move
 promoteTo (Move x) = Move . set where
@@ -424,7 +579,7 @@ fromUCI _ _ = Nothing
 -- | Convert a move to the format used by the Universal Chess Interface protocol.
 toUCI :: Move -> String
 toUCI (unpack -> (from, to, promo)) = coord from <> coord to <> p where
-  coord x = let (r,f) = x `divMod` 8 in
+  coord x = let (r,f) = toRF x in
             chr (f + ord 'a') : [chr (r + ord '1')]
   p = case promo of
     Just Queen -> "q"
@@ -478,25 +633,25 @@ unsafeApplyMove' :: Position -> Move -> Position
 unsafeApplyMove' pos@Position{board, flags} m@(unpack -> (from, to, promo))
   | m == wKscm && flags `testMask` crwKs
   = pos { board = board { wK = wK board `xor` mask
-                        , wR = wR board `xor` (bit (fromEnum H1) `setBit` fromEnum F1)
+                        , wR = wR board `xor` (bit (toIndex H1) `setBit` toIndex F1)
                         }
         , flags = flags `clearMask` (rank1 .|. epMask)
         }
   | m == wQscm && flags `testMask` crwQs
   = pos { board = board { wK = wK board `xor` mask
-                        , wR = wR board `xor` (bit (fromEnum A1) `setBit` fromEnum D1)
+                        , wR = wR board `xor` (bit (toIndex A1) `setBit` toIndex D1)
                         }
         , flags = flags `clearMask` (rank1 .|. epMask)
         }
   | m == bKscm && flags `testMask` crbKs
   = pos { board = board { bK = bK board `xor` mask
-                        , bR = bR board `xor` (bit (fromEnum H8) `setBit` fromEnum F8)
+                        , bR = bR board `xor` (bit (toIndex H8) `setBit` toIndex F8)
                         }
         , flags = flags `clearMask` (rank8 .|. epMask)
         }
   | m == bQscm && flags `testMask` crbQs
   = pos { board = board { bK = bK board `xor` mask
-                        , bR = bR board `xor` (bit (fromEnum A8) `setBit` fromEnum D8)
+                        , bR = bR board `xor` (bit (toIndex A8) `setBit` toIndex D8)
                         }
         , flags = flags `clearMask` (rank8 .|. epMask)
         }
@@ -702,25 +857,25 @@ canCastleQueenside !pos@Position{board} = canCastleQueenside' pos (occupied boar
 canCastleKingside', canCastleQueenside' :: Position -> Word64 -> Bool
 canCastleKingside' Position{board, color = White, flags} !occ =
   flags `testMask` crwKs && occ .&. crwKe == 0 &&
-  not (any (attackedBy Black board occ . fromEnum) [E1, F1])
+  not (any (attackedBy Black board occ) [E1, F1, G1])
 canCastleKingside' Position{board, color = Black, flags} !occ = 
   flags `testMask` crbKs && occ .&. crbKe == 0 &&
-  not (any (attackedBy White board occ . fromEnum) [E8, F8])
+  not (any (attackedBy White board occ) [E8, F8, G8])
 canCastleQueenside' Position{board, color = White, flags} !occ =
   flags `testMask` crwQs && occ .&. crwQe == 0 &&
-  not (any (attackedBy Black board occ . fromEnum) [E1, D1, C1])
+  not (any (attackedBy Black board occ) [E1, D1, C1])
 canCastleQueenside' Position{board, color = Black, flags} !occ =
   flags `testMask` crbQs && occ .&. crbQe == 0 &&
-  not (any (attackedBy White board occ . fromEnum) [E8, D8, C8])
+  not (any (attackedBy White board occ) [E8, D8, C8])
 
 wKscm, wQscm, bKscm, bQscm :: Move
-wKscm = move (fromEnum E1) (fromEnum G1)
-wQscm = move (fromEnum E1) (fromEnum C1)
-bKscm = move (fromEnum E8) (fromEnum G8)
-bQscm = move (fromEnum E8) (fromEnum C8)
+wKscm = move E1 G1
+wQscm = move E1 C1
+bKscm = move E8 G8
+bQscm = move E8 C8
 
-attackedBy :: Color -> BB -> Word64 -> Int -> Bool
-attackedBy White !bb@BB{wP, wN, wB, wR, wQ, wK} !occ !sq
+attackedBy :: IsSquare sq => Color -> BB -> Word64 -> sq -> Bool
+attackedBy White !bb@BB{wP, wN, wB, wR, wQ, wK} !occ (toIndex -> sq)
   | (wPawnAttacks ! sq) .&. wP /= 0 = True
   | (knightAttacks ! sq) .&. wN /= 0 = True
   | bishopTargets sq occ .&. wB /= 0 = True
@@ -728,7 +883,7 @@ attackedBy White !bb@BB{wP, wN, wB, wR, wQ, wK} !occ !sq
   | queenTargets sq occ .&.  wQ /= 0 = True
   | (kingAttacks ! sq) .&. wK /= 0   = True
   | otherwise                        = False
-attackedBy Black !bb@BB{bP, bN, bB, bR, bQ, bK} !occ !sq
+attackedBy Black !bb@BB{bP, bN, bB, bR, bQ, bK} !occ (toIndex -> sq)
   | (bPawnAttacks ! sq) .&. bP /= 0 = True
   | (knightAttacks ! sq) .&. bN /= 0 = True
   | bishopTargets sq occ .&. bB /= 0 = True
@@ -829,3 +984,15 @@ testMask a b = a .&. b == b
 {-# INLINE bPawnMoves #-}
 {-# INLINE unpack #-}
 {-# INLINE foldBits #-}
+{-# INLINEABLE relaxedSAN #-}
+{-# INLINEABLE strictSAN #-}
+{-# SPECIALISE relaxedSAN :: Position -> Parser Strict.ByteString Move #-}
+{-# SPECIALISE relaxedSAN :: Position -> Parser Lazy.ByteString Move #-}
+{-# SPECIALISE relaxedSAN :: Position -> Parser Strict.Text Move #-}
+{-# SPECIALISE relaxedSAN :: Position -> Parser Lazy.Text Move #-}
+{-# SPECIALISE relaxedSAN :: Position -> Parser String Move #-}
+{-# SPECIALISE strictSAN :: Position -> Parser Strict.ByteString Move #-}
+{-# SPECIALISE strictSAN :: Position -> Parser Lazy.ByteString Move #-}
+{-# SPECIALISE strictSAN :: Position -> Parser Strict.Text Move #-}
+{-# SPECIALISE strictSAN :: Position -> Parser Lazy.Text Move #-}
+{-# SPECIALISE strictSAN :: Position -> Parser String Move #-}

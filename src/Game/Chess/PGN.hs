@@ -3,7 +3,7 @@ module Game.Chess.PGN where
 
 import Control.Monad
 import Data.Bifunctor
-import Data.ByteString (ByteString)
+import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import Data.Char
 import Data.Foldable
@@ -11,6 +11,9 @@ import Data.Functor
 import Data.List
 import Data.Maybe
 import Data.String
+import Data.Text (Text)
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import Data.Text.Prettyprint.Doc hiding (space)
 import Data.Text.Prettyprint.Doc.Render.Text
 import Data.Tree
@@ -21,8 +24,8 @@ import Text.Megaparsec
 import Text.Megaparsec.Byte
 import qualified Text.Megaparsec.Byte.Lexer as L
 
-newtype PGN = PGN [([(ByteString, String)], (Outcome, Forest PlyData))]
-
+newtype PGN = PGN [Game] deriving (Eq, Monoid, Semigroup)
+type Game = ([(ByteString, Text)], (Outcome, Forest PlyData))
 data Outcome = Win Color
              | Draw
              | Undecided
@@ -32,7 +35,7 @@ data PlyData = PlyData {
   prefixNAG :: ![Int]
 , ply :: !Move
 , suffixNAG :: ![Int]
-} deriving Show
+} deriving (Eq, Show)
 
 readPGNFile :: FilePath -> IO (Either String PGN)
 readPGNFile fp = first errorBundlePretty . parse pgn fp <$> BS.readFile fp
@@ -93,25 +96,19 @@ movetext pos = (,[]) <$> eog <|> main pos where
   main p = do
     pnags <- many nag
     validateMoveNumber p
-    s <- sym
+    m <- lexeme $ relaxedSAN p
     snags <- many nag
     rav <- concat <$> many (lparenP *> var p)
-    case fromSAN p (BS.unpack s) of
-      Right m ->
-        (fmap . fmap) (\xs -> Node (PlyData pnags m snags) xs:rav) $
-        movetext (unsafeApplyMove p m)
-      Left e -> fail e
+    (fmap . fmap) (\xs -> Node (PlyData pnags m snags) xs:rav) $
+      movetext (unsafeApplyMove p m)
   var p = do
     pnags <- many nag
     validateMoveNumber p
-    s <- sym
+    m <- lexeme $ relaxedSAN p
     snags <- many nag
     rav <- concat <$> many (lparenP *> var p)
-    case fromSAN p (BS.unpack s) of
-      Right m ->
-        fmap (\xs -> Node (PlyData pnags m snags) xs:rav) $
-        rparenP $> [] <|> var (unsafeApplyMove p m)
-      Left e -> fail e
+    fmap (\xs -> Node (PlyData pnags m snags) xs:rav) $
+      rparenP $> [] <|> var (unsafeApplyMove p m)
   validateMoveNumber p =
     optional (lexeme $ L.decimal <* space <* many (single periodChar)) >>= \case
       Just n | moveNumber p /= n ->
@@ -121,20 +118,20 @@ movetext pos = (,[]) <$> eog <|> main pos where
 pgn :: Parser PGN
 pgn = spaceConsumer *> fmap PGN (many game) <* spaceConsumer <* eof
 
-game :: Parser ([(ByteString, String)], (Outcome, Forest PlyData))
+game :: Parser Game
 game = do
   tl <- tagList
   pos <- case lookup "FEN" tl of
     Nothing -> pure startpos
-    Just fen -> case fromFEN fen of
+    Just fen -> case fromFEN (T.unpack fen) of
       Just p -> pure p
       Nothing -> fail "Invalid FEN"
   mt <- movetext pos
   pure $ (tl, mt)
   
-str :: Parser String
+str :: Parser Text
 str = p <?> "string" where
-  p = (fmap . fmap) (chr . fromEnum) $ single quoteChar *> many ch <* single quoteChar
+  p = fmap (T.pack . fmap (chr . fromEnum)) $ single quoteChar *> many ch <* single quoteChar
   ch = single backslashChar *> (  single backslashChar $> backslashChar
                           <|> single quoteChar $> quoteChar
                            )
@@ -150,21 +147,21 @@ depthFirst f = fmap $ f . pure
 pgnDoc :: RAVOrder (Doc ann) -> PGN -> Doc ann
 pgnDoc ro (PGN games) = vsep $ fmap (gameDoc ro) games
 
-gameDoc :: RAVOrder (Doc ann) -> ([(ByteString, String)], (Outcome, Forest PlyData)) -> Doc ann
+gameDoc :: RAVOrder (Doc ann) -> Game -> Doc ann
 gameDoc ro (tl, mt)
   | null tl = moveDoc ro pos mt
   | otherwise = tagsDoc tl <> line <> line <> moveDoc ro pos mt
  where
-  pos | Just fen <- lookup "FEN" tl = fromJust $ fromFEN fen
+  pos | Just fen <- lookup "FEN" tl = fromJust $ fromFEN (T.unpack fen)
       | otherwise = startpos
 
-tagsDoc :: [(ByteString, String)] -> Doc ann
+tagsDoc :: [(ByteString, Text)] -> Doc ann
 tagsDoc = vsep . fmap tagpair where
   tagpair (k, esc -> v) = brackets $ pretty (BS.unpack k) <+> dquotes (pretty v)
-  esc = concatMap e where
-    e '\\' = "\\\\"
-    e '"' = "\\\""
-    e c = pure c
+  esc = T.concatMap e where
+    e '\\' = T.pack "\\\\"
+    e '"' = T.pack "\\\""
+    e c = T.singleton c
 
 
 moveDoc :: RAVOrder (Doc ann) -> Position -> (Outcome, Forest PlyData) -> Doc ann
