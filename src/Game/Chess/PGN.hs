@@ -20,6 +20,7 @@ import Data.Tree
 import Data.Word
 import Data.Void
 import Game.Chess
+import System.IO
 import Text.Megaparsec
 import Text.Megaparsec.Byte
 import qualified Text.Megaparsec.Byte.Lexer as L
@@ -39,6 +40,11 @@ data PlyData = PlyData {
 
 readPGNFile :: FilePath -> IO (Either String PGN)
 readPGNFile fp = first errorBundlePretty . parse pgn fp <$> BS.readFile fp
+
+hPutPGN :: Handle -> RAVOrder (Doc ann) -> PGN -> IO ()
+hPutPGN h ro (PGN games) = for_ games $ \game -> do
+  hPutDoc h $ gameDoc ro game
+  hPutStrLn h ""
 
 type Parser = Parsec Void ByteString
 
@@ -93,22 +99,15 @@ tagList = many tagPair
 
 movetext :: Position -> Parser (Outcome, Forest PlyData)
 movetext pos = (,[]) <$> eog <|> main pos where
-  main p = do
+  main p = ply p >>= \(m, n) -> fmap n <$> movetext (unsafeApplyMove p m)
+  var p = ply p >>= \(m, n) -> n <$> (rparenP $> [] <|> var (unsafeApplyMove p m))
+  ply p = do
     pnags <- many nag
     validateMoveNumber p
     m <- lexeme $ relaxedSAN p
     snags <- many nag
     rav <- concat <$> many (lparenP *> var p)
-    (fmap . fmap) (\xs -> Node (PlyData pnags m snags) xs:rav) $
-      movetext (unsafeApplyMove p m)
-  var p = do
-    pnags <- many nag
-    validateMoveNumber p
-    m <- lexeme $ relaxedSAN p
-    snags <- many nag
-    rav <- concat <$> many (lparenP *> var p)
-    fmap (\xs -> Node (PlyData pnags m snags) xs:rav) $
-      rparenP $> [] <|> var (unsafeApplyMove p m)
+    pure $ (m, \xs -> Node (PlyData pnags m snags) xs:rav)
   validateMoveNumber p =
     optional (lexeme $ L.decimal <* space <* many (single periodChar)) >>= \case
       Just n | moveNumber p /= n ->
@@ -126,8 +125,7 @@ game = do
     Just fen -> case fromFEN (T.unpack fen) of
       Just p -> pure p
       Nothing -> fail "Invalid FEN"
-  mt <- movetext pos
-  pure $ (tl, mt)
+  (tl,) <$> movetext pos
   
 str :: Parser Text
 str = p <?> "string" where
@@ -145,7 +143,7 @@ breadthFirst f ts = pure $ f ts
 depthFirst f = fmap $ f . pure
 
 pgnDoc :: RAVOrder (Doc ann) -> PGN -> Doc ann
-pgnDoc ro (PGN games) = vsep $ fmap (gameDoc ro) games
+pgnDoc ro (PGN games) = vsep $ gameDoc ro <$> games
 
 gameDoc :: RAVOrder (Doc ann) -> Game -> Doc ann
 gameDoc ro (tl, mt)
@@ -163,9 +161,8 @@ tagsDoc = vsep . fmap tagpair where
     e '"' = T.pack "\\\""
     e c = T.singleton c
 
-
 moveDoc :: RAVOrder (Doc ann) -> Position -> (Outcome, Forest PlyData) -> Doc ann
-moveDoc ro pos (o,ts) = fillSep (go pos True ts <> [outcome o]) <> line where
+moveDoc ro pos (o,ts) = (fillSep $ go pos True ts <> [outcome o]) <> line where
   go _ _ [] = []
   go pos pmn (t:ts)
     | color pos == White || pmn
@@ -174,7 +171,7 @@ moveDoc ro pos (o,ts) = fillSep (go pos True ts <> [outcome o]) <> line where
     = pnag <> (san:snag) <> rav <> go pos' (not . null $ rav) (subForest t)
    where
     pl = ply . rootLabel $ t
-    san = pretty (toSAN pos pl)
+    san = pretty $ unsafeToSAN pos pl
     pos' = unsafeApplyMove pos pl
     pnag = nag <$> prefixNAG (rootLabel t)
     mn = pretty (moveNumber pos) <> if color pos == White then "." else "..."

@@ -260,10 +260,10 @@ sanCoords pos@Position{flags} (pc,lms) m@(unpack -> (from, to, _)) =
     | length (filter rEq ms) == 1
     = [rankChar from]
     | otherwise
-    = coord from
+    = toCoord from
   target
-    | capture = 'x' : coord to
-    | otherwise = coord to
+    | capture = "x" <> toCoord to
+    | otherwise = toCoord to
   ms = filter (isMoveTo to) $ lms
   isMoveTo to (unpack -> (_, to', _)) = to == to'
   fEq (unpack -> (from', _, _)) = from' `mod` 8 == fromFile
@@ -271,8 +271,6 @@ sanCoords pos@Position{flags} (pc,lms) m@(unpack -> (from, to, _)) =
   (fromRank, fromFile) = toRF from
   fileChar i = chr $ (i `mod` 8) + ord 'a'
   rankChar i = chr $ (i `div` 8) + ord '1'
-  coord i = let (r,f) = toRF i
-            in [chr (f + ord 'a'), chr (r + ord '1')]
 
 unsafeToSAN :: Position -> Move -> String
 unsafeToSAN pos@Position{flags} m@(unpack -> (from, to, promo)) =
@@ -296,10 +294,10 @@ unsafeToSAN pos@Position{flags} m@(unpack -> (from, to, promo)) =
     | length ms == 1              = []
     | length (filter fEq ms) == 1 = [fileChar from]
     | length (filter rEq ms) == 1 = [rankChar from]
-    | otherwise                   = coord from
+    | otherwise                   = toCoord from
   target
-    | capture = 'x' : coord to
-    | otherwise = coord to
+    | capture = "x" <> toCoord to
+    | otherwise = toCoord to
   promotion = case promo of
     Just Knight -> "N"
     Just Bishop -> "B"
@@ -321,7 +319,6 @@ unsafeToSAN pos@Position{flags} m@(unpack -> (from, to, promo)) =
   (fromRank, fromFile) = toRF from
   fileChar i = chr $ (i `mod` 8) + ord 'a'
   rankChar i = chr $ (i `div` 8) + ord '1'
-  coord i = let (r,f) = toRF i in chr (f + ord 'a') : [chr (r + ord '1')]
 
 -- | The starting position as given by the FEN string
 --   "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1".
@@ -370,6 +367,9 @@ class IsSquare sq where
 
 toRF :: IsSquare sq => sq -> (Int, Int)
 toRF sq = toIndex sq `divMod` 8
+
+toCoord :: (IsSquare sq, IsString s) => sq -> s
+toCoord (toRF -> (r,f)) = fromString $ [chr (f + ord 'a'), chr (r + ord '1')]
 
 instance IsSquare Sq where
   toIndex = fromEnum
@@ -984,8 +984,6 @@ testMask a b = a .&. b == b
 {-# INLINE bPawnMoves #-}
 {-# INLINE unpack #-}
 {-# INLINE foldBits #-}
-{-# INLINEABLE relaxedSAN #-}
-{-# INLINEABLE strictSAN #-}
 {-# SPECIALISE relaxedSAN :: Position -> Parser Strict.ByteString Move #-}
 {-# SPECIALISE relaxedSAN :: Position -> Parser Lazy.ByteString Move #-}
 {-# SPECIALISE relaxedSAN :: Position -> Parser Strict.Text Move #-}
