@@ -8,7 +8,7 @@ module Game.Chess.UCI (
   -- * Engine options
 , Option(..), options, getOption, setOptionSpinButton
   -- * Manipulating the current game information
-, currentPosition, setPosition, addMove
+, currentPosition, setPosition, addPly
   -- * The Info data type
 , Info(..), Score(..), Bounds(..)
   -- * Searching
@@ -60,22 +60,22 @@ data Engine = Engine {
 , isReady :: MVar ()
 , isSearching :: IORef Bool
 , infoChan :: TChan [Info]
-, bestMoveChan :: TChan (Move, Maybe Move)
-, game :: IORef (Position, [Move])
+, bestMoveChan :: TChan (Ply, Maybe Ply)
+, game :: IORef (Position, [Ply])
 }
 
 -- | Set the starting position of the current game, also clearing any
 -- pre-existing history.
 setPosition :: MonadIO m
             => Engine -> Position
-            -> m (Position, [Move])
+            -> m (Position, [Ply])
               -- ^ the game previously in progress
 setPosition e@Engine{game} p = liftIO $ do
   oldGame <- atomicModifyIORef' game ((p, []),)
   sendPosition e
   pure oldGame
 
-data UCIException = IllegalMove Move deriving Show
+data UCIException = IllegalMove Ply deriving Show
 
 instance Exception UCIException
 
@@ -85,10 +85,10 @@ data Command = Name ByteString
              | UCIOk
              | ReadyOK
              | Info [Info]
-             | BestMove !(Move, Maybe Move)
+             | BestMove !(Ply, Maybe Ply)
              deriving (Show)
 
-data Info = PV [Move]
+data Info = PV [Ply]
           | Depth Int
           | SelDepth Int
           | Elapsed (Time Millisecond)
@@ -98,7 +98,7 @@ data Info = PV [Move]
           | NPS Int
           | TBHits Int
           | HashFull Int
-          | CurrMove Move
+          | CurrMove Ply
           | CurrMoveNumber Int
           deriving (Eq, Show)
 
@@ -179,9 +179,9 @@ command pos = skipSpace *> choice
                                 <|> LowerBound <$ "lowerbound"
                                  )
     pure $ Score s b
-  pv = fmap (PV . snd) $ foldM toMove (pos, []) =<< sepBy mv skipSpace
-  toMove (pos, xs) s = case fromUCI pos s of
-    Just m -> pure (applyMove pos m, xs <> [m])
+  pv = fmap (PV . snd) $ foldM toPly (pos, []) =<< sepBy mv skipSpace
+  toPly (pos, xs) s = case fromUCI pos s of
+    Just m -> pure (doPly pos m, xs <> [m])
     Nothing -> fail $ "Failed to parse move " <> s
   currmove = fmap (fromUCI pos) mv >>= \case
     Just m -> pure $ CurrMove m
@@ -200,7 +200,7 @@ command pos = skipSpace *> choice
     case fromUCI pos m of
       Just m' -> case ponder of
         Nothing -> pure $ BestMove (m', Nothing)
-        Just p -> case fromUCI (applyMove pos m') p of
+        Just p -> case fromUCI (doPly pos m') p of
           Just p' -> pure $ BestMove (m', Just p')
           Nothing -> fail $ "Failed to parse ponder move " <> p
       Nothing -> fail $ "Failed to parse best move " <> m
@@ -270,7 +270,7 @@ send Engine{inH, procH} b = do
     Nothing -> pure ()
     Just ec -> throwIO ec
 
-data SearchParam = SearchMoves [Move]
+data SearchParam = SearchMoves [Ply]
                 -- ^ restrict search to the specified moves only
                  | TimeLeft Color (Time Millisecond)
                 -- ^ time (in milliseconds) left on the clock
@@ -285,7 +285,7 @@ data SearchParam = SearchMoves [Move]
                 -- ^ search until 'stop' gets called
                  deriving (Eq, Show)
  
-searchmoves :: [Move] -> SearchParam
+searchmoves :: [Ply] -> SearchParam
 searchmoves = SearchMoves
 
 timeleft, timeincrement :: KnownDivRat unit Millisecond
@@ -312,7 +312,7 @@ searching Engine{isSearching} = liftIO $ readIORef isSearching
 -- | Instruct the engine to begin searching.
 search :: MonadIO m
        => Engine -> [SearchParam]
-       -> m (TChan (Move, Maybe Move), TChan [Info])
+       -> m (TChan (Ply, Maybe Ply), TChan [Info])
 search e@Engine{isSearching} params = liftIO $ do
   chans <- atomically $ (,) <$> dupTChan (bestMoveChan e)
                             <*> dupTChan (infoChan e)
@@ -355,7 +355,7 @@ setOptionSpinButton n v c
 -- | Return the final position of the currently active game.
 currentPosition :: MonadIO m => Engine -> m Position
 currentPosition Engine{game} = liftIO $
-  uncurry (foldl' applyMove) <$> readIORef game
+  uncurry (foldl' doPly) <$> readIORef game
 
 nextMove :: Engine -> IO Color
 nextMove Engine{game} = do
@@ -366,10 +366,10 @@ nextMove Engine{game} = do
 --
 -- This function checks if the move is actually legal, and throws a 'UCIException'
 -- if it isn't.
-addMove :: MonadIO m => Engine -> Move -> m ()
-addMove e@Engine{game} m = liftIO $ do
+addPly :: MonadIO m => Engine -> Ply -> m ()
+addPly e@Engine{game} m = liftIO $ do
   pos <- currentPosition e
-  if m `notElem` moves pos then throwIO $ IllegalMove m else do
+  if m `notElem` legalPlies pos then throwIO $ IllegalMove m else do
     atomicModifyIORef' game $ \g -> (fmap (<> [m]) g, ())
     sendPosition e
  

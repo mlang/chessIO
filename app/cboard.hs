@@ -23,7 +23,7 @@ import Time.Units
 data S = S {
   engine :: Engine
 , mover :: Maybe ThreadId
-, hintRef :: IORef (Maybe Move)
+, hintRef :: IORef (Maybe Ply)
 }
 
 main :: IO ()
@@ -44,7 +44,7 @@ completeSAN :: MonadIO m => Engine -> CompletionFunc m
 completeSAN e = completeWord Nothing "" $ \w ->
   fmap (map mkCompletion . filter (w `isPrefixOf`)) $ do
     pos <- currentPosition e
-    pure $ unsafeToSAN pos <$> moves pos
+    pure $ unsafeToSAN pos <$> legalPlies pos
  where
   mkCompletion s = (simpleCompletion s) { isFinished = False }
 
@@ -123,7 +123,7 @@ loop = do
         case parseMove pos input of
           Left err -> outputStrLn err
           Right m -> ifM (searching e) (outputStrLn "Not your move") $ do
-            addMove e m
+            addPly e m
             outputBoard
             (bmc, _) <- search e [movetime (sec 1)]
             hr <- lift $ gets hintRef
@@ -132,22 +132,22 @@ loop = do
             lift $ modify' $ \s -> s { mover = Just tid }
         loop
 
-varToString :: Position -> [Move] -> String
+varToString :: Position -> [Ply] -> String
 varToString _ [] = ""
 varToString pos ms
   | color pos == Black && length ms == 1
   = show (moveNumber pos) <> "..." <> toSAN pos (head ms)
   | color pos == Black
-  = show (moveNumber pos) <> "..." <> toSAN pos (head ms) <> " " <> fromWhite (applyMove pos (head ms)) (tail ms)
+  = show (moveNumber pos) <> "..." <> toSAN pos (head ms) <> " " <> fromWhite (doPly pos (head ms)) (tail ms)
   | otherwise
   = fromWhite pos ms
  where
   fromWhite pos = unwords . concat
                 . zipWith f [moveNumber pos ..] . chunksOf 2 . snd
-                . mapAccumL (curry (uncurry applyMove &&& uncurry toSAN)) pos
+                . mapAccumL (curry (uncurry doPly &&& uncurry toSAN)) pos
   f n (x:xs) = (show n <> "." <> x):xs
 
-parseMove :: Position -> String -> Either String Move
+parseMove :: Position -> String -> Either String Ply
 parseMove pos s = case fromUCI pos s of
   Just m -> pure m
   Nothing -> fromSAN pos s
@@ -173,15 +173,15 @@ printBoard externalPrint pos = externalPrint . init . unlines $
             | otherwise -> ' '
 
 doBestMove :: (String -> IO ())
-           -> IORef (Maybe Move)
-           -> TChan (Move, Maybe Move)
+           -> IORef (Maybe Ply)
+           -> TChan (Ply, Maybe Ply)
            -> Engine
            -> IO ()
 doBestMove externalPrint hintRef bmc e = do
   (bm, ponder) <- atomically . readTChan $ bmc
   pos <- currentPosition e
   externalPrint $ "< " <> toSAN pos bm
-  addMove e bm
+  addPly e bm
   currentPosition e >>= printBoard externalPrint
   writeIORef hintRef ponder
 

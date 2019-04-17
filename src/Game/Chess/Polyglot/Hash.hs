@@ -1,49 +1,12 @@
-module Game.Chess.Opening.Polyglot (readPolyglotFile, bookPlies) where
+module Game.Chess.Polyglot.Hash (hashPosition, pieceKey, castleKey, turnKey) where
 
 import Control.Applicative
 import Data.Bits
-import Data.Binary
-import Data.Foldable (traverse_)
 import Data.Maybe
-import Data.Vector (Vector)
-import qualified Data.Vector as Vector
 import qualified Data.Vector.Unboxed as Unboxed
 import Data.Ix
+import Data.Word
 import Game.Chess
-
-data BookEntry = BookEntry {
-  key :: Word64
-, move :: Move
-, weight :: Word16
-, learn :: Word32
-} deriving (Eq, Show)
-
-instance Binary BookEntry where
-  get = BookEntry <$> get <*> get <*> get <*> get
-  put BookEntry{key, move, weight, learn} =
-    put key *> put move *> put weight *> put learn
-
-newtype PolyglotBook = Book { unBook :: Vector BookEntry }
-
-instance Binary PolyglotBook where
-  get = Book . Vector.fromList <$> many get
-  put = traverse_ put . unBook
-
-readPolyglotFile :: FilePath -> IO PolyglotBook
-readPolyglotFile = decodeFile 
-
-bookPlies :: PolyglotBook -> Position -> [Move]
-bookPlies (Book v) pos = fmap move $ Vector.toList $
-  Vector.takeWhile ((hash ==) . key) $ Vector.unsafeDrop (lowerBound v hash) v
- where
-  hash = hashPosition pos
-  lowerBound v = bsearch (key . Vector.unsafeIndex v) (0, Vector.length v - 1)
-  bsearch :: (Integral a, Ord b) => (a -> b) -> (a, a) -> b -> a
-  bsearch f (lo, hi) v
-    | lo >= hi   = lo
-    | v <= f mid = bsearch f (lo, mid) v
-    | otherwise  = bsearch f (mid + 1, hi) v
-   where mid = (lo + hi) `div` 2
 
 hashPosition :: Position -> Word64
 hashPosition pos = piece `xor` castling `xor` ep `xor` turn where
@@ -110,9 +73,9 @@ pieceKeys = Unboxed.fromList
   ,0x21A007933A522A20,0x2DF16F761598AA4F,0x763C4A1371B368FD,0xF793C46702E086A0
   ,0xD7288E012AEB8D31,0xDE336A2A4BC1C44B,0x0BF692B38D079F23,0x2C604A7A177326B3
   ,0x4850E73E03EB6064,0xCFC447F1E53C8E1B,0xB05CA3F564268D99,0x9AE182C8BC9474E8
-  ,0xA4FC4BD4FC5558CA,0xE755178D58FC4E76,0x69B97DB1A4C03DFE,0xF9B5B7C4ACC67C96,
-   0xFC6A82D64B8655FB, 0x9C684CB6C4D24417, 0x8EC97D2917456ED0, 0x6703DF9D2924E97E,
-   0xC547F57E42A7444E, 0x78E37644E7CAD29E, 0xFE9A44E9362F05FA, 0x08BD35CC38336615,
+  ,0xA4FC4BD4FC5558CA,0xE755178D58FC4E76,0x69B97DB1A4C03DFE,0xF9B5B7C4ACC67C96
+  ,0xFC6A82D64B8655FB,0x9C684CB6C4D24417,0x8EC97D2917456ED0,0x6703DF9D2924E97E
+  ,0xC547F57E42A7444E,0x78E37644E7CAD29E,0xFE9A44E9362F05FA,0x08BD35CC38336615,
    0x9315E5EB3A129ACE, 0x94061B871E04DF75, 0xDF1D9F9D784BA010, 0x3BBA57B68871B59D,
    0xD2B7ADEEDED1F73F, 0xF7A255D83BC373F8, 0xD7F4F2448C0CEB81, 0xD95BE88CD210FFA7,
    0x336F52F8FF4728E7, 0xA74049DAC312AC71, 0xA2F61BB6E437FDB5, 0x4F2A5CB07F6A35B3,

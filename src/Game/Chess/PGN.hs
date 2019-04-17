@@ -32,9 +32,15 @@ data Outcome = Win Color
              | Undecided
              deriving (Eq, Show)
 
+instance Pretty Outcome where
+  pretty (Win White) = "1-0"
+  pretty (Win Black) = "0-1"
+  pretty Draw        = "1/2-1/2"
+  pretty Undecided   = "*"
+
 data PlyData = PlyData {
   prefixNAG :: ![Int]
-, ply :: !Move
+, ply :: !Ply
 , suffixNAG :: ![Int]
 } deriving (Eq, Show)
 
@@ -99,8 +105,8 @@ tagList = many tagPair
 
 movetext :: Position -> Parser (Outcome, Forest PlyData)
 movetext pos = (,[]) <$> eog <|> main pos where
-  main p = ply p >>= \(m, n) -> fmap n <$> movetext (unsafeApplyMove p m)
-  var p = ply p >>= \(m, n) -> n <$> (rparenP $> [] <|> var (unsafeApplyMove p m))
+  main p = ply p >>= \(m, n) -> fmap n <$> movetext (unsafeDoPly p m)
+  var p = ply p >>= \(m, n) -> n <$> (rparenP $> [] <|> var (unsafeDoPly p m))
   ply p = do
     pnags <- many nag
     validateMoveNumber p
@@ -162,7 +168,7 @@ tagsDoc = vsep . fmap tagpair where
     e c = T.singleton c
 
 moveDoc :: RAVOrder (Doc ann) -> Position -> (Outcome, Forest PlyData) -> Doc ann
-moveDoc ro pos (o,ts) = (fillSep $ go pos True ts <> [outcome o]) <> line where
+moveDoc ro pos (o,ts) = (fillSep $ go pos True ts <> [pretty o]) <> line where
   go _ _ [] = []
   go pos pmn (t:ts)
     | color pos == White || pmn
@@ -172,13 +178,9 @@ moveDoc ro pos (o,ts) = (fillSep $ go pos True ts <> [outcome o]) <> line where
    where
     pl = ply . rootLabel $ t
     san = pretty $ unsafeToSAN pos pl
-    pos' = unsafeApplyMove pos pl
+    pos' = unsafeDoPly pos pl
     pnag = nag <$> prefixNAG (rootLabel t)
     mn = pretty (moveNumber pos) <> if color pos == White then "." else "..."
     rav = ro (parens . fillSep . go pos True) ts
     snag = nag <$> suffixNAG (rootLabel t)
-  outcome (Win White) = "1-0"
-  outcome (Win Black) = "0-1"
-  outcome Draw        = "1/2-1/2"
-  outcome Undecided   = "*"
   nag n = "$" <> pretty n

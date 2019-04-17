@@ -57,8 +57,9 @@ library:
   source-dirs: src
   exposed-modules:
   - Game.Chess
-  - Game.Chess.Opening.Polyglot
   - Game.Chess.PGN
+  - Game.Chess.Polyglot.Book
+  - Game.Chess.Polyglot.Hash
   - Game.Chess.UCI
 
 executables:

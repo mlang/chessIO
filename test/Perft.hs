@@ -48,12 +48,12 @@ showResult depth PerftResult{nodes} = show depth <> " " <> show nodes
 
 perft :: Int -> Position -> PerftResult
 perft 0 _ = PerftResult 1
-perft 1 p = PerftResult . fromIntegral . length $ moves p
+perft 1 p = PerftResult . fromIntegral . length $ legalPlies p
 perft n p
   | n < 4
-  = foldMap (perft (pred n) . unsafeApplyMove p) $ moves p
+  = foldMap (perft (pred n) . unsafeDoPly p) $ legalPlies p
   | otherwise
-  = fold . parMap rdeepseq (perft (pred n) . unsafeApplyMove p) $ moves p
+  = fold . parMap rdeepseq (perft (pred n) . unsafeDoPly p) $ legalPlies p
 
 runTestSuite :: [(Position, [(Int, PerftResult)])] -> IO (Maybe PerftResult)
 runTestSuite = fmap (getAp . foldMap Ap) . traverse (uncurry (test mempty)) where
