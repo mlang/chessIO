@@ -14,6 +14,7 @@ import Data.IORef
 import Data.List
 import Data.List.Extra
 import Game.Chess
+import Game.Chess.Polyglot.Book
 import Game.Chess.UCI
 import System.Console.Haskeline hiding (catch, handle)
 import System.Exit
@@ -23,6 +24,7 @@ import Time.Units
 data S = S {
   engine :: Engine
 , mover :: Maybe ThreadId
+, book :: PolyglotBook
 , hintRef :: IORef (Maybe Ply)
 }
 
@@ -36,7 +38,7 @@ main = getArgs >>= \case
       putStrLn "Unable to initialise engine, maybe it doesn't speak UCI?"
       exitWith $ ExitFailure 2
     Just e -> do
-      s <- S e Nothing <$> newIORef Nothing
+      s <- S e Nothing defaultBook <$> newIORef Nothing
       runInputT (setComplete (completeSAN e) defaultSettings) chessIO `evalStateT` s
       exitSuccess
 
@@ -117,6 +119,25 @@ loop = do
         loop
       | "stop" == input -> do
         stop e
+        loop
+      | ["polyglot", file] <- words input -> do
+        b <- liftIO $ readPolyglotFile file
+        lift $ modify $ \x -> x { book = b }
+        loop
+      | "book" == input -> do
+        b <- lift $ gets book
+        pos <- currentPosition e
+        let plies = bookPlies b pos
+        if not . null $ plies
+          then do
+            addPly e (head plies)
+            outputBoard
+            (bmc, _) <- search e [movetime (sec 1)]
+            hr <- lift $ gets hintRef
+            externalPrint <- getExternalPrint
+            tid <- liftIO . forkIO $ doBestMove externalPrint hr bmc e
+            lift $ modify' $ \s -> s { mover = Just tid }
+          else pure ()
         loop
       | otherwise -> do
         pos <- currentPosition e

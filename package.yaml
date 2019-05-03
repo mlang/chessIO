@@ -20,6 +20,7 @@ dependencies:
 - binary
 - bytestring
 - containers
+- file-embed
 - megaparsec
 - o-clock
 - parser-combinators
@@ -38,12 +39,14 @@ default-extensions:
 - FlexibleContexts
 - GeneralizedNewtypeDeriving
 - LambdaCase
+- MultiParamTypeClasses
 - NamedFieldPuns
 - NumericUnderscores
 - RecordWildCards
 - OverloadedStrings
 - TupleSections
 - TypeApplications
+- TypeFamilies
 - ViewPatterns
 
 extra-source-files:
