@@ -3,10 +3,10 @@ module Main where
 import Control.Arrow ((&&&))
 import Control.Concurrent
 import Control.Concurrent.STM
-import Control.Exception
 import Control.Monad
 import Control.Monad.Extra hiding (loop)
 import Control.Monad.IO.Class
+import Control.Monad.Random
 import Control.Monad.State.Strict
 import qualified Data.ByteString.Char8 as BS
 import Data.Char
@@ -14,11 +14,12 @@ import Data.IORef
 import Data.List
 import Data.List.Extra
 import Game.Chess
-import Game.Chess.Polyglot.Book
+import Game.Chess.Polyglot.Book (PolyglotBook, defaultBook, readPolyglotFile, bookPlies, bookPly)
 import Game.Chess.UCI
 import System.Console.Haskeline hiding (catch, handle)
 import System.Exit
 import System.Environment
+import System.Random
 import Time.Units
 
 data S = S {
@@ -71,16 +72,16 @@ midgame = do
   e <- lift $ gets engine
   b <- lift $ gets book
   pos <- currentPosition e
-  let plies = bookPlies b pos
-  if not . null $ plies
-    then do
-      addPly e (head plies)
+  case bookPly b pos of
+    Just r -> do
+      pl <- liftIO . evalRandIO $ r
+      addPly e pl
       (bmc, _) <- search e [movetime (ms 100)]
       liftIO $ do
         (bm, _) <- atomically . readTChan $ bmc
         addPly e bm
       midgame
-    else outputBoard
+    Nothing -> outputBoard
 
 outputBoard :: InputT (StateT S IO) ()
 outputBoard = do
@@ -97,7 +98,7 @@ loop = do
     Just input
       | null input -> outputBoard *> loop
       | Just position <- fromFEN input -> do
-        setPosition e position
+        void $ setPosition e position
         outputBoard
         loop
       | "hint" == input -> do
@@ -156,7 +157,7 @@ loop = do
           else pure ()
         loop
       | "midgame" == input -> do
-        setPosition e startpos
+        void $ setPosition e startpos
         midgame
         loop
       | otherwise -> do
@@ -226,8 +227,8 @@ doBestMove externalPrint hintRef bmc e = do
   currentPosition e >>= printBoard externalPrint
   writeIORef hintRef ponder
 
-printPV :: (String -> IO ()) -> TChan [Info] -> Engine -> IO ()
-printPV externalPrint ic engine = forever $ do
+printPV :: (String -> IO ()) -> TChan [Info] -> IO ()
+printPV externalPrint ic = forever $ do
   info <- atomically . readTChan $ ic
   case find isPV info of
     Just pv -> externalPrint $ show pv

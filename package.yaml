@@ -16,16 +16,17 @@ description: A simple library for generating legal chess moves.
 
 dependencies:
 - attoparsec
-- base >= 4.8 && < 5
-- binary
+- base >= 4.10 && < 5
 - bytestring
 - containers
 - file-embed
 - megaparsec
+- MonadRandom
 - o-clock
 - parser-combinators
 - prettyprinter
 - process
+- random
 - stm
 - text
 - unordered-containers

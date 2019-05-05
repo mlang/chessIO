@@ -38,7 +38,6 @@ import qualified Data.HashMap.Strict as HashMap
 import Data.IORef
 import Data.Ix
 import Data.List
-import Data.Maybe
 import Data.String (IsString(..))
 import Game.Chess
 import Numeric.Natural
@@ -237,7 +236,7 @@ initialise c@Engine{outH, outputStrLn, game} = do
   l <- BS.hGetLine outH
   pos <- fst <$> readIORef game
   if BS.null l then initialise c else case parseOnly (command pos <* endOfInput) l of
-    Left err -> do
+    Left _ -> do
       outputStrLn . BS.unpack $ l
       initialise c
     Right (Name n) -> initialise (c { name = Just n })

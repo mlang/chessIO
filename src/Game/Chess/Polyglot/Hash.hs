@@ -1,6 +1,5 @@
 module Game.Chess.Polyglot.Hash (hashPosition, pieceKey, castleKey, turnKey) where
 
-import Control.Applicative
 import Data.Bits
 import Data.Maybe
 import qualified Data.Vector.Unboxed as Unboxed

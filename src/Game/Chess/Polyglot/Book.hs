@@ -1,33 +1,33 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Game.Chess.Polyglot.Book (
   PolyglotBook
 , fromByteString
 , defaultBook, twic
 , readPolyglotFile
+, bookPly
 , bookPlies
 , bookForest
 ) where
 
-import Control.Applicative
-import Control.Monad
+import Control.Arrow
+import Control.Monad.Random (Rand)
+import qualified Control.Monad.Random as Rand
 import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Internal as BS
 import qualified Data.ByteString as BS
-import Data.ByteString.Lazy (fromStrict)
 import Data.FileEmbed
 import qualified Data.Vector.Storable as VS
 import Data.Tree
 import Data.Word
+import Foreign.ForeignPtr (plusForeignPtr)
 import Foreign.Ptr (castPtr)
 import Foreign.Storable
 import Game.Chess
 import Game.Chess.Polyglot.Hash
-import GHC.ForeignPtr (ForeignPtr(..))
-import GHC.Exts (Int(I#), plusAddr#)
 import GHC.Ptr
+import System.Random (RandomGen)
 
 data BookEntry = BookEntry {
   key :: {-# UNPACK #-} !Word64
@@ -47,7 +47,7 @@ instance Storable BookEntry where
     pokeBE (castPtr ptr) key
     pokeBE (castPtr ptr `plusPtr` 8) ply
     pokeBE (castPtr ptr `plusPtr` 10) weight
-    pokeByteOff ptr 12 learn
+    pokeBE (castPtr ptr `plusPtr` 12) learn
 
 peekBE :: forall a. (Bits a, Num a, Storable a) => Ptr Word8 -> IO a
 peekBE ptr = go ptr 0 (sizeOf (undefined :: a)) where
@@ -77,9 +77,6 @@ fromByteString bs = Book v where
   (fptr, off, len) = BS.toForeignPtr bs
   elemSize = sizeOf (undefined `asTypeOf` VS.head v)
 
-plusForeignPtr :: ForeignPtr a -> Int -> ForeignPtr b
-plusForeignPtr (ForeignPtr addr c) (I# d) = ForeignPtr (plusAddr# addr d) c
-
 readPolyglotFile :: FilePath -> IO PolyglotBook
 readPolyglotFile = fmap fromByteString . BS.readFile
 
@@ -92,11 +89,20 @@ paths = foldTree f where
   f a [] = [[a]]
   f a xs = (a :) <$> concat xs
 
+bookPly :: RandomGen g => PolyglotBook -> Position -> Maybe (Rand g Ply)
+bookPly b pos =
+  case findPosition b pos of
+    [] -> Nothing
+    l -> Just . Rand.fromList $ map (ply &&& fromIntegral . weight) l
+
 bookPlies :: PolyglotBook -> Position -> [Ply]
-bookPlies (Book v) pos
+bookPlies b pos
   | halfMoveClock pos > 150 = []
-  | otherwise = fmap ply . VS.toList . VS.takeWhile ((hash ==) . key) $
-    VS.unsafeDrop (lowerBound hash) v
+  | otherwise = ply <$> findPosition b pos
+
+findPosition :: PolyglotBook -> Position -> [BookEntry]
+findPosition (Book v) pos =
+  VS.toList . VS.takeWhile ((hash ==) . key) $ VS.unsafeDrop (lowerBound hash) v
  where
   hash = hashPosition pos
   lowerBound = bsearch (key . VS.unsafeIndex v) (0, VS.length v - 1)

@@ -8,9 +8,7 @@ import qualified Data.ByteString.Char8 as BS
 import Data.Char
 import Data.Foldable
 import Data.Functor
-import Data.List
 import Data.Maybe
-import Data.String
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -58,13 +56,16 @@ spaceConsumer :: Parser ()
 spaceConsumer = L.space
   space1 (L.skipLineComment ";") (L.skipBlockComment "{" "}")
 
+lexeme :: Parser a -> Parser a
 lexeme = L.lexeme spaceConsumer
 
+eog :: Parser Outcome
 eog = lexeme $  string "1-0" $> Win White
             <|> string "0-1" $> Win Black
             <|> string "1/2-1/2" $> Draw
             <|> string "*" $> Undecided
 
+sym :: Parser ByteString
 sym = lexeme . fmap fst . match $ do
   void $ alphaNumChar
   many $ alphaNumChar <|> oneOf [35,43,45,58,61,95]
@@ -77,10 +78,14 @@ periodChar    = fromIntegral $ ord '.'
 quoteChar     = fromIntegral $ ord '"'
 backslashChar = fromIntegral $ ord '\\'
 dollarChar    = fromIntegral $ ord '$'
+
+lbracketP, rbracketP, lparenP, rparenP :: Parser ()
 lbracketP = void . lexeme . single . fromIntegral $ ord '['
 rbracketP = void . lexeme . single . fromIntegral $ ord ']'
 lparenP   = void . lexeme . single . fromIntegral $ ord '('
 rparenP   = void . lexeme . single . fromIntegral $ ord ')'
+
+nag :: Parser Int
 nag = lexeme $  single dollarChar *> L.decimal
             <|> string "!!" $> 3
             <|> string "??" $> 4
@@ -94,6 +99,7 @@ comment = (fmap . fmap) (chr . fromEnum) $
       single semiChar *> manyTill anySingle (eof <|> void eol)
   <|> single lbraceChar *> many (anySingleBut rbraceChar) <* single rbraceChar
 
+tagPair :: Parser (ByteString, Text)
 tagPair = lexeme $ do
   lbracketP
   k <- sym
@@ -101,6 +107,7 @@ tagPair = lexeme $ do
   rbracketP
   pure $ (k, v)
 
+tagList :: Parser [(ByteString, Text)]
 tagList = many tagPair
 
 movetext :: Position -> Parser (Outcome, Forest PlyData)

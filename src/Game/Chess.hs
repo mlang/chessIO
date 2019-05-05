@@ -36,7 +36,6 @@ module Game.Chess (
 
 import Control.Applicative
 import Control.Applicative.Combinators
-import Control.Monad
 import Data.Bits
 import qualified Data.ByteString as Strict (ByteString)
 import qualified Data.ByteString.Lazy as Lazy (ByteString)
@@ -50,21 +49,21 @@ import Data.Proxy
 import Data.String
 import qualified Data.Text as Strict (Text)
 import qualified Data.Text.Lazy as Lazy (Text)
-import Data.Vector.Unboxed (Vector, MVector, (!), Unbox)
+import Data.Vector.Unboxed (Vector, (!))
 import Data.Void
 import qualified Data.Vector.Unboxed as Vector
 import Data.Word
 import Text.Megaparsec
-import Text.Megaparsec.Char
 import Text.Read (readMaybe)
 import Data.Tree
-import Data.Tuple
 
 positionTree :: Position -> Tree Position
 positionTree pos = Node pos $ positionForest pos
+positionForest :: Position -> Forest Position
 positionForest pos = positionTree . unsafeDoPly pos <$> legalPlies pos
 plyForest :: Position -> Forest Ply
 plyForest pos = plyTree pos <$> legalPlies pos
+plyTree :: Position -> Ply -> Tree Ply
 plyTree pos ply = Node ply . plyForest $ unsafeDoPly pos ply
 
 type Parser s = Parsec Void s
@@ -170,8 +169,8 @@ instance SANToken Word8 where
 
 strictSAN :: forall s. (Stream s, SANToken (Token s), IsString (Tokens s))
           => Position -> Parser s Ply
-strictSAN pos@Position{flags} = case legalPlies pos of
-  [] -> fail $ "No legal moves in this position"
+strictSAN pos = case legalPlies pos of
+  [] -> fail "No legal moves in this position"
   ms -> (castling pos <|> normal ms) >>= checkStatus
  where
   normal ms = do
@@ -204,7 +203,7 @@ relaxedSAN :: (Stream s, SANToken (Token s), IsString (Tokens s))
 relaxedSAN pos = (castling pos <|> normal) <* optional sanStatus where
   normal = do
     pc <- sanPiece <|> pure Pawn
-    (from, cap, to) <- conv <$> location
+    (from, _, to) <- conv <$> location
     prm <- optional $ optional (chunk "=") *> promotionPiece
     case possible pc from to prm of
       [m] -> pure m
@@ -243,7 +242,7 @@ toSAN pos m | m `elem` legalPlies pos = unsafeToSAN pos m
             | otherwise          = error "Game.Chess.toSAN: Illegal move"
 
 sanCoords :: IsString s => Position -> (PieceType, [Ply]) -> Ply -> s
-sanCoords pos@Position{flags} (pc,lms) m@(unpack -> (from, to, _)) =
+sanCoords pos (pc,lms) m@(unpack -> (from, to, _)) =
   fromString $ source <> target
  where
   capture = isCapture pos m
@@ -263,7 +262,7 @@ sanCoords pos@Position{flags} (pc,lms) m@(unpack -> (from, to, _)) =
   target
     | capture = "x" <> toCoord to
     | otherwise = toCoord to
-  ms = filter (isMoveTo to) $ lms
+  ms = filter (isMoveTo to) lms
   isMoveTo to (unpack -> (_, to', _)) = to == to'
   fEq (unpack -> (from', _, _)) = from' `mod` 8 == fromFile
   rEq (unpack -> (from', _, _)) = from' `div` 8 == fromRank
@@ -272,7 +271,7 @@ sanCoords pos@Position{flags} (pc,lms) m@(unpack -> (from, to, _)) =
   rankChar i = chr $ (i `div` 8) + ord '1'
 
 unsafeToSAN :: Position -> Ply -> String
-unsafeToSAN pos@Position{flags} m@(unpack -> (from, to, promo)) =
+unsafeToSAN pos m@(unpack -> (from, to, promo)) =
   moveStr <> status
  where
   moveStr = case piece of
@@ -368,7 +367,7 @@ toRF :: IsSquare sq => sq -> (Int, Int)
 toRF sq = toIndex sq `divMod` 8
 
 toCoord :: (IsSquare sq, IsString s) => sq -> s
-toCoord (toRF -> (r,f)) = fromString $ [chr (f + ord 'a'), chr (r + ord '1')]
+toCoord (toRF -> (r,f)) = fromString [chr (f + ord 'a'), chr (r + ord '1')]
 
 instance IsSquare Sq where
   toIndex = fromEnum
@@ -874,7 +873,7 @@ bKscm = move E8 G8
 bQscm = move E8 C8
 
 attackedBy :: IsSquare sq => Color -> BB -> Word64 -> sq -> Bool
-attackedBy White !bb@BB{wP, wN, wB, wR, wQ, wK} !occ (toIndex -> sq)
+attackedBy White BB{wP, wN, wB, wR, wQ, wK} !occ (toIndex -> sq)
   | (wPawnAttacks ! sq) .&. wP /= 0 = True
   | (knightAttacks ! sq) .&. wN /= 0 = True
   | bishopTargets sq occ .&. wB /= 0 = True
@@ -882,7 +881,7 @@ attackedBy White !bb@BB{wP, wN, wB, wR, wQ, wK} !occ (toIndex -> sq)
   | queenTargets sq occ .&.  wQ /= 0 = True
   | (kingAttacks ! sq) .&. wK /= 0   = True
   | otherwise                        = False
-attackedBy Black !bb@BB{bP, bN, bB, bR, bQ, bK} !occ (toIndex -> sq)
+attackedBy Black BB{bP, bN, bB, bR, bQ, bK} !occ (toIndex -> sq)
   | (bPawnAttacks ! sq) .&. bP /= 0 = True
   | (knightAttacks ! sq) .&. bN /= 0 = True
   | bishopTargets sq occ .&. bB /= 0 = True
