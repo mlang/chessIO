@@ -66,6 +66,22 @@ chessIO = do
   loop
   lift (gets engine) >>= void . quit
 
+midgame :: InputT (StateT S IO) ()
+midgame = do
+  e <- lift $ gets engine
+  b <- lift $ gets book
+  pos <- currentPosition e
+  let plies = bookPlies b pos
+  if not . null $ plies
+    then do
+      addPly e (head plies)
+      (bmc, _) <- search e [movetime (ms 100)]
+      liftIO $ do
+        (bm, _) <- atomically . readTChan $ bmc
+        addPly e bm
+      midgame
+    else outputBoard
+
 outputBoard :: InputT (StateT S IO) ()
 outputBoard = do
   e <- lift $ gets engine
@@ -138,6 +154,10 @@ loop = do
             tid <- liftIO . forkIO $ doBestMove externalPrint hr bmc e
             lift $ modify' $ \s -> s { mover = Just tid }
           else pure ()
+        loop
+      | "midgame" == input -> do
+        setPosition e startpos
+        midgame
         loop
       | otherwise -> do
         pos <- currentPosition e

@@ -1,6 +1,9 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Game.Chess.Polyglot.Book (
   PolyglotBook
+, fromByteString
 , defaultBook, twic
 , readPolyglotFile
 , bookPlies
@@ -9,96 +12,76 @@ module Game.Chess.Polyglot.Book (
 
 import Control.Applicative
 import Control.Monad
-import Data.Binary
+import Data.Bits
+import Data.ByteString (ByteString)
+import qualified Data.ByteString.Internal as BS
+import qualified Data.ByteString as BS
 import Data.ByteString.Lazy (fromStrict)
 import Data.FileEmbed
-import Data.Foldable (traverse_)
-import Data.Vector (Vector)
-import qualified Data.Vector.Unboxed as Unboxed
-import qualified Data.Vector.Generic         as G
-import qualified Data.Vector.Generic.Mutable as M
-import qualified Data.Vector as Vector
+import qualified Data.Vector.Storable as VS
 import Data.Tree
+import Data.Word
+import Foreign.Ptr (castPtr)
+import Foreign.Storable
 import Game.Chess
 import Game.Chess.Polyglot.Hash
+import GHC.ForeignPtr (ForeignPtr(..))
+import GHC.Exts (Int(I#), plusAddr#)
+import GHC.Ptr
+
+data BookEntry = BookEntry {
+  key :: {-# UNPACK #-} !Word64
+, ply :: {-# UNPACK #-} !Ply
+, weight :: {-# UNPACK #-} !Word16
+, learn :: {-# UNPACK #-} !Word32
+} deriving (Eq, Show)
+
+instance Storable BookEntry where
+  sizeOf _ = 16
+  alignment _ = alignment (undefined :: Word64)
+  peek ptr = BookEntry <$> peekBE (castPtr ptr)
+                       <*> (Ply <$> peekBE (castPtr ptr `plusPtr` 8))
+                       <*> peekBE (castPtr ptr `plusPtr` 10)
+                       <*> peekBE (castPtr ptr `plusPtr` 12)
+  poke ptr (BookEntry key (Ply ply) weight learn) = do
+    pokeBE (castPtr ptr) key
+    pokeBE (castPtr ptr `plusPtr` 8) ply
+    pokeBE (castPtr ptr `plusPtr` 10) weight
+    pokeByteOff ptr 12 learn
+
+peekBE :: forall a. (Bits a, Num a, Storable a) => Ptr Word8 -> IO a
+peekBE ptr = go ptr 0 (sizeOf (undefined :: a)) where
+  go _ !x 0 = pure x
+  go !p !x !n = peek p >>= \w8 -> 
+    go (p `plusPtr` 1) (x `shiftL` 8 .|. fromIntegral w8) (n - 1)
+
+pokeBE :: forall a. (Bits a, Integral a, Num a, Storable a) => Ptr Word8 -> a -> IO ()
+pokeBE p x = go x (sizeOf x) where
+  go _ 0 = pure ()
+  go !x !n = do
+    pokeElemOff p (n-1) (fromIntegral x)
+    go (x `shiftR` 8) (n-1)
 
 defaultBook, twic :: PolyglotBook
 defaultBook = twic
-twic = (decode . fromStrict) $(embedFile "book/twic-9g.bin")
+twic = fromByteString $(embedFile "book/twic-9g.bin")
 
 pv :: PolyglotBook -> [Ply]
 pv b = head . concatMap paths $ bookForest b startpos
 
-data BookEntry = BookEntry {
-  key :: !Word64
-, ply :: !Ply
-, weight :: !Word16
-, learn :: !Word32
-} deriving (Eq, Show)
+newtype PolyglotBook = Book (VS.Vector BookEntry)
 
-instance Binary BookEntry where
-  get = BookEntry <$> get <*> get <*> get <*> get
-  put BookEntry{key, ply, weight, learn} =
-    put key *> put ply *> put weight *> put learn
+fromByteString :: ByteString -> PolyglotBook
+fromByteString bs = Book v where
+  v = VS.unsafeFromForeignPtr0 (plusForeignPtr fptr off) (len `div` elemSize)
+  (fptr, off, len) = BS.toForeignPtr bs
+  elemSize = sizeOf (undefined `asTypeOf` VS.head v)
 
-newtype instance Unboxed.MVector s BookEntry = MV_BookEntry (Unboxed.MVector s (Word64,Ply,Word16,Word32))
-newtype instance Unboxed.Vector    BookEntry = V_BookEntry  (Unboxed.Vector    (Word64,Ply,Word16,Word32))
-instance Unboxed.Unbox BookEntry
-
-instance M.MVector Unboxed.MVector BookEntry where
-  {-# INLINE basicLength #-}
-  {-# INLINE basicUnsafeSlice #-}
-  {-# INLINE basicOverlaps #-}
-  {-# INLINE basicUnsafeNew #-}
-  {-# INLINE basicInitialize #-}
-  {-# INLINE basicUnsafeReplicate #-}
-  {-# INLINE basicUnsafeRead #-}
-  {-# INLINE basicUnsafeWrite #-}
-  {-# INLINE basicClear #-}
-  {-# INLINE basicSet #-}
-  {-# INLINE basicUnsafeCopy #-}
-  {-# INLINE basicUnsafeGrow #-}
-  basicLength (MV_BookEntry v) = M.basicLength v
-  basicUnsafeSlice i n (MV_BookEntry v) = MV_BookEntry $ M.basicUnsafeSlice i n v
-  basicOverlaps (MV_BookEntry v1) (MV_BookEntry v2) = M.basicOverlaps v1 v2
-  basicUnsafeNew n = MV_BookEntry <$> M.basicUnsafeNew n
-  basicInitialize (MV_BookEntry v) = M.basicInitialize v
-  basicUnsafeReplicate n (BookEntry a b c d) = MV_BookEntry <$> M.basicUnsafeReplicate n (a,b,c,d)
-  basicUnsafeRead (MV_BookEntry v) i = (\(a, b, c, d) -> BookEntry a b c d) <$> M.basicUnsafeRead v i
-  basicUnsafeWrite (MV_BookEntry v) i (BookEntry a b c d) = M.basicUnsafeWrite v i (a,b,c,d)
-  basicClear (MV_BookEntry v) = M.basicClear v
-  basicSet (MV_BookEntry v) (BookEntry a b c d) = M.basicSet v (a,b,c,d)
-  basicUnsafeCopy (MV_BookEntry v1) (MV_BookEntry v2) = M.basicUnsafeCopy v1 v2
-  basicUnsafeMove (MV_BookEntry v1) (MV_BookEntry v2) = M.basicUnsafeMove v1 v2
-  basicUnsafeGrow (MV_BookEntry v) n = MV_BookEntry <$> M.basicUnsafeGrow v n
-
-instance G.Vector Unboxed.Vector BookEntry where
-  {-# INLINE basicUnsafeFreeze #-}
-  {-# INLINE basicUnsafeThaw #-}
-  {-# INLINE basicLength #-}
-  {-# INLINE basicUnsafeSlice #-}
-  {-# INLINE basicUnsafeIndexM #-}
-  {-# INLINE elemseq #-}
-  basicUnsafeFreeze (MV_BookEntry v) = V_BookEntry <$> G.basicUnsafeFreeze v
-  basicUnsafeThaw (V_BookEntry v) = MV_BookEntry <$> G.basicUnsafeThaw v
-  basicLength (V_BookEntry v) = G.basicLength v
-  basicUnsafeSlice i n (V_BookEntry v) = V_BookEntry $ G.basicUnsafeSlice i n v
-  basicUnsafeIndexM (V_BookEntry v) i =
-    (\(a, b, c, d) -> BookEntry a b c d) <$> G.basicUnsafeIndexM v i
-  basicUnsafeCopy (MV_BookEntry mv) (V_BookEntry v) = G.basicUnsafeCopy mv v
-  elemseq _ (BookEntry a b c d) z = G.elemseq (undefined :: Vector a) a
-                                  $ G.elemseq (undefined :: Vector a) b
-                                  $ G.elemseq (undefined :: Vector a) c
-                                  $ G.elemseq (undefined :: Vector a) d z
-
-newtype PolyglotBook = Book { unBook :: Vector BookEntry }
-
-instance Binary PolyglotBook where
-  get = Book . Vector.fromList <$> many get
-  put = traverse_ put . unBook
+plusForeignPtr :: ForeignPtr a -> Int -> ForeignPtr b
+plusForeignPtr (ForeignPtr addr c) (I# d) = ForeignPtr (plusAddr# addr d) c
 
 readPolyglotFile :: FilePath -> IO PolyglotBook
-readPolyglotFile = decodeFile 
+readPolyglotFile = fmap fromByteString . BS.readFile
 
 bookForest :: PolyglotBook -> Position -> Forest Ply
 bookForest b p = tree <$> bookPlies b p where
@@ -112,11 +95,11 @@ paths = foldTree f where
 bookPlies :: PolyglotBook -> Position -> [Ply]
 bookPlies (Book v) pos
   | halfMoveClock pos > 150 = []
-  | otherwise = fmap ply . Vector.toList . Vector.takeWhile ((hash ==) . key) $
-    Vector.unsafeDrop (lowerBound hash) v
+  | otherwise = fmap ply . VS.toList . VS.takeWhile ((hash ==) . key) $
+    VS.unsafeDrop (lowerBound hash) v
  where
   hash = hashPosition pos
-  lowerBound = bsearch (key . Vector.unsafeIndex v) (0, Vector.length v - 1)
+  lowerBound = bsearch (key . VS.unsafeIndex v) (0, VS.length v - 1)
   bsearch :: (Integral a, Ord b) => (a -> b) -> (a, a) -> b -> a
   bsearch f (lo, hi) x
     | lo >= hi   = lo

@@ -25,7 +25,7 @@ module Game.Chess (
   -- ** Converting from/to Forsyth-Edwards-Notation
 , fromFEN, toFEN
   -- * Chess moves
-, Ply
+, Ply(..)
   -- ** Converting from/to algebraic notation
 , strictSAN, relaxedSAN, fromSAN, toSAN, unsafeToSAN, fromUCI, toUCI
   -- ** Move generation
@@ -37,7 +37,6 @@ module Game.Chess (
 import Control.Applicative
 import Control.Applicative.Combinators
 import Control.Monad
-import Data.Binary
 import Data.Bits
 import qualified Data.ByteString as Strict (ByteString)
 import qualified Data.ByteString.Lazy as Lazy (ByteString)
@@ -51,9 +50,6 @@ import Data.Proxy
 import Data.String
 import qualified Data.Text as Strict (Text)
 import qualified Data.Text.Lazy as Lazy (Text)
-import qualified Data.Vector.Generic.Base as G
-import qualified Data.Vector.Generic.Mutable as M
-import qualified Data.Vector.Primitive as P
 import Data.Vector.Unboxed (Vector, MVector, (!), Unbox)
 import Data.Void
 import qualified Data.Vector.Unboxed as Vector
@@ -528,53 +524,7 @@ bitScanForward, bitScanReverse :: Word64 -> Int
 bitScanForward = countTrailingZeros
 bitScanReverse = (63 -) . countLeadingZeros
 
-newtype Ply = Ply Word16 deriving (Binary, Eq)
-
-newtype instance MVector s Ply = MV_Ply (MVector s Ply)
-newtype instance Vector    Ply = V_Ply  (Vector    Ply)
-instance Unbox Ply
-
-instance M.MVector MVector Ply where
-  {-# INLINE basicLength #-}
-  {-# INLINE basicUnsafeSlice #-}
-  {-# INLINE basicOverlaps #-}
-  {-# INLINE basicUnsafeNew #-}
-  {-# INLINE basicInitialize #-}
-  {-# INLINE basicUnsafeReplicate #-}
-  {-# INLINE basicUnsafeRead #-}
-  {-# INLINE basicUnsafeWrite #-}
-  {-# INLINE basicClear #-}
-  {-# INLINE basicSet #-}
-  {-# INLINE basicUnsafeCopy #-}
-  {-# INLINE basicUnsafeGrow #-}
-  basicLength (MV_Ply v) = M.basicLength v
-  basicUnsafeSlice i n (MV_Ply v) = MV_Ply $ M.basicUnsafeSlice i n v
-  basicOverlaps (MV_Ply v1) (MV_Ply v2) = M.basicOverlaps v1 v2
-  basicUnsafeNew n = MV_Ply <$> M.basicUnsafeNew n
-  basicInitialize (MV_Ply v) = M.basicInitialize v
-  basicUnsafeReplicate n x = MV_Ply <$> M.basicUnsafeReplicate n x
-  basicUnsafeRead (MV_Ply v) i = M.basicUnsafeRead v i
-  basicUnsafeWrite (MV_Ply v) i x = M.basicUnsafeWrite v i x
-  basicClear (MV_Ply v) = M.basicClear v
-  basicSet (MV_Ply v) x = M.basicSet v x
-  basicUnsafeCopy (MV_Ply v1) (MV_Ply v2) = M.basicUnsafeCopy v1 v2
-  basicUnsafeMove (MV_Ply v1) (MV_Ply v2) = M.basicUnsafeMove v1 v2
-  basicUnsafeGrow (MV_Ply v) n = MV_Ply <$> M.basicUnsafeGrow v n
-
-instance G.Vector Vector Ply where
-  {-# INLINE basicUnsafeFreeze #-}
-  {-# INLINE basicUnsafeThaw #-}
-  {-# INLINE basicLength #-}
-  {-# INLINE basicUnsafeSlice #-}
-  {-# INLINE basicUnsafeIndexM #-}
-  {-# INLINE elemseq #-}
-  basicUnsafeFreeze (MV_Ply v) = V_Ply <$> G.basicUnsafeFreeze v
-  basicUnsafeThaw (V_Ply v) = MV_Ply <$> G.basicUnsafeThaw v
-  basicLength (V_Ply v) = G.basicLength v
-  basicUnsafeSlice i n (V_Ply v) = V_Ply $ G.basicUnsafeSlice i n v
-  basicUnsafeIndexM (V_Ply v) i = G.basicUnsafeIndexM v i
-  basicUnsafeCopy (MV_Ply mv) (V_Ply v) = G.basicUnsafeCopy mv v
-  elemseq _ = seq
+newtype Ply = Ply Word16 deriving (Eq)
 
 instance Show Ply where
   show = toUCI
