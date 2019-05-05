@@ -90,10 +90,9 @@ paths = foldTree f where
   f a xs = (a :) <$> concat xs
 
 bookPly :: RandomGen g => PolyglotBook -> Position -> Maybe (Rand g Ply)
-bookPly b pos =
-  case findPosition b pos of
-    [] -> Nothing
-    l -> Just . Rand.fromList $ map (ply &&& fromIntegral . weight) l
+bookPly b pos = case findPosition b pos of
+  [] -> Nothing
+  l -> Just . Rand.fromList $ map (ply &&& fromIntegral . weight) l
 
 bookPlies :: PolyglotBook -> Position -> [Ply]
 bookPlies b pos
@@ -101,9 +100,10 @@ bookPlies b pos
   | otherwise = ply <$> findPosition b pos
 
 findPosition :: PolyglotBook -> Position -> [BookEntry]
-findPosition (Book v) pos =
-  VS.toList . VS.takeWhile ((hash ==) . key) $ VS.unsafeDrop (lowerBound hash) v
+findPosition (Book v) pos = fmap conv . VS.toList .
+  VS.takeWhile ((hash ==) . key) . VS.unsafeDrop (lowerBound hash) $ v
  where
+  conv be@BookEntry{ply} = be { ply = fromPolyglot pos ply }
   hash = hashPosition pos
   lowerBound = bsearch (key . VS.unsafeIndex v) (0, VS.length v - 1)
   bsearch :: (Integral a, Ord b) => (a -> b) -> (a, a) -> b -> a

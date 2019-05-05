@@ -27,7 +27,7 @@ module Game.Chess (
   -- * Chess moves
 , Ply(..)
   -- ** Converting from/to algebraic notation
-, strictSAN, relaxedSAN, fromSAN, toSAN, unsafeToSAN, fromUCI, toUCI
+, strictSAN, relaxedSAN, fromSAN, toSAN, unsafeToSAN, fromUCI, toUCI, fromPolyglot
   -- ** Move generation
 , legalPlies
   -- ** Executing moves
@@ -551,6 +551,18 @@ unpack (Ply x) = ( fromIntegral ((x `unsafeShiftR` 6) .&. 0b111111)
     3 -> Just Rook
     4 -> Just Queen
     _ -> Nothing
+
+fromPolyglot :: Position -> Ply -> Ply
+fromPolyglot pos pl@(unpack -> (from, to, _)) = case color pos of
+  White | from == toIndex E1 && canCastleKingside pos && to == toIndex H1
+          -> from `move` G1
+        | from == toIndex E1 && canCastleQueenside pos && to == toIndex A1
+          -> from `move` C1
+  Black | from == toIndex E8 && canCastleKingside pos && to == toIndex H8
+          -> from `move` G8
+        | from == toIndex E8 && canCastleQueenside pos && to == toIndex A8
+          -> from `move` C8
+  _ -> pl
 
 -- | Parse a move in the format used by the Universal Chess Interface protocol.
 fromUCI :: Position -> String -> Maybe Ply
