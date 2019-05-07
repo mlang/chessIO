@@ -1,5 +1,7 @@
 {-# LANGUAGE GADTs #-}
-module Game.Chess.PGN where
+module Game.Chess.PGN (
+  readPGNFile, gameFromForest, PGN(..), Game, Outcome(..)
+, hPutPGN, pgnDoc, RAVOrder, breadthFirst, depthFirst, gameDoc) where
 
 import Control.Monad
 import Data.Bifunctor
@@ -22,6 +24,15 @@ import System.IO
 import Text.Megaparsec
 import Text.Megaparsec.Byte
 import qualified Text.Megaparsec.Byte.Lexer as L
+
+gameFromForest :: [(ByteString, Text)] -> Forest Ply -> Outcome -> Game
+gameFromForest tags forest o = (("Result", r):tags, (o, (fmap . fmap) f forest)) where
+  f pl = PlyData [] pl []
+  r = case o of
+    Win White -> "1-0"
+    Win Black -> "0-1"
+    Draw      -> "1/2-1/2"
+    Undecided -> "*"
 
 newtype PGN = PGN [Game] deriving (Eq, Monoid, Semigroup)
 type Game = ([(ByteString, Text)], (Outcome, Forest PlyData))

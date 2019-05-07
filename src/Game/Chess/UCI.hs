@@ -6,8 +6,9 @@ module Game.Chess.UCI (
   -- * Starting a UCI engine
 , start, start'
   -- * Engine options
-, Option(..), options, getOption, setOptionSpinButton
+, Option(..), options, getOption, setOptionSpinButton, setOptionString
   -- * Manipulating the current game information
+, isready
 , currentPosition, setPosition, addPly
   -- * The Info data type
 , Info(..), Score(..), Bounds(..)
@@ -99,6 +100,7 @@ data Info = PV [Ply]
           | HashFull Int
           | CurrMove Ply
           | CurrMoveNumber Int
+          | String ByteString
           deriving (Eq, Show)
 
 data Score = CentiPawns Int
@@ -111,12 +113,12 @@ data Bounds = UpperBound | LowerBound deriving (Eq, Show)
 data Option = CheckBox Bool
             | ComboBox { comboBoxValue :: ByteString, comboBoxValues :: [ByteString] }
             | SpinButton { spinButtonValue, spinButtonMinBound, spinButtonMaxBound :: Int }
-            | String ByteString
+            | OString ByteString
             | Button
             deriving (Eq, Show)
 
 instance IsString Option where
-  fromString = String . BS.pack
+  fromString = OString . BS.pack
 
 command :: Position -> Parser Command
 command pos = skipSpace *> choice
@@ -156,7 +158,7 @@ command pos = skipSpace *> choice
                            <*> takeByteString
     pure $ ComboBox def (map BS.pack vars <> [lastVar])
   var = skipSpace *> "var" *> skipSpace
-  str = fmap String $
+  str = fmap OString $
     "string" *> skipSpace *> "default" *> skipSpace *> takeByteString
   button = "button" $> Button
   infoItem = Depth <$> kv "depth" decimal
@@ -171,6 +173,7 @@ command pos = skipSpace *> choice
          <|> kv "pv" pv
          <|> kv "currmove" currmove
          <|> CurrMoveNumber <$> kv "currmovenumber" decimal
+         <|> String <$> kv "string" takeByteString
   score = do
     s <- kv "cp" (CentiPawns <$> signed decimal)
      <|> kv "mate" (MateIn <$> signed decimal)
@@ -350,6 +353,13 @@ setOptionSpinButton n v c
     pure $ c { options = HashMap.update (set v) n $ options c }
  where
   set v opt@SpinButton{} = Just $ opt { spinButtonValue = v }
+
+setOptionString :: MonadIO m => ByteString -> ByteString -> Engine -> m Engine
+setOptionString n v e = liftIO $ do
+  send e $ "setoption name " <> byteString n <> " value " <> byteString v
+  pure $ e { options = HashMap.update (set v) n $ options e }
+ where
+  set v _ = Just $ OString v
 
 -- | Return the final position of the currently active game.
 currentPosition :: MonadIO m => Engine -> m Position

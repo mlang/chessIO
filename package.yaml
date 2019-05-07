@@ -82,6 +82,13 @@ executables:
     source-dirs:  app
     dependencies:
     - chessIO
+  polyplay:
+    main:                polyplay.hs
+    source-dirs:  app
+    dependencies:
+    - chessIO
+    - optparse-applicative
+    - time
 
 tests:
   perft:
