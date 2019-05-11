@@ -18,6 +18,7 @@ description: A simple library for generating legal chess moves.
 dependencies:
 - attoparsec
 - base >= 4.10 && < 5
+- binary
 - bytestring
 - containers
 - file-embed
@@ -46,6 +47,7 @@ default-extensions:
 - NumericUnderscores
 - RecordWildCards
 - OverloadedStrings
+- PatternSynonyms
 - TupleSections
 - TypeApplications
 - TypeFamilies

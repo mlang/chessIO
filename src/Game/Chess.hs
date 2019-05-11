@@ -53,6 +53,8 @@ import Data.Vector.Unboxed (Vector, (!))
 import Data.Void
 import qualified Data.Vector.Unboxed as Vector
 import Data.Word
+import Game.Chess.QuadBitboard (QuadBitboard)
+import qualified Game.Chess.QuadBitboard as QBB
 import Text.Megaparsec
 import Text.Read (readMaybe)
 import Data.Tree
@@ -329,20 +331,20 @@ data PieceType = Pawn | Knight | Bishop | Rook | Queen | King deriving (Eq, Ix, 
 data Color = Black | White deriving (Eq, Ix, Ord, Show)
 
 pieceAt :: IsSquare sq => Position -> sq -> Maybe (Color, PieceType)
-pieceAt (board -> BB{wP, wN, wB, wR, wQ, wK, bP, bN, bB, bR, bQ, bK}) (toIndex -> sq)
-  | wP `testBit` sq = Just (White, Pawn)
-  | wN `testBit` sq = Just (White, Knight)
-  | wB `testBit` sq = Just (White, Bishop)
-  | wR `testBit` sq = Just (White, Rook)
-  | wQ `testBit` sq = Just (White, Queen)
-  | wK `testBit` sq = Just (White, King)
-  | bP `testBit` sq = Just (Black, Pawn)
-  | bN `testBit` sq = Just (Black, Knight)
-  | bB `testBit` sq = Just (Black, Bishop)
-  | bR `testBit` sq = Just (Black, Rook)
-  | bQ `testBit` sq = Just (Black, Queen)
-  | bK `testBit` sq = Just (Black, King)
-  | otherwise       = Nothing
+pieceAt (board -> qbb) (toIndex -> sq) = case qbb QBB.! sq of
+  QBB.WhitePawn -> Just (White, Pawn)
+  QBB.WhiteKnight -> Just (White, Knight)
+  QBB.WhiteBishop -> Just (White, Bishop)
+  QBB.WhiteRook -> Just (White, Rook)
+  QBB.WhiteQueen -> Just (White, Queen)
+  QBB.WhiteKing -> Just (White, King)
+  QBB.BlackPawn -> Just (Black, Pawn)
+  QBB.BlackKnight -> Just (Black, Knight)
+  QBB.BlackBishop -> Just (Black, Bishop)
+  QBB.BlackRook -> Just (Black, Rook)
+  QBB.BlackQueen -> Just (Black, Queen)
+  QBB.BlackKing -> Just (Black, King)
+  QBB.NoPiece -> Nothing
 
 opponent :: Color -> Color
 opponent White = Black
@@ -381,12 +383,8 @@ isDark (toIndex -> sq) = (0xaa55aa55aa55aa55 :: Word64) `testBit` sq
 isLight :: IsSquare sq => sq -> Bool
 isLight = not . isDark
 
-data BB = BB { wP, wN, wB, wR, wQ, wK :: !Word64
-             , bP, bN, bB, bR, bQ, bK :: !Word64
-             } deriving (Eq, Show)
-
 data Position = Position {
-  board :: !BB
+  board :: {-# UNPACK #-} !QuadBitboard
 , color :: !Color
   -- ^ active color
 , flags :: !Word64
@@ -398,47 +396,19 @@ data Position = Position {
 instance Eq Position where
   a == b = board a == board b && color a == color b && flags a == flags b
 
-emptyBB :: BB
-emptyBB = BB 0 0 0 0 0 0 0 0 0 0 0 0
-
 -- | Construct a position from Forsyth-Edwards-Notation.
 fromFEN :: String -> Maybe Position
 fromFEN fen
   | length parts /= 6
   = Nothing
   | otherwise =
-    Position <$> readBoard (parts !! 0)
+    Position <$> Just (fromString (parts !! 0))
              <*> readColor (parts !! 1)
              <*> readFlags (parts !! 2) (parts !! 3)
              <*> readMaybe (parts !! 4)
              <*> readMaybe (parts !! 5)
  where
   parts = words fen
-  readBoard = go (toRF A8) emptyBB where
-    go rf@(r,f) bb ('r':s) = go (r, f + 1) (bb { bR = bR bb .|. rfBit rf }) s
-    go rf@(r,f) bb ('n':s) = go (r, f + 1) (bb { bN = bN bb .|. rfBit rf }) s
-    go rf@(r,f) bb ('b':s) = go (r, f + 1) (bb { bB = bB bb .|. rfBit rf }) s
-    go rf@(r,f) bb ('q':s) = go (r, f + 1) (bb { bQ = bQ bb .|. rfBit rf }) s
-    go rf@(r,f) bb ('k':s) = go (r, f + 1) (bb { bK = bK bb .|. rfBit rf }) s
-    go rf@(r,f) bb ('p':s) = go (r, f + 1) (bb { bP = bP bb .|. rfBit rf }) s
-    go rf@(r,f) bb ('R':s) = go (r, f + 1) (bb { wR = wR bb .|. rfBit rf }) s
-    go rf@(r,f) bb ('N':s) = go (r, f + 1) (bb { wN = wN bb .|. rfBit rf }) s
-    go rf@(r,f) bb ('B':s) = go (r, f + 1) (bb { wB = wB bb .|. rfBit rf }) s
-    go rf@(r,f) bb ('Q':s) = go (r, f + 1) (bb { wQ = wQ bb .|. rfBit rf }) s
-    go rf@(r,f) bb ('K':s) = go (r, f + 1) (bb { wK = wK bb .|. rfBit rf }) s
-    go rf@(r,f) bb ('P':s) = go (r, f + 1) (bb { wP = wP bb .|. rfBit rf }) s
-    go (r,f) bb ('1':s) = go (r, f + 1) bb s
-    go (r,f) bb ('2':s) = go (r, f + 2) bb s
-    go (r,f) bb ('3':s) = go (r, f + 3) bb s
-    go (r,f) bb ('4':s) = go (r, f + 4) bb s
-    go (r,f) bb ('5':s) = go (r, f + 5) bb s
-    go (r,f) bb ('6':s) = go (r, f + 6) bb s
-    go (r,f) bb ('7':s) = go (r, f + 7) bb s
-    go (r,f) bb ('8':s) = go (r, f + 8) bb s
-    go (r,_) bb ('/':s) = go (r - 1, 0) bb s
-    go _ bb [] = Just bb
-    go _ _ _ = Nothing
-
   readColor "w" = Just White
   readColor "b" = Just Black
   readColor _ = Nothing
@@ -465,7 +435,7 @@ rfBit (r,f) | inRange (0,7) r && inRange (0,7) f = bit $ r*8 + f
 -- | Convert a position to Forsyth-Edwards-Notation.
 toFEN :: Position -> String
 toFEN (Position bb c flgs hm mn) = unwords [
-    intercalate "/" (rank <$> [7,6..0])
+    QBB.toString bb
   , showColor c, showCst (flgs `clearMask` epMask), showEP (flgs .&. epMask), show hm, show mn
   ]
  where
@@ -484,34 +454,15 @@ toFEN (Position bb c flgs hm mn) = unwords [
   showEP 0 = "-"
   showEP x = chr (f + ord 'a') : [chr (r + ord '1')] where
     (r, f) = toRF $ bitScanForward x
-  rank r = concatMap countEmpty $ groupBy (\x y -> x == y && x == ' ') $
-           charAt r <$> [0..7]
-  countEmpty xs | head xs == ' ' = show $ length xs
-                | otherwise = xs
-  charAt r f
-    | wP bb `testBit` b = 'P'
-    | wN bb `testBit` b = 'N'
-    | wB bb `testBit` b = 'B'
-    | wR bb `testBit` b = 'R'
-    | wQ bb `testBit` b = 'Q'
-    | wK bb `testBit` b = 'K'
-    | bP bb `testBit` b = 'p'
-    | bN bb `testBit` b = 'n'
-    | bB bb `testBit` b = 'b'
-    | bR bb `testBit` b = 'r'
-    | bQ bb `testBit` b = 'q'
-    | bK bb `testBit` b = 'k'
-    | otherwise         = ' '
-   where b = r*8 + f
 
-occupiedBy :: Color -> BB -> Word64
-occupiedBy White bb = wP bb .|. wN bb .|. wB bb .|. wR bb .|. wQ bb .|. wK bb
-occupiedBy Black bb = bP bb .|. bN bb .|. bB bb .|. bR bb .|. bQ bb .|. bK bb
+occupiedBy :: Color -> QuadBitboard -> Word64
+occupiedBy White = QBB.white
+occupiedBy Black = QBB.black
 
-occupied :: BB -> Word64
-occupied bb = occupiedBy White bb .|. occupiedBy Black bb
+occupied :: QuadBitboard -> Word64
+occupied = QBB.occupied
 
-notOccupied :: BB -> Word64
+notOccupied :: QuadBitboard -> Word64
 notOccupied = complement . occupied
 
 foldBits :: (a -> Int -> a) -> a -> Word64 -> a
@@ -642,115 +593,67 @@ unsafeDoPly pos@Position{color = Black, moveNumber, halfMoveClock} m =
 unsafeDoPly' :: Position -> Ply -> Position
 unsafeDoPly' pos@Position{board, flags} m@(unpack -> (from, to, promo))
   | m == wKscm && flags `testMask` crwKs
-  = pos { board = board { wK = wK board `xor` mask
-                        , wR = wR board `xor` (bit (toIndex H1) `setBit` toIndex F1)
-                        }
+  = pos { board = board <> QBB.whiteKingsideCastle
         , flags = flags `clearMask` (rank1 .|. epMask)
         }
   | m == wQscm && flags `testMask` crwQs
-  = pos { board = board { wK = wK board `xor` mask
-                        , wR = wR board `xor` (bit (toIndex A1) `setBit` toIndex D1)
-                        }
+  = pos { board = board <> QBB.whiteQueensideCastle
         , flags = flags `clearMask` (rank1 .|. epMask)
         }
   | m == bKscm && flags `testMask` crbKs
-  = pos { board = board { bK = bK board `xor` mask
-                        , bR = bR board `xor` (bit (toIndex H8) `setBit` toIndex F8)
-                        }
+  = pos { board = board <> QBB.blackKingsideCastle
         , flags = flags `clearMask` (rank8 .|. epMask)
         }
   | m == bQscm && flags `testMask` crbQs
-  = pos { board = board { bK = bK board `xor` mask
-                        , bR = bR board `xor` (bit (toIndex A8) `setBit` toIndex D8)
-                        }
+  = pos { board = board <> QBB.blackQueensideCastle
         , flags = flags `clearMask` (rank8 .|. epMask)
         }
   | Just piece <- promo
   = case color pos of
       White -> case piece of
-        Queen -> pos { board = clearB { wP = wP board `clearBit` from
-                                      , wQ = wQ board `setBit` to
-                                      }
+        Queen -> pos { board = QBB.whitePromotion board from to QBB.WhiteQueen
                      , flags = flags `clearMask` (epMask .|. bit to)
                      }
-        Rook  -> pos { board = clearB { wP = wP board `clearBit` from
-                                      , wR = wR board `setBit` to
-                                      }
+        Rook  -> pos { board = QBB.whitePromotion board from to QBB.WhiteRook
                      , flags = flags `clearMask` (epMask .|. bit to)
                      }
-        Bishop -> pos { board = clearB { wP = wP board `clearBit` from
-                                       , wB = wB board `setBit` to
-                                       }
+        Bishop -> pos { board = QBB.whitePromotion board from to QBB.WhiteBishop
                       , flags = flags `clearMask` (epMask .|. bit to)
                       }
-        Knight -> pos { board = clearB { wP = wP board `clearBit` from
-                                       , wN = wN board `setBit` to
-                                       }
+        Knight -> pos { board = QBB.whitePromotion board from to QBB.WhiteKnight
                       , flags = flags `clearMask` (epMask .|. bit to)
                       }
         _ -> error "Impossible: White tried to promote to Pawn"
       Black -> case piece of
-        Queen -> pos { board = clearW { bP = bP board `clearBit` from
-                                      , bQ = bQ board `setBit` to
-                                      }
+        Queen -> pos { board = QBB.blackPromotion board from to QBB.BlackQueen
                      , flags = flags `clearMask` (epMask .|. bit to)
                      }  
-        Rook   -> pos { board = clearW { bP = bP board `clearBit` from
-                                       , bR = bR board `setBit` to
-                                       }
+        Rook   -> pos { board = QBB.blackPromotion board from to QBB.BlackRook
                       , flags = flags `clearMask` (epMask .|. bit to)
                       }
-        Bishop -> pos { board = clearW { bP = bP board `clearBit` from
-                                       , bB = bB board `setBit` to
-                                       }
+        Bishop -> pos { board = QBB.blackPromotion board from to QBB.BlackBishop
                       , flags = flags `clearMask` (epMask .|. bit to)
                       }
-        Knight -> pos { board = clearW { bP = bP board `clearBit` from
-                                       , bN = bN board `setBit` to
-                                       }
+        Knight -> pos { board = QBB.blackPromotion board from to QBB.BlackKnight
                       , flags = flags `clearMask` (epMask .|. bit to)
                       }
         _ -> error "Impossible: Black tried to promote to Pawn"
+  | QBB.pawns board `testMask` fromMask &&
+    toMask .&. (rank3 .|. rank6) .&. flags /= 0
+  = pos { board = board <> QBB.enPassant from to
+        , flags = flags `clearMask` toMask
+        }
   | otherwise
-  = pos { board = newBoard
+  = pos { board = QBB.move board from to
         , flags = (flags `clearMask` (epMask .|. mask)) .|. dpp
         }
  where
-  !epBit = case color pos of
-    White | wP board `testMask` fromMask -> shiftS $ flags .&. rank6 .&. toMask
-    Black | bP board `testMask` fromMask -> shiftN $ flags .&. rank3 .&. toMask
-    _ -> 0
-  clearW = board { wP = wP board `clearMask` (toMask .|. epBit)
-                 , wN = wN board `clearMask` toMask
-                 , wB = wB board `clearMask` toMask
-                 , wR = wR board `clearMask` toMask
-                 , wQ = wQ board `clearMask` toMask
-                 }
-  clearB = board { bP = bP board `clearMask` (toMask .|. epBit)
-                 , bN = bN board `clearMask` toMask
-                 , bB = bB board `clearMask` toMask
-                 , bR = bR board `clearMask` toMask
-                 , bQ = bQ board `clearMask` toMask
-                 }
   !fromMask = 1 `unsafeShiftL` from
   !toMask = 1 `unsafeShiftL` to
   !mask = fromMask .|. toMask
-  newBoard = case color pos of
-    White | wP board `testMask` fromMask -> clearB { wP = wP board `xor` mask }
-          | wN board `testMask` fromMask -> clearB { wN = wN board `xor` mask }
-          | wB board `testMask` fromMask -> clearB { wB = wB board `xor` mask }
-          | wR board `testMask` fromMask -> clearB { wR = wR board `xor` mask }
-          | wQ board `testMask` fromMask -> clearB { wQ = wQ board `xor` mask }
-          | otherwise -> clearB { wK = wK board `xor` mask }
-    Black | bP board `testMask` fromMask -> clearW { bP = bP board `xor` mask }
-          | bN board `testMask` fromMask -> clearW { bN = bN board `xor` mask }
-          | bB board `testMask` fromMask -> clearW { bB = bB board `xor` mask }
-          | bR board `testMask` fromMask -> clearW { bR = bR board `xor` mask }
-          | bQ board `testMask` fromMask -> clearW { bQ = bQ board `xor` mask }
-          | otherwise -> clearW { bK = bK board `xor` mask }
   dpp = case color pos of
-    White | fromMask .&. rank2 .&. wP board /= 0 && from + 16 == to -> shiftN fromMask
-    Black | fromMask .&. rank7 .&. bP board /= 0 && from - 16 == to -> shiftS fromMask
+    White | fromMask .&. rank2 .&. QBB.wPawns board /= 0 && from + 16 == to -> shiftN fromMask
+    Black | fromMask .&. rank7 .&. QBB.bPawns board /= 0 && from - 16 == to -> shiftS fromMask
     _                                                            -> 0
 
 -- | Generate a list of possible moves for the given position.
@@ -771,13 +674,13 @@ legalPlies pos@Position{color, board, flags} = filter legalPly $
   !occ = ours .|. them
   (!pawnMoves, !knightMoves, !kingMoves) = case color of
     White ->
-      ( wPawnMoves (wP board) (complement occ) (them .|. (flags .&. epMask))
-      , flip (foldBits genNMoves) (wN board)
-      , flip (foldBits genKMoves) (wK board) . wShort . wLong)
+      ( wPawnMoves (QBB.wPawns board) (complement occ) (them .|. (flags .&. epMask))
+      , flip (foldBits genNMoves) (QBB.wKnights board)
+      , flip (foldBits genKMoves) (QBB.wKings board) . wShort . wLong)
     Black ->
-      ( bPawnMoves (bP board) (complement occ) (them .|. (flags .&. epMask))
-      , flip (foldBits genNMoves) (bN board)
-      , flip (foldBits genKMoves) (bK board) . bShort . bLong)
+      ( bPawnMoves (QBB.bPawns board) (complement occ) (them .|. (flags .&. epMask))
+      , flip (foldBits genNMoves) (QBB.bKnights board)
+      , flip (foldBits genKMoves) (QBB.bKings board) . bShort . bLong)
   genNMoves ms sq = foldBits (mkM sq) ms ((knightAttacks ! sq) .&. notOurs)
   genKMoves ms sq = foldBits (mkM sq) ms ((kingAttacks ! sq) .&. notOurs)
   wShort ml | canCastleKingside' pos occ = wKscm : ml
@@ -792,8 +695,8 @@ legalPlies pos@Position{color, board, flags} = filter legalPly $
 
 -- | Returns 'True' if 'Color' is in check in the given position.
 inCheck :: Color -> Position -> Bool
-inCheck White Position{board} = attackedBy Black board (occupied board) (bitScanForward (wK board))
-inCheck Black Position{board} = attackedBy White board (occupied board) (bitScanForward (bK board))
+inCheck White Position{board} = attackedBy Black board (occupied board) (bitScanForward (QBB.wKings board))
+inCheck Black Position{board} = attackedBy White board (occupied board) (bitScanForward (QBB.bKings board))
 
 wPawnMoves :: Word64 -> Word64 -> Word64 -> [Ply] -> [Ply]
 wPawnMoves !pawns !emptySquares !opponentPieces =
@@ -839,12 +742,12 @@ slideMoves piece (Position bb c _ _ _) !ours !notOurs !occ =
     Queen -> queenTargets sq occ .&. notOurs
     _ -> error "Not a sliding piece"
   pieces = case (c, piece) of
-    (White, Bishop) -> wB bb
-    (Black, Bishop) -> bB bb
-    (White, Rook)   -> wR bb
-    (Black, Rook)   -> bR bb
-    (White, Queen)  -> wQ bb
-    (Black, Queen)  -> bQ bb
+    (White, Bishop) -> QBB.wBishops bb
+    (Black, Bishop) -> QBB.bBishops bb
+    (White, Rook)   -> QBB.wRooks bb
+    (Black, Rook)   -> QBB.bRooks bb
+    (White, Queen)  -> QBB.wQueens bb
+    (Black, Queen)  -> QBB.bQueens bb
     _ -> 0
 
 data Castle = Kingside | Queenside deriving (Eq, Ix, Ord, Show)
@@ -884,22 +787,22 @@ wQscm = move E1 C1
 bKscm = move E8 G8
 bQscm = move E8 C8
 
-attackedBy :: IsSquare sq => Color -> BB -> Word64 -> sq -> Bool
-attackedBy White BB{wP, wN, wB, wR, wQ, wK} !occ (toIndex -> sq)
-  | (wPawnAttacks ! sq) .&. wP /= 0 = True
-  | (knightAttacks ! sq) .&. wN /= 0 = True
-  | bishopTargets sq occ .&. wB /= 0 = True
-  | rookTargets sq occ .&.   wR /= 0 = True
-  | queenTargets sq occ .&.  wQ /= 0 = True
-  | (kingAttacks ! sq) .&. wK /= 0   = True
+attackedBy :: IsSquare sq => Color -> QuadBitboard -> Word64 -> sq -> Bool
+attackedBy White qbb !occ (toIndex -> sq)
+  | (wPawnAttacks ! sq) .&. QBB.wPawns qbb /= 0 = True
+  | (knightAttacks ! sq) .&. QBB.wKnights qbb /= 0 = True
+  | bishopTargets sq occ .&. QBB.wBishops qbb /= 0 = True
+  | rookTargets sq occ .&.   QBB.wRooks qbb /= 0 = True
+  | queenTargets sq occ .&. QBB.wQueens qbb /= 0 = True
+  | (kingAttacks ! sq) .&. QBB.wKings qbb /= 0   = True
   | otherwise                        = False
-attackedBy Black BB{bP, bN, bB, bR, bQ, bK} !occ (toIndex -> sq)
-  | (bPawnAttacks ! sq) .&. bP /= 0 = True
-  | (knightAttacks ! sq) .&. bN /= 0 = True
-  | bishopTargets sq occ .&. bB /= 0 = True
-  | rookTargets sq occ .&.   bR /= 0 = True
-  | queenTargets sq occ .&.  bQ /= 0 = True
-  | (kingAttacks ! sq) .&. bK /= 0   = True
+attackedBy Black qbb !occ (toIndex -> sq)
+  | (bPawnAttacks ! sq) .&. QBB.bPawns qbb /= 0 = True
+  | (knightAttacks ! sq) .&. QBB.bKnights qbb /= 0 = True
+  | bishopTargets sq occ .&. QBB.bBishops qbb /= 0 = True
+  | rookTargets sq occ .&.   QBB.bRooks qbb /= 0 = True
+  | queenTargets sq occ .&.  QBB.bQueens qbb /= 0 = True
+  | (kingAttacks ! sq) .&. QBB.bKings qbb /= 0   = True
   | otherwise                        = False
 
 notAFile, notABFile, notGHFile, notHFile, rank1, rank2, rank3, rank4, rank5, rank6, rank7, rank8 :: Word64
