@@ -14,7 +14,7 @@ module Game.Chess.QuadBitboard (
 , pattern BlackPawn, pattern BlackKnight, pattern BlackBishop
 , pattern BlackRook, pattern BlackQueen, pattern BlackKing
   -- * Construction
-, empty, standard, singleton
+, empty, standard, square
   -- * Access
 , (!), setNibble
   -- * Transformations
@@ -143,9 +143,10 @@ pattern BlackRook   = 9
 pattern BlackQueen  = 11
 pattern BlackKing   = 13
 
--- | law: singleton i x ! i = x where inRange (0,63) i && inRange (0,15) x
-singleton :: Bits nibble => Int -> nibble -> QuadBitboard
-singleton (bit -> b) nb = QBB (f 0) (f 1) (f 2) (f 3) where
+-- | law: square i x ! i = x where inRange (0,63) i && inRange (0,15) x
+{-# INLINE square #-}
+square :: Bits nibble => Int -> nibble -> QuadBitboard
+square (bit -> b) nb = QBB (f 0) (f 1) (f 2) (f 3) where
   f n | nb `testBit` n = b
       | otherwise      = 0
 
@@ -168,7 +169,7 @@ instance IsString QuadBitboard where
     go (!r,_) qbb ('/':xs) = go (r - 1, 0) qbb xs
     go (!r,!f) !qbb (x:xs)
       | inRange ('1','8') x = go (r, f + (ord x - ord '0')) qbb xs
-      | otherwise = go (r, f + 1) (qbb <> singleton (r*8+f) nb) xs where
+      | otherwise = go (r, f + 1) (qbb <> square (r*8+f) nb) xs where
         nb = case x of
           'P' -> WhitePawn
           'N' -> WhiteKnight
@@ -189,6 +190,7 @@ instance Monoid QuadBitboard where
 
 -- | bitwise XOR
 instance Semigroup QuadBitboard where
+  {-# INLINE (<>) #-}
   QBB bb0 bb1 bb2 bb3 <> QBB bb0' bb1' bb2' bb3' =
     QBB (bb0 `xor` bb0') (bb1 `xor` bb1') (bb2 `xor` bb2') (bb3 `xor` bb3')
 
@@ -215,7 +217,7 @@ move qbb fromSq toSq = qbb <> move' fromSq (qbb ! fromSq) toSq (qbb ! toSq)
 
 move' :: Int -> Word4 -> Int -> Word4 -> QuadBitboard
 move' fromSq fromCode toSq toCode =
-  singleton fromSq fromCode <> singleton toSq (fromCode `xor` toCode)
+  square fromSq fromCode <> square toSq (fromCode `xor` toCode)
 
 whiteKingsideCastle, whiteQueensideCastle, blackKingsideCastle, blackQueensideCastle
   :: QuadBitboard
@@ -227,9 +229,9 @@ blackQueensideCastle = move' 60 BlackKing 58 NoPiece <> move' 56 BlackRook 59 No
 enPassant :: Int -> Int -> QuadBitboard
 enPassant fromSq toSq
   | fromSq < toSq
-  = move' fromSq WhitePawn toSq NoPiece <> singleton (toSq-8) BlackPawn
+  = move' fromSq WhitePawn toSq NoPiece <> square (toSq-8) BlackPawn
   | otherwise
-  = move' fromSq BlackPawn toSq NoPiece <> singleton (toSq+8) WhitePawn
+  = move' fromSq BlackPawn toSq NoPiece <> square (toSq+8) WhitePawn
 
 whitePromotion, blackPromotion :: QuadBitboard -> Int -> Int -> Word4 -> QuadBitboard
 whitePromotion qbb fromSq toSq promoCode =
@@ -239,6 +241,6 @@ blackPromotion qbb fromSq toSq promoCode =
 
 whitePromotion', blackPromotion' :: Int -> Int -> Word4 -> Word4 -> QuadBitboard
 whitePromotion' fromSq toSq toCode promoCode =
-  singleton fromSq WhitePawn <> singleton toSq (toCode `xor` promoCode)
+  square fromSq WhitePawn <> square toSq (toCode `xor` promoCode)
 blackPromotion' fromSq toSq toCode promoCode =
-  singleton fromSq BlackPawn <> singleton toSq (toCode `xor` promoCode)
+  square fromSq BlackPawn <> square toSq (toCode `xor` promoCode)
