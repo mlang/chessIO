@@ -15,7 +15,6 @@ import Game.Chess.PGN
 import Game.Chess.Polyglot.Book
 import Game.Chess.UCI
 import Options.Applicative
-import System.Environment
 import Time.Units
 
 data Clock = Clock !Color !NominalDiffTime !NominalDiffTime !UTCTime
@@ -32,14 +31,14 @@ flipClock clock = upd clock <$!> getCurrentTime where
 
 clockRemaining :: Clock -> Color -> IO (Maybe (Time Millisecond))
 clockRemaining (Clock c w b t) c'
-  | c == c' = case c of
-    White -> (\t' -> f $ w - (t' `diffUTCTime` t)) <$!> getCurrentTime
-    Black -> (\t' -> f $ b - (t' `diffUTCTime` t)) <$!> getCurrentTime
+  | c == c' = getCurrentTime >>= \t' -> pure $ case c of
+    White -> f $ w - (t' `diffUTCTime` t)
+    Black -> f $ b - (t' `diffUTCTime` t)
   | otherwise = pure $ case c' of
     White -> f w
     Black -> f b
  where
-  f x | x <= 0 = Nothing
+  f x | x <= 0    = Nothing
       | otherwise = Just . ms . fromRational . toRational $ x * 1000
 
 clockTimes :: Clock -> (Maybe (Time Millisecond), Maybe (Time Millisecond))
@@ -98,8 +97,8 @@ play b e !c = do
         (bmc, ic) <- search e [timeleft White wt, timeleft Black bt]
         sc <- newIORef Nothing
         itid <- liftIO . forkIO . forever $ do
-          info <- atomically . readTChan $ ic
-          case find isScore info of
+          i <- atomically . readTChan $ ic
+          case find isScore i of
             Just (Score s Nothing) -> writeIORef sc (Just s)
             _ -> pure ()
         (bm, _) <- atomically . readTChan $ bmc

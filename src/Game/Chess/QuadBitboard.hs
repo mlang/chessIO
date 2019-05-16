@@ -29,15 +29,15 @@ module Game.Chess.QuadBitboard (
 , whitePromotion, blackPromotion, whitePromotion', blackPromotion'
 ) where
 
-import Control.Applicative hiding (empty)
+import Control.Applicative (liftA2)
 import Data.Binary
 import Data.Bits
-import Data.Char
+import Data.Char (ord, toLower)
 import Data.Ix
-import Data.List
-import Data.String
+import Data.List (groupBy, intercalate)
+import Data.String (IsString(..))
 import GHC.Enum
-import Numeric
+import Numeric (showHex)
 
 data QuadBitboard = QBB { black :: {-# UNPACK #-} !Word64
                         , pbq :: {-# UNPACK #-} !Word64
@@ -47,8 +47,8 @@ data QuadBitboard = QBB { black :: {-# UNPACK #-} !Word64
 
 occupied, pnr, white, pawns, knights, bishops, rooks, queens, kings
   :: QuadBitboard -> Word64
-occupied QBB{pbq, nbk, rqk} = pbq .|. nbk .|. rqk
-pnr QBB{pbq, nbk, rqk}      = pbq `xor` nbk `xor` rqk
+occupied QBB{pbq, nbk, rqk} = pbq  .|.  nbk  .|.  rqk
+pnr      QBB{pbq, nbk, rqk} = pbq `xor` nbk `xor` rqk
 white = liftA2 xor occupied black
 
 pawns   = liftA2 (.&.) pnr pbq
@@ -191,8 +191,8 @@ instance Monoid QuadBitboard where
 -- | bitwise XOR
 instance Semigroup QuadBitboard where
   {-# INLINE (<>) #-}
-  QBB bb0 bb1 bb2 bb3 <> QBB bb0' bb1' bb2' bb3' =
-    QBB (bb0 `xor` bb0') (bb1 `xor` bb1') (bb2 `xor` bb2') (bb3 `xor` bb3')
+  QBB b0 b1 b2 b3 <> QBB b0' b1' b2' b3' =
+    QBB (b0 `xor` b0') (b1 `xor` b1') (b2 `xor` b2') (b3 `xor` b3')
 
 instance Show QuadBitboard where
   show QBB{..} =
@@ -204,11 +204,13 @@ instance Show QuadBitboard where
 toString :: QuadBitboard -> String
 toString qbb = intercalate "/" $ rank <$> [7, 6..0] where
   rank r = concatMap countEmpty . groupBy spaces $ charAt r <$> [0..7]
-  countEmpty xs = if head xs == ' ' then show $ length xs else xs
-  spaces x y = x == y && x == ' '
-  charAt r f = maybe ' ' (if odd nb then toLower else id) $
+  countEmpty xs | head xs == spc = show $ length xs
+                | otherwise      = xs
+  spaces x y = x == y && x == spc
+  charAt r f = maybe spc (if odd nb then toLower else id) $
     lookup (nb `div` 2) $ zip [1..] "PNBRQK"
    where nb = qbb ! (r*8+f)
+  spc = ' '
 
 -- | Move a nibble.  Note that this function, while convenient, isn't very
 -- fast as it needs to lookup the source nibble value.

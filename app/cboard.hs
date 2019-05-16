@@ -8,7 +8,6 @@ import Control.Monad.Extra hiding (loop)
 import Control.Monad.IO.Class
 import Control.Monad.Random
 import Control.Monad.State.Strict
-import qualified Data.ByteString.Char8 as BS
 import Data.Char
 import Data.IORef
 import Data.List
@@ -19,7 +18,6 @@ import Game.Chess.UCI
 import System.Console.Haskeline hiding (catch, handle)
 import System.Exit
 import System.Environment
-import System.Random
 import Time.Units
 
 data S = S {

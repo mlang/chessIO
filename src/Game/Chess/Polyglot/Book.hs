@@ -69,8 +69,10 @@ twic = fromByteString $(embedFile "book/twic-9g.bin")
 pv :: PolyglotBook -> [Ply]
 pv b = head . concatMap paths $ bookForest b startpos
 
-newtype PolyglotBook = Book (VS.Vector BookEntry)
+-- | A Polyglot opening book.
+newtype PolyglotBook = Book (VS.Vector BookEntry) deriving (Eq)
 
+-- | Create a PolyglotBook from a ByteString.
 fromByteString :: ByteString -> PolyglotBook
 fromByteString bs = Book v where
   v = VS.unsafeFromForeignPtr0 (plusForeignPtr fptr off) (len `div` elemSize)
@@ -89,11 +91,13 @@ paths = foldTree f where
   f a [] = [[a]]
   f a xs = (a :) <$> concat xs
 
+-- | Pick a random ply from the book.
 bookPly :: RandomGen g => PolyglotBook -> Position -> Maybe (Rand g Ply)
 bookPly b pos = case findPosition b pos of
   [] -> Nothing
   l -> Just . Rand.fromList $ map (ply &&& fromIntegral . weight) l
 
+-- | Probe the book for all plies known for the given position.
 bookPlies :: PolyglotBook -> Position -> [Ply]
 bookPlies b pos
   | halfMoveClock pos > 150 = []
@@ -111,4 +115,4 @@ findPosition (Book v) pos = fmap conv . VS.toList .
     | lo >= hi   = lo
     | x <= f mid = bsearch f (lo, mid) x
     | otherwise  = bsearch f (mid + 1, hi) x
-   where mid = (lo + hi) `div` 2
+   where mid = lo + ((hi - lo) `div` 2)

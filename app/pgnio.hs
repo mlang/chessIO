@@ -4,7 +4,6 @@ import Game.Chess.PGN
 import System.Environment
 import System.Exit
 import System.IO
-import Text.Megaparsec
 
 main :: IO ()
 main = getArgs >>= \case

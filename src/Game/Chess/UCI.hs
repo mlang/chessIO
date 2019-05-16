@@ -352,14 +352,14 @@ setOptionSpinButton n v c
     send c $ "setoption name " <> byteString n <> " value " <> intDec v
     pure $ c { options = HashMap.update (set v) n $ options c }
  where
-  set v opt@SpinButton{} = Just $ opt { spinButtonValue = v }
+  set val opt@SpinButton{} = Just $ opt { spinButtonValue = val }
 
 setOptionString :: MonadIO m => ByteString -> ByteString -> Engine -> m Engine
 setOptionString n v e = liftIO $ do
   send e $ "setoption name " <> byteString n <> " value " <> byteString v
   pure $ e { options = HashMap.update (set v) n $ options e }
  where
-  set v _ = Just $ OString v
+  set val _ = Just $ OString val
 
 -- | Return the final position of the currently active game.
 currentPosition :: MonadIO m => Engine -> m Position
