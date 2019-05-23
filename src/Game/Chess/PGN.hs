@@ -1,7 +1,8 @@
 {-# LANGUAGE GADTs #-}
 module Game.Chess.PGN (
   readPGNFile, gameFromForest, PGN(..), Game, Outcome(..)
-, hPutPGN, pgnDoc, RAVOrder, breadthFirst, depthFirst, gameDoc) where
+, hPutPGN, pgnDoc, RAVOrder, breadthFirst, depthFirst, gameDoc
+, weightedForest) where
 
 import Control.Monad
 import Data.Bifunctor
@@ -10,7 +11,10 @@ import qualified Data.ByteString.Char8 as BS
 import Data.Char
 import Data.Foldable
 import Data.Functor
+import Data.List
 import Data.Maybe
+import Data.Ord
+import Data.Ratio
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -202,3 +206,23 @@ moveDoc ro pos (o,ts) = (fillSep $ go pos True ts <> [pretty o]) <> line where
     rav = ro (parens . fillSep . go pos True) ts
     snag = nag <$> suffixNAG (rootLabel t)
   nag n = "$" <> pretty n
+
+weightedForest :: PGN -> Forest (Rational, Ply)
+weightedForest (PGN games) = merge . concatMap rate . map snd $ filter ok games where
+  ok (ts, (o, _)) = Nothing == lookup "FEN" ts && o /= Undecided
+  rate (o, ts) = f startpos <$> trunk ts where
+    w c | o == Win c = 1
+        | o == Win (opponent c) = -1
+        | o == Draw = 1 % 2
+    f pos (Node a ts') = Node (w (color pos), ply a) $
+      f (unsafeDoPly pos (ply a)) <$> ts'
+  trunk [] = []
+  trunk (x:_) = [x { subForest = trunk (subForest x)}]
+  merge [] = []
+  merge ((Node a ts):xs) =
+      sortOn (Down . fst . rootLabel)
+    $ Node (w, snd a) (merge $ ts ++ concatMap subForest good) : merge bad
+   where
+    (good, bad) = partition (eq a . rootLabel) xs where eq a b = snd a == snd b
+    w = fst a + sum (map (fst . rootLabel) good)
+
