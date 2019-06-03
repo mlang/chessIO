@@ -208,8 +208,9 @@ moveDoc ro pos (o,ts) = (fillSep $ go pos True ts <> [pretty o]) <> line where
   nag n = "$" <> pretty n
 
 weightedForest :: PGN -> Forest (Rational, Ply)
-weightedForest (PGN games) = merge . concatMap rate . map snd $ filter ok games where
-  ok (ts, (o, _)) = Nothing == lookup "FEN" ts && o /= Undecided
+weightedForest (PGN games) = merge . concatMap rate $ snd <$> filter ok games
+ where
+  ok (tags, (o, _)) = isNothing (lookup "FEN" tags) && o /= Undecided
   rate (o, ts) = f startpos <$> trunk ts where
     w c | o == Win c = 1
         | o == Win (opponent c) = -1
@@ -219,10 +220,9 @@ weightedForest (PGN games) = merge . concatMap rate . map snd $ filter ok games 
   trunk [] = []
   trunk (x:_) = [x { subForest = trunk (subForest x)}]
   merge [] = []
-  merge ((Node a ts):xs) =
+  merge ((Node a ts) : xs) =
       sortOn (Down . fst . rootLabel)
     $ Node (w, snd a) (merge $ ts ++ concatMap subForest good) : merge bad
    where
-    (good, bad) = partition (eq a . rootLabel) xs where eq a b = snd a == snd b
-    w = fst a + sum (map (fst . rootLabel) good)
-
+    (good, bad) = partition (eq a . rootLabel) xs where eq x y = snd x == snd y
+    w = fst a + sum (fst . rootLabel <$> good)

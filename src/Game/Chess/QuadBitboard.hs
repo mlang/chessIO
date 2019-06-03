@@ -45,12 +45,12 @@ data QuadBitboard = QBB { black :: {-# UNPACK #-} !Word64
                         , rqk :: {-# UNPACK #-} !Word64
                         } deriving (Eq)
 
-occupied, pnr, white, pawns, knights, bishops, rooks, queens, kings
-  :: QuadBitboard -> Word64
+occupied, pnr, white :: QuadBitboard -> Word64
 occupied QBB{pbq, nbk, rqk} = pbq  .|.  nbk  .|.  rqk
 pnr      QBB{pbq, nbk, rqk} = pbq `xor` nbk `xor` rqk
-white = liftA2 xor occupied black
+white                       = liftA2 xor occupied black
 
+pawns, knights, bishops, rooks, queens, kings :: QuadBitboard -> Word64
 pawns   = liftA2 (.&.) pnr pbq
 knights = liftA2 (.&.) pnr nbk
 bishops = liftA2 (.&.) pbq nbk
@@ -81,6 +81,7 @@ bKings   = liftA2 (.&.) kings black
 {-# INLINE knights #-}
 {-# INLINE bishops #-}
 {-# INLINE rooks #-}
+{-# INLINE queens #-}
 {-# INLINE kings #-}
 {-# INLINE wPawns #-}
 {-# INLINE wKnights #-}
@@ -123,7 +124,7 @@ instance FiniteBits Word4 where
   countTrailingZeros (W4 x) = countTrailingZeros x
 
 pattern NoPiece :: Word4
-pattern NoPiece = 0
+pattern NoPiece     = 0
 
 pattern WhitePawn, WhiteKnight, WhiteBishop, WhiteRook, WhiteQueen, WhiteKing
   :: Word4
@@ -157,7 +158,7 @@ square (bit -> b) nb = QBB (f 0) (f 1) (f 2) (f 3) where
 setNibble :: Bits nibble => QuadBitboard -> Int -> nibble -> QuadBitboard
 setNibble QBB{..} sq nb = QBB (f 0 black) (f 1 pbq) (f 2 nbk) (f 3 rqk) where
   f n | nb `testBit` n = (`setBit` sq)
-      | otherwise = (`clearBit` sq)
+      | otherwise      = (`clearBit` sq)
 
 instance Binary QuadBitboard where
   get = QBB <$> get <*> get <*> get <*> get
