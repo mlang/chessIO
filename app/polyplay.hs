@@ -55,6 +55,12 @@ data Polyplay = Polyplay {
 , engineArgs :: [String]
 }
 
+data Runtime = Runtime {
+  book :: PolyglotBook
+, engine :: Engine
+, clock :: !Clock
+}
+
 opts :: Parser Polyplay
 opts = Polyplay <$> option auto (long "hash" <> metavar "MB" <> value 1024)
                 <*> option auto (long "threads" <> metavar "N" <> value 1)
@@ -65,36 +71,41 @@ opts = Polyplay <$> option auto (long "hash" <> metavar "MB" <> value 1024)
                 <*> many (argument str (metavar "ARG"))
 
 main :: IO ()
-main = run =<< execParser (info (opts <**> helper) mempty)
+main = run polyplay =<< execParser (info (opts <**> helper) mempty)
 
-run :: Polyplay -> IO ()
-run Polyplay{..} = do
-  b <- readPolyglotFile bookFile
+run :: (Runtime -> IO ()) -> Polyplay -> IO ()
+run f Polyplay{..} = do
+  book <- readPolyglotFile bookFile
   start engineProgram engineArgs >>= \case
     Nothing -> putStrLn "Engine failed to start."
-    Just e -> do
-      _ <- setOptionSpinButton "Hash" hashSize e
-      _ <- setOptionSpinButton "Threads" threadCount e
+    Just engine -> do
+      _ <- setOptionSpinButton "Hash" hashSize engine
+      _ <- setOptionSpinButton "Threads" threadCount engine
       case tbPath of
-        Just fp -> void $ setOptionString "SyzygyPath" (fromString fp) e
+        Just fp -> void $ setOptionString "SyzygyPath" (fromString fp) engine
         Nothing -> pure ()
-      isready e
-      (h, o) <- play b e =<< newClock timeControl
-      let g = gameFromForest [ ("White", "Stockfish")
-                             , ("Black", "Stockfish")
-                             ] (toForest h) o
-      putDoc (gameDoc breadthFirst g)
-      pure ()
+      isready engine
+      clock <- newClock timeControl
+      f Runtime { book, engine, clock }
 
-play :: PolyglotBook -> Engine -> Clock -> IO ([Ply], Outcome)
-play b e !c = do
-  pos <- currentPosition e
+polyplay :: Runtime -> IO ()
+polyplay rt = do
+  (h, o) <- play rt
+  let g = gameFromForest [ ("White", "Stockfish")
+                         , ("Black", "Stockfish")
+                         ] (toForest h) o
+  putDoc (gameDoc breadthFirst g)
+  pure ()
+
+play :: Runtime -> IO ([Ply], Outcome)
+play Runtime{..} = do
+  pos <- currentPosition engine
   case legalPlies pos of
-    [] -> lost e
-    _ -> case bookPly b pos of
+    [] -> lost engine
+    _ -> case bookPly book pos of
       Nothing -> do
-        let (Just wt, Just bt) = clockTimes c
-        (bmc, ic) <- search e [timeleft White wt, timeleft Black bt]
+        let (Just wt, Just bt) = clockTimes clock
+        (bmc, ic) <- search engine [timeleft White wt, timeleft Black bt]
         sc <- newIORef Nothing
         itid <- liftIO . forkIO . forever $ do
           i <- atomically . readTChan $ ic
@@ -103,19 +114,20 @@ play b e !c = do
             _ -> pure ()
         (bm, _) <- atomically . readTChan $ bmc
         killThread itid
-        c' <- flipClock c
-        clockRemaining c' (color pos) >>= \case
-          Nothing -> lost e
+        clock' <- flipClock clock
+        clockRemaining clock' (color pos) >>= \case
+          Nothing -> lost engine
           Just _ -> do
-            addPly e bm
+            addPly engine bm
             s <- readIORef sc
             putStrLn $ toSAN pos bm <> " " <> show s
-            play b e c'
+            play Runtime { book, engine, clock = clock'}
       Just r -> do
         pl <- evalRandIO r
         putStrLn $ toSAN pos pl
-        addPly e pl
-        play b e =<< flipClock c
+        addPly engine pl
+        clock' <- flipClock clock
+        play Runtime { book, engine, clock = clock' }
 
 lost :: Engine -> IO ([Ply], Outcome)
 lost e = do
