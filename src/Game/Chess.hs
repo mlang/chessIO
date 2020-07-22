@@ -2,7 +2,7 @@
 {-|
 Module      : Game.Chess
 Description : Basic data types and functions related to the game of chess
-Copyright   : (c) Mario Lang, 2019
+Copyright   : (c) Mario Lang, 2020
 License     : BSD3
 Maintainer  : mlang@blind.guru
 Stability   : experimental
