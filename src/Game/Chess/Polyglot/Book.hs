@@ -25,12 +25,11 @@ import qualified Data.Vector.Storable as VS
 import Data.Tree
 import Data.Word
 import Foreign.ForeignPtr (castForeignPtr, plusForeignPtr)
-import Foreign.Ptr (castPtr)
 import Foreign.Storable
 import Game.Chess
 import Game.Chess.PGN
 import Game.Chess.Polyglot.Hash
-import GHC.Ptr
+import GHC.Ptr (Ptr, castPtr, plusPtr)
 import System.Random (RandomGen)
 
 data BookEntry = BookEntry {

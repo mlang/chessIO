@@ -17,7 +17,6 @@ import Data.Ord
 import Data.Ratio
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
 import Data.Text.Prettyprint.Doc hiding (space)
 import Data.Text.Prettyprint.Doc.Render.Text
 import Data.Tree
@@ -61,8 +60,8 @@ readPGNFile :: FilePath -> IO (Either String PGN)
 readPGNFile fp = first errorBundlePretty . parse pgn fp <$> BS.readFile fp
 
 hPutPGN :: Handle -> RAVOrder (Doc ann) -> PGN -> IO ()
-hPutPGN h ro (PGN games) = for_ games $ \game -> do
-  hPutDoc h $ gameDoc ro game
+hPutPGN h ro (PGN games) = for_ games $ \g -> do
+  hPutDoc h $ gameDoc ro g
   hPutStrLn h ""
 
 type Parser = Parsec Void ByteString
@@ -85,9 +84,7 @@ sym = lexeme . fmap fst . match $ do
   void $ alphaNumChar
   many $ alphaNumChar <|> oneOf [35,43,45,58,61,95]
 
-lbraceChar, rbraceChar, semiChar, periodChar, quoteChar, backslashChar, dollarChar :: Word8
-lbraceChar    = fromIntegral $ ord '{'
-rbraceChar    = fromIntegral $ ord '}'
+semiChar, periodChar, quoteChar, backslashChar, dollarChar :: Word8
 semiChar      = fromIntegral $ ord ';'
 periodChar    = fromIntegral $ ord '.'
 quoteChar     = fromIntegral $ ord '"'
@@ -108,11 +105,6 @@ nag = lexeme $  single dollarChar *> L.decimal
             <|> string "?!" $> 6
             <|> string "!"  $> 1
             <|> string "?"  $> 2
-
-comment :: Parser String
-comment = (fmap . fmap) (chr . fromEnum) $
-      single semiChar *> manyTill anySingle (eof <|> void eol)
-  <|> single lbraceChar *> many (anySingleBut rbraceChar) <* single rbraceChar
 
 tagPair :: Parser (ByteString, Text)
 tagPair = lexeme $ do

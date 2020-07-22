@@ -1,4 +1,6 @@
-module Game.Chess.Polyglot.Hash (hashPosition, pieceKey, castleKey, turnKey) where
+module Game.Chess.Polyglot.Hash (
+  hashPosition, pieceKey, castleKey, epKeys, turnKey
+) where
 
 import Data.Bits
 import Data.Maybe

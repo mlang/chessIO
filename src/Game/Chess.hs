@@ -24,6 +24,8 @@ module Game.Chess (
 , castlingRights, canCastleKingside, canCastleQueenside
   -- ** Converting from/to Forsyth-Edwards-Notation
 , fromFEN, toFEN
+  -- ** Position tree
+, positionTree, positionForest
   -- * Chess moves
 , Ply(..)
   -- ** Converting from/to algebraic notation
@@ -33,6 +35,8 @@ module Game.Chess (
 , legalPlies
   -- ** Executing moves
 , doPly, unsafeDoPly
+  -- ** Move trees
+, plyTree, plyForest
 ) where
 
 import Control.Applicative
