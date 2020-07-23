@@ -186,10 +186,10 @@ pattern BlackKing   = 13
 
 -- | law: square i x ! i = x where inRange (0,63) i && inRange (0,15) x
 {-# INLINE square #-}
-square :: Bits nibble => Int -> nibble -> QuadBitboard
-square (bit -> b) nb = QBB (f 0) (f 1) (f 2) (f 3) where
-  f n | nb `testBit` n = b
-      | otherwise      = 0
+square :: Int -> Word4 -> QuadBitboard
+square !sq !nb = QBB (f 0) (f 1) (f 2) (f 3) where
+  !b = bit sq
+  f !n = fromIntegral ((nb `unsafeShiftR` n) .&. 1) * b
 
 (!) :: QuadBitboard -> Int -> Word4
 (!) QBB{..} sq = fromIntegral $ f black 0 .|. f pbq 1 .|. f nbk 2 .|. f rqk 3 where

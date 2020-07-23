@@ -859,10 +859,10 @@ bPawnAttacks = Vector.generate 64 $ \sq -> let b = bit sq in
 data Direction = N | NE | E | SE | S | SW | W | NW deriving (Eq, Show)
 
 rookTargets, bishopTargets, queenTargets :: Int -> Word64 -> Word64
-rookTargets sq occ = getRayTargets sq N occ .|. getRayTargets sq E occ
-                 .|. getRayTargets sq S occ .|. getRayTargets sq W occ
-bishopTargets sq occ = getRayTargets sq NW occ .|. getRayTargets sq NE occ
-                   .|. getRayTargets sq SE occ .|. getRayTargets sq SW occ
+rookTargets !sq !occ = getRayTargets sq N occ .|. getRayTargets sq E occ
+                   .|. getRayTargets sq S occ .|. getRayTargets sq W occ
+bishopTargets !sq !occ = getRayTargets sq NW occ .|. getRayTargets sq NE occ
+                     .|. getRayTargets sq SE occ .|. getRayTargets sq SW occ
 queenTargets sq occ = rookTargets sq occ .|. bishopTargets sq occ
 
 getRayTargets :: Int -> Direction -> Word64 -> Word64
@@ -908,6 +908,8 @@ testMask a b = a .&. b == b
 {-# INLINE bPawnMoves #-}
 {-# INLINE unpack #-}
 {-# INLINE foldBits #-}
+{-# INLINE bitScanForward #-}
+{-# INLINE bitScanReverse #-}
 {-# SPECIALISE relaxedSAN :: Position -> Parser Strict.ByteString Ply #-}
 {-# SPECIALISE relaxedSAN :: Position -> Parser Lazy.ByteString Ply #-}
 {-# SPECIALISE relaxedSAN :: Position -> Parser Strict.Text Ply #-}
