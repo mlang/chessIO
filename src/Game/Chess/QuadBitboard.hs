@@ -36,6 +36,9 @@ import Data.Char (ord, toLower)
 import Data.Ix
 import Data.List (groupBy, intercalate)
 import Data.String (IsString(..))
+import qualified Data.Vector.Generic as G
+import qualified Data.Vector.Generic.Mutable as M
+import Data.Vector.Unboxed (Vector, MVector, Unbox)
 import GHC.Enum
 import Numeric (showHex)
 
@@ -44,6 +47,43 @@ data QuadBitboard = QBB { black :: {-# UNPACK #-} !Word64
                         , nbk :: {-# UNPACK #-} !Word64
                         , rqk :: {-# UNPACK #-} !Word64
                         } deriving (Eq)
+
+newtype instance MVector s QuadBitboard = MV_QuadBitboard (MVector s (Word64, Word64, Word64, Word64))
+newtype instance Vector    QuadBitboard = V_QuadBitboard (Vector (Word64, Word64, Word64, Word64))
+instance Unbox QuadBitboard
+
+instance M.MVector MVector QuadBitboard where
+  basicLength (MV_QuadBitboard v) = M.basicLength v
+  basicUnsafeSlice i n (MV_QuadBitboard v) = MV_QuadBitboard $ M.basicUnsafeSlice i n v
+  basicOverlaps (MV_QuadBitboard v1) (MV_QuadBitboard v2) = M.basicOverlaps v1 v2
+  basicUnsafeNew n = MV_QuadBitboard <$> M.basicUnsafeNew n
+  basicInitialize (MV_QuadBitboard v) = M.basicInitialize v
+  basicUnsafeReplicate n (QBB b0 b1 b2 b3) = MV_QuadBitboard <$> M.basicUnsafeReplicate n (b0, b1, b2, b3)
+  basicUnsafeRead (MV_QuadBitboard v) i = f <$> M.basicUnsafeRead v i where
+    f (b0, b1, b2, b3) = QBB b0 b1 b2 b3
+  basicUnsafeWrite (MV_QuadBitboard v) i (QBB b0 b1 b2 b3) = M.basicUnsafeWrite v i (b0, b1, b2, b3)
+  basicClear (MV_QuadBitboard v) = M.basicClear v
+  basicSet (MV_QuadBitboard v) (QBB b0 b1 b2 b3) = M.basicSet v (b0, b1, b2, b3)
+  basicUnsafeCopy (MV_QuadBitboard v1) (MV_QuadBitboard v2) = M.basicUnsafeCopy v1 v2
+  basicUnsafeMove (MV_QuadBitboard v1) (MV_QuadBitboard v2) = M.basicUnsafeMove v1 v2
+  basicUnsafeGrow (MV_QuadBitboard v) n = MV_QuadBitboard <$> M.basicUnsafeGrow v n
+
+instance G.Vector Vector QuadBitboard where
+  {-# INLINE basicUnsafeIndexM #-}
+  basicUnsafeFreeze (MV_QuadBitboard v) = V_QuadBitboard <$> G.basicUnsafeFreeze v
+  basicUnsafeThaw (V_QuadBitboard v) = MV_QuadBitboard <$> G.basicUnsafeThaw v
+  basicLength (V_QuadBitboard v) = G.basicLength v
+  basicUnsafeSlice i n (V_QuadBitboard v) = V_QuadBitboard $ G.basicUnsafeSlice  i n v
+  basicUnsafeIndexM (V_QuadBitboard v) i
+    = f <$> G.basicUnsafeIndexM v i where
+    f (b0, b1, b2, b3) = QBB b0 b1 b2 b3
+  basicUnsafeCopy (MV_QuadBitboard mv) (V_QuadBitboard v) = G.basicUnsafeCopy mv v
+  elemseq _ (QBB b0 b1 b2 b3) z
+    = G.elemseq (undefined :: Vector a) b0
+    $ G.elemseq (undefined :: Vector a) b1
+    $ G.elemseq (undefined :: Vector a) b2
+    $ G.elemseq (undefined :: Vector a) b3
+    z
 
 occupied, pnr, white :: QuadBitboard -> Word64
 occupied QBB{pbq, nbk, rqk} = pbq  .|.  nbk  .|.  rqk
