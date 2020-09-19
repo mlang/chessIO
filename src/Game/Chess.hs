@@ -1,4 +1,4 @@
-{-# LANGUAGE PolyKinds, FlexibleInstances, TypeSynonymInstances, GADTs, ScopedTypeVariables #-}
+{-# LANGUAGE PolyKinds, FlexibleInstances, GADTs, ScopedTypeVariables #-}
 {-|
 Module      : Game.Chess
 Description : Basic data types and functions related to the game of chess
@@ -776,8 +776,8 @@ castlingRights Position{flags} = wks . wqs . bks . bqs $ [] where
          | otherwise              = xs
 
 canCastleKingside, canCastleQueenside :: Position -> Bool
-canCastleKingside !pos@Position{qbb} = canCastleKingside' pos (occupied qbb)
-canCastleQueenside !pos@Position{qbb} = canCastleQueenside' pos (occupied qbb)
+canCastleKingside pos@Position{qbb} = canCastleKingside' pos (occupied qbb)
+canCastleQueenside pos@Position{qbb} = canCastleQueenside' pos (occupied qbb)
 
 canCastleKingside', canCastleQueenside' :: Position -> Word64 -> Bool
 canCastleKingside' Position{qbb, color = White, flags} !occ =

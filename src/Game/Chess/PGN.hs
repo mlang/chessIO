@@ -81,11 +81,10 @@ eog = lexeme $  string "1-0" $> Win White
 
 sym :: Parser ByteString
 sym = lexeme . fmap fst . match $ do
-  void $ alphaNumChar
+  void alphaNumChar
   many $ alphaNumChar <|> oneOf [35,43,45,58,61,95]
 
-semiChar, periodChar, quoteChar, backslashChar, dollarChar :: Word8
-semiChar      = fromIntegral $ ord ';'
+periodChar, quoteChar, backslashChar, dollarChar :: Word8
 periodChar    = fromIntegral $ ord '.'
 quoteChar     = fromIntegral $ ord '"'
 backslashChar = fromIntegral $ ord '\\'
@@ -112,7 +111,7 @@ tagPair = lexeme $ do
   k <- sym
   v <- str
   rbracketP
-  pure $ (k, v)
+  pure (k, v)
 
 tagList :: Parser [(ByteString, Text)]
 tagList = many tagPair
@@ -127,7 +126,7 @@ movetext pos = (,[]) <$> eog <|> main pos where
     m <- lexeme $ relaxedSAN p
     snags <- many nag
     rav <- concat <$> many (lparenP *> var p)
-    pure $ (m, \xs -> Node (PlyData pnags m snags) xs:rav)
+    pure (m, \xs -> Node (PlyData pnags m snags) xs:rav)
   validateMoveNumber p =
     optional (lexeme $ L.decimal <* space <* many (single periodChar)) >>= \case
       Just n | moveNumber p /= n ->
@@ -182,7 +181,7 @@ tagsDoc = vsep . fmap tagpair where
     e c = T.singleton c
 
 moveDoc :: RAVOrder (Doc ann) -> Position -> (Outcome, Forest PlyData) -> Doc ann
-moveDoc ro pos (o,ts) = (fillSep $ go pos True ts <> [pretty o]) <> line where
+moveDoc ro pos (o,ts) = fillSep (go pos True ts <> [pretty o]) <> line where
   go _ _ [] = []
   go pos pmn (t:ts)
     | color pos == White || pmn

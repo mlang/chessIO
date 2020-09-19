@@ -4,7 +4,7 @@ module Game.Chess.Polyglot.Book (
   PolyglotBook
 , defaultBook, twic
 , fromByteString, toByteString
-, readPolyglotFile, writePolyglotFile
+, readPolyglotFile, writePolyglotFile, makeBook
 , bookPly
 , bookPlies
 , bookForest
@@ -71,8 +71,9 @@ defaultBook, twic :: PolyglotBook
 defaultBook = twic
 twic = fromByteString $(embedFile "book/twic-9g.bin")
 
-pv :: PolyglotBook -> [Ply]
-pv b = head . concatMap paths $ bookForest b startpos
+---- | Predicted Variation.  Return the most popular game.
+--pv :: PolyglotBook -> [Ply]
+--pv b = head . concatMap paths $ bookForest b startpos
 
 -- | A Polyglot opening book.
 newtype PolyglotBook = Book (VS.Vector BookEntry) deriving (Eq)

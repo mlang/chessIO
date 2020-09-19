@@ -126,9 +126,8 @@ loop = do
                 externalPrint $ show s <> ": " <> varToString pos pv
               _ -> pure ()
           tid <- liftIO . forkIO $ do
-            (bm, ponder) <- atomically . readTChan $ bmc
+            (bm, _) <- atomically . readTChan $ bmc
             killThread itid
-            pos <- currentPosition e
             externalPrint $ "Best move: " <> toSAN pos bm
           lift $ modify' $ \s -> s { mover = Just tid }
         loop
@@ -147,11 +146,7 @@ loop = do
           then do
             addPly e (head plies)
             outputBoard
-            (bmc, _) <- search e [movetime (sec 1)]
-            hr <- lift $ gets hintRef
-            externalPrint <- getExternalPrint
-            tid <- liftIO . forkIO $ doBestMove externalPrint hr bmc e
-            lift $ modify' $ \s -> s { mover = Just tid }
+            searchBestMove
           else pure ()
         loop
       | "midgame" == input -> do
@@ -165,27 +160,33 @@ loop = do
           Right m -> ifM (searching e) (outputStrLn "Not your move") $ do
             addPly e m
             outputBoard
-            (bmc, _) <- search e [movetime (sec 1)]
-            hr <- lift $ gets hintRef
-            externalPrint <- getExternalPrint
-            tid <- liftIO . forkIO $ doBestMove externalPrint hr bmc e
-            lift $ modify' $ \s -> s { mover = Just tid }
+            searchBestMove
         loop
+
+searchBestMove :: InputT (StateT S IO) ()
+searchBestMove = do
+  e <- lift $ gets engine
+  (bmc, _) <- search e [movetime (sec 1)]
+  hr <- lift $ gets hintRef
+  externalPrint <- getExternalPrint
+  tid <- liftIO . forkIO $ doBestMove externalPrint hr bmc e
+  lift $ modify' $ \s -> s { mover = Just tid }
 
 varToString :: Position -> [Ply] -> String
 varToString _ [] = ""
-varToString pos ms
-  | color pos == Black && length ms == 1
-  = show (moveNumber pos) <> "..." <> toSAN pos (head ms)
+varToString pos plies
+  | color pos == Black && length plies == 1
+  = show (moveNumber pos) <> "..." <> toSAN pos (head plies)
   | color pos == Black
-  = show (moveNumber pos) <> "..." <> toSAN pos (head ms) <> " " <> fromWhite (doPly pos (head ms)) (tail ms)
+  = show (moveNumber pos) <> "..." <> toSAN pos (head plies) <> " " <> fromWhite (doPly pos (head plies)) (tail plies)
   | otherwise
-  = fromWhite pos ms
+  = fromWhite pos plies
  where
-  fromWhite pos = unwords . concat
-                . zipWith f [moveNumber pos ..] . chunksOf 2 . snd
-                . mapAccumL (curry (uncurry doPly &&& uncurry toSAN)) pos
+  fromWhite pos' = unwords . concat
+                 . zipWith f [moveNumber pos' ..] . chunksOf 2 . snd
+                 . mapAccumL (curry (uncurry doPly &&& uncurry toSAN)) pos'
   f n (x:xs) = (show n <> "." <> x):xs
+  f _ [] = []
 
 parseMove :: Position -> String -> Either String Ply
 parseMove pos s = case fromUCI pos s of
