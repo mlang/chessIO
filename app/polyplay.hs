@@ -4,9 +4,11 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Monad
 import Control.Monad.Random
+import Data.Maybe (maybe)
 import Data.IORef
 import Data.List
 import Data.String
+import Data.Text.Encoding (decodeUtf8)
 import Data.Text.Prettyprint.Doc.Render.Text
 import Data.Time.Clock
 import Data.Tree
@@ -91,8 +93,10 @@ run f Polyplay{..} = do
 polyplay :: Runtime -> IO ()
 polyplay rt = do
   (h, o) <- play rt
-  let g = gameFromForest [ ("White", "Stockfish")
-                         , ("Black", "Stockfish")
+  let wname = maybe "Unknown" decodeUtf8 $ name (engine rt)
+  let bname = wname
+  let g = gameFromForest [ ("White", wname)
+                         , ("Black", bname)
                          ] (toForest h) o
   putDoc (gameDoc breadthFirst g)
   pure ()
