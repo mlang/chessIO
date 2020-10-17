@@ -193,7 +193,7 @@ square !sq !nb = QBB (f 0) (f 1) (f 2) (f 3) where
 
 (!) :: QuadBitboard -> Int -> Word4
 (!) QBB{..} sq = fromIntegral $ f black 0 .|. f pbq 1 .|. f nbk 2 .|. f rqk 3 where
-  f x n = ((x `unsafeShiftR` sq) .&. 1) `unsafeShiftL` n
+  f bb n = ((bb `unsafeShiftR` sq) .&. 1) `unsafeShiftL` n
 
 setNibble :: Bits nibble => QuadBitboard -> Int -> nibble -> QuadBitboard
 setNibble QBB{..} sq nb = QBB (f 0 black) (f 1 pbq) (f 2 nbk) (f 3 rqk) where
@@ -226,14 +226,14 @@ instance IsString QuadBitboard where
           'k' -> BlackKing
           _ -> error $ "QuadBitBoard.fromString: Illegal FEN character " <> show x
 
-instance Monoid QuadBitboard where
-  mempty = empty
-
 -- | bitwise XOR
 instance Semigroup QuadBitboard where
   {-# INLINE (<>) #-}
   QBB b0 b1 b2 b3 <> QBB b0' b1' b2' b3' =
     QBB (b0 `xor` b0') (b1 `xor` b1') (b2 `xor` b2') (b3 `xor` b3')
+
+instance Monoid QuadBitboard where
+  mempty = empty
 
 instance Show QuadBitboard where
   show QBB{..} =

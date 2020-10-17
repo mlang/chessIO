@@ -9,13 +9,14 @@ module Game.Chess.UCI (
 , Option(..), options, getOption, setOptionSpinButton, setOptionString
   -- * Manipulating the current game information
 , isready
-, currentPosition, setPosition, addPly
+, currentPosition, setPosition, addPly, replacePly
   -- * The Info data type
 , Info(..), Score(..), Bounds(..)
   -- * Searching
 , search, searching
 , SearchParam
-, searchmoves, timeleft, timeincrement, movestogo, movetime, nodes, depth, infinite
+, searchmoves, ponder, timeleft, timeincrement, movestogo, movetime, nodes, depth, infinite
+, ponderhit
 , stop
   -- * Quitting
 , quit, quit'
@@ -274,6 +275,8 @@ send Engine{inH, procH} b = do
 
 data SearchParam = SearchMoves [Ply]
                 -- ^ restrict search to the specified moves only
+                 | Ponder
+                -- ^ start searching in pondering mode
                  | TimeLeft Color (Time Millisecond)
                 -- ^ time (in milliseconds) left on the clock
                  | TimeIncrement Color (Time Millisecond)
@@ -289,6 +292,9 @@ data SearchParam = SearchMoves [Ply]
  
 searchmoves :: [Ply] -> SearchParam
 searchmoves = SearchMoves
+
+ponder :: SearchParam
+ponder = Ponder
 
 timeleft, timeincrement :: KnownDivRat unit Millisecond
                         => Color -> Time unit -> SearchParam
@@ -323,6 +329,7 @@ search e@Engine{isSearching} params = liftIO $ do
   pure chans
  where
   build (SearchMoves ms) xs = "searchmoves" : (fromString . toUCI <$> ms) <> xs
+  build Ponder xs = "ponder" : xs
   build (TimeLeft White (floor . unTime -> x)) xs = "wtime" : integerDec x : xs
   build (TimeLeft Black (floor . unTime -> x)) xs = "btime" : integerDec x : xs
   build (TimeIncrement White (floor . unTime -> x)) xs = "winc" : integerDec x : xs
@@ -333,6 +340,10 @@ search e@Engine{isSearching} params = liftIO $ do
   build (MaxDepth x) xs = "depth" : naturalDec x : xs
   build Infinite xs = "infinite" : xs
   naturalDec = integerDec . toInteger
+
+-- | Switch a ponder search to normal search when the pondered move was played.
+ponderhit :: MonadIO m => Engine -> m ()
+ponderhit e = liftIO $ send e "ponderhit"
 
 -- | Stop a search in progress.
 stop :: MonadIO m => Engine -> m ()
@@ -382,6 +393,12 @@ addPly e@Engine{game} m = liftIO $ do
     atomicModifyIORef' game $ \g -> (fmap (<> [m]) g, ())
     sendPosition e
  
+replacePly :: MonadIO m => Engine -> Ply -> m ()
+replacePly e@Engine{game} pl = liftIO $ do
+  atomicModifyIORef' game $ \g ->
+    (fmap init g, ())
+  addPly e pl
+  
 sendPosition :: Engine -> IO ()
 sendPosition e@Engine{game} = readIORef game >>= send e . cmd where
   cmd (p, h) = fold . intersperse " " $
