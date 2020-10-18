@@ -164,26 +164,34 @@ play rt@Runtime{book, history, active, passive, clock} = do
               (bmc, ic) <- search e1 [timeleft White wt, timeleft Black bt]
               play $ rt { active = Player e1 (Just (Searching bmc ic)) }
             Player e1 (Just (Searching bmc ic)) -> do
+              sc <- newIORef Nothing
+              itid <- liftIO . forkIO . forever $ do
+                i <- atomically . readTChan $ ic
+                case find isScore i of
+                  Just (Score s _) -> writeIORef sc (Just s)
+                  _ -> pure ()
               (bm, pndr) <- atomically . readTChan $ bmc
+              killThread itid
+              sc <- readIORef sc
               let history' = fmap (<> [bm]) history
               clock' <- flipClock clock
               addPly e1 bm
               p1 <- case passive of
                 Player e2 Nothing -> do
                   addPly e2 bm
-                  putStrLn $ "Move: " <> toSAN pos bm
+                  putStrLn $ "Move: " <> toSAN pos bm <> " (" <> show sc <> ")"
                   pure $ Player e2 Nothing
                 Player e2 (Just (Pondering pndr bmc ic)) -> do
                   if bm == pndr
                   then do
                     ponderhit e2
-                    putStrLn $ "Ponderhit: " <> toSAN pos bm
+                    putStrLn $ "Ponderhit: " <> toSAN pos bm <> " (" <> show sc <> ")"
                     pure $ Player e2 (Just (Searching bmc ic))
                   else do
                     stop e2
                     atomically . readTChan $ bmc
                     replacePly e2 bm
-                    putStrLn $ "Pondermiss: " <> toSAN pos bm
+                    putStrLn $ "Pondermiss: " <> toSAN pos bm <> " (" <> show sc <> ")"
                     pure $ Player e2 Nothing
               p2 <- case pndr of
                 Just pndr -> do
