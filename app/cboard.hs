@@ -221,12 +221,12 @@ doBestMove :: (String -> IO ())
            -> Engine
            -> IO ()
 doBestMove externalPrint hintRef bmc e = do
-  (bm, ponder) <- atomically . readTChan $ bmc
+  (bm, pndr) <- atomically . readTChan $ bmc
   pos <- currentPosition e
   externalPrint $ "< " <> toSAN pos bm
   addPly e bm
   currentPosition e >>= printBoard externalPrint
-  writeIORef hintRef ponder
+  writeIORef hintRef pndr
 
 printPV :: (String -> IO ()) -> TChan [Info] -> IO ()
 printPV externalPrint ic = forever $ do
