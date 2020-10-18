@@ -2,4 +2,4 @@ resolver: lts-16.18
 packages:
 - .
 extra-deps:
-- o-clock-1.0.0.1
+- o-clock-1.2.0
