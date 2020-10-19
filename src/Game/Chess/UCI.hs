@@ -125,7 +125,7 @@ command :: Position -> Parser Command
 command pos = skipSpace *> choice
   [ "id" `kv` name
   , "id" `kv` author
-  , "option" `kv` option
+  , "option" `kv` opt
   , "uciok" $> UCIOk
   , "readyok" $> ReadyOK
   , "info" `kv` fmap Info (sepBy1 infoItem skipSpace)
@@ -134,7 +134,7 @@ command pos = skipSpace *> choice
  where
   name = Name <$> kv "name" takeByteString
   author = Author <$> kv "author" takeByteString
-  option = do
+  opt = do
     void "name"
     skipSpace
     optName <- BS.pack <$> manyTill anyChar (skipSpace *> "type")
@@ -328,7 +328,7 @@ search e@Engine{isSearching} params = liftIO $ do
   writeIORef isSearching True
   pure chans
  where
-  build (SearchMoves ms) xs = "searchmoves" : (fromString . toUCI <$> ms) <> xs
+  build (SearchMoves plies) xs = "searchmoves" : (fromString . toUCI <$> plies) <> xs
   build Ponder xs = "ponder" : xs
   build (TimeLeft White (floor . unTime -> x)) xs = "wtime" : integerDec x : xs
   build (TimeLeft Black (floor . unTime -> x)) xs = "btime" : integerDec x : xs
@@ -376,11 +376,6 @@ setOptionString n v e = liftIO $ do
 currentPosition :: MonadIO m => Engine -> m Position
 currentPosition Engine{game} = liftIO $
   uncurry (foldl' doPly) <$> readIORef game
-
-nextMove :: Engine -> IO Color
-nextMove Engine{game} = do
-  (initialPosition, history) <- readIORef game
-  pure $ if even . length $ history then color initialPosition else opponent . color $ initialPosition
 
 -- | Add a 'Move' to the game history.
 --

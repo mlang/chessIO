@@ -65,7 +65,7 @@ peekBE ptr = go ptr 0 (sizeOf (undefined :: a)) where
 pokeBE :: forall a. (Bits a, Integral a, Num a, Storable a) => Ptr Word8 -> a -> IO ()
 pokeBE p x = go x (sizeOf x) where
   go _ 0 = pure ()
-  go !x !n = pokeElemOff p (n-1) (fromIntegral x) *> go (x `shiftR` 8) (n-1)
+  go !v !n = pokeElemOff p (n-1) (fromIntegral v) *> go (v `shiftR` 8) (n-1)
 
 defaultBook, twic :: PolyglotBook
 defaultBook = twic
@@ -100,8 +100,8 @@ writePolyglotFile fp = BS.writeFile fp . toByteString
 fromList :: [BookEntry] -> PolyglotBook
 fromList = Book . VS.fromList . sort
 
-toList :: PolyglotBook -> [BookEntry]
-toList (Book v) = VS.toList v
+--toList :: PolyglotBook -> [BookEntry]
+--toList (Book v) = VS.toList v
 
 makeBook :: PGN -> PolyglotBook
 makeBook = fromList . concatMap (foldTree f . annot startpos) . weightedForest
@@ -118,10 +118,10 @@ bookForest :: PolyglotBook -> Position -> Forest Ply
 bookForest b p = tree <$> bookPlies b p where
   tree pl = Node pl . bookForest b $ unsafeDoPly p pl
 
-paths :: Tree a -> [[a]]
-paths = foldTree f where
-  f a [] = [[a]]
-  f a xs = (a :) <$> concat xs
+--paths :: Tree a -> [[a]]
+--paths = foldTree f where
+--  f a [] = [[a]]
+--  f a xs = (a :) <$> concat xs
 
 -- | Pick a random ply from the book.
 bookPly :: RandomGen g => PolyglotBook -> Position -> Maybe (Rand g Ply)
