@@ -30,16 +30,24 @@ module Game.Chess.QuadBitboard (
 ) where
 
 import Control.Applicative (liftA2)
-import Data.Binary
+import Data.Binary ( Word8, Word64, Binary(put, get) )
 import Data.Bits
+    ( Bits(xor, complement, bit, unsafeShiftR, (.&.), unsafeShiftL,
+           (.|.), testBit, setBit, clearBit),
+      FiniteBits(..) )
 import Data.Char (ord, toLower)
-import Data.Ix
+import Data.Ix ( Ix(inRange) )
 import Data.List (groupBy, intercalate)
 import Data.String (IsString(..))
 import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Generic.Mutable as M
 import Data.Vector.Unboxed (Vector, MVector, Unbox)
 import GHC.Enum
+    ( boundedEnumFrom,
+      boundedEnumFromThen,
+      predError,
+      succError,
+      toEnumError )
 import Numeric (showHex)
 
 data QuadBitboard = QBB { black :: {-# UNPACK #-} !Word64

@@ -21,6 +21,7 @@ dependencies:
 - binary
 - bytestring
 - containers
+- extra
 - file-embed
 - megaparsec
 - MonadRandom
@@ -79,7 +80,6 @@ executables:
     - -threaded
     dependencies:
     - chessIO
-    - extra
     - haskeline
     - mtl
   pgnio:

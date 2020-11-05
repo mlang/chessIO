@@ -1,24 +1,54 @@
 module Main where
 
 import Control.Arrow ((&&&))
-import Control.Concurrent
-import Control.Concurrent.STM
-import Control.Monad
-import Control.Monad.Extra hiding (loop)
-import Control.Monad.IO.Class
-import Control.Monad.Random
+import Control.Concurrent ( forkIO, killThread, ThreadId )
+import Control.Concurrent.STM ( atomically, readTChan, TChan )
+import Control.Monad ( forever, void )
+import Control.Monad.Extra ( ifM, unlessM )
+import Control.Monad.IO.Class ( MonadIO(..) )
+import Control.Monad.Random ( evalRandIO, MonadTrans(lift) )
 import Control.Monad.State.Strict
-import Data.Char
-import Data.IORef
-import Data.List
-import Data.List.Extra
+    ( StateT, evalStateT, gets, modify, modify' )
+import Data.Char ( toLower, toUpper )
+import Data.IORef ( newIORef, readIORef, writeIORef, IORef )
+import Data.List ( find, isPrefixOf )
+import Data.List.Extra ( chunksOf )
 import Game.Chess
-import Game.Chess.Polyglot.Book (PolyglotBook, defaultBook, readPolyglotFile, bookPlies, bookPly)
+    ( fromFEN, fromUCI, isDark, legalPlies, pieceAt, startpos, fromSAN, toSAN,
+      unsafeToSAN, Color(Black, White),
+      PieceType(King, Pawn, Knight, Bishop, Rook, Queen),
+      Ply, Position, Sq(H8, A1), varToSAN )
+import Game.Chess.Polyglot.Book
+    ( PolyglotBook, defaultBook, readPolyglotFile, bookPlies, bookPly )
 import Game.Chess.UCI
-import System.Console.Haskeline hiding (catch, handle)
-import System.Exit
-import System.Environment
-import Time.Units
+    ( addPly,
+      currentPosition,
+      infinite,
+      movetime,
+      quit,
+      search,
+      searching,
+      setPosition,
+      start,
+      stop,
+      Engine,
+      Info(Score, PV) )
+import System.Console.Haskeline
+    ( defaultSettings,
+      getExternalPrint,
+      getInputLine,
+      outputStr,
+      outputStrLn,
+      completeWord,
+      simpleCompletion,
+      runInputT,
+      setComplete,
+      Completion(isFinished),
+      CompletionFunc,
+      InputT )
+import System.Exit ( ExitCode(ExitFailure), exitSuccess, exitWith )
+import System.Environment ( getArgs )
+import Time.Units ( ms, sec )
 
 data S = S {
   engine :: Engine
@@ -125,7 +155,7 @@ loop = do
             info <- atomically . readTChan $ ic
             case (find isScore &&& find isPV) info of
               (Just (Score s Nothing), Just (PV pv)) ->
-                externalPrint $ show s <> ": " <> varToString pos pv
+                externalPrint $ show s <> ": " <> varToSAN pos pv
               _ -> pure ()
           tid <- liftIO . forkIO $ do
             (bm, _) <- atomically . readTChan $ bmc
@@ -173,22 +203,6 @@ searchBestMove = do
   externalPrint <- getExternalPrint
   tid <- liftIO . forkIO $ doBestMove externalPrint hr bmc e
   lift $ modify' $ \s -> s { mover = Just tid }
-
-varToString :: Position -> [Ply] -> String
-varToString _ [] = ""
-varToString pos plies
-  | color pos == Black && length plies == 1
-  = show (moveNumber pos) <> "..." <> toSAN pos (head plies)
-  | color pos == Black
-  = show (moveNumber pos) <> "..." <> toSAN pos (head plies) <> " " <> fromWhite (doPly pos (head plies)) (tail plies)
-  | otherwise
-  = fromWhite pos plies
- where
-  fromWhite pos' = unwords . concat
-                 . zipWith f [moveNumber pos' ..] . chunksOf 2 . snd
-                 . mapAccumL (curry (uncurry doPly &&& uncurry toSAN)) pos'
-  f n (x:xs) = (show n <> "." <> x):xs
-  f _ [] = []
 
 parseMove :: Position -> String -> Either String Ply
 parseMove pos s = case fromUCI pos s of
