@@ -6,6 +6,7 @@ module Game.Chess.SAN (
 
 import           Control.Applicative (Applicative(liftA2))
 import           Control.Arrow ((&&&))
+import           Data.Bifunctor (first)
 import qualified Data.ByteString as Strict (ByteString)
 import qualified Data.ByteString.Lazy as Lazy (ByteString)
 import           Data.Char (chr, ord)
@@ -30,7 +31,8 @@ import Game.Chess.Internal ( Castle(Queenside, Kingside),
 import Text.Megaparsec ( optional, (<|>), empty, (<?>), chunk, parse,
                          errorBundlePretty, choice, option, Parsec,
                          MonadParsec(try, token),
-                         Stream(Token, chunkLength, Tokens) )
+                         Stream, TraversableStream, VisualStream,
+                         Token, Tokens, chunkLength )
 
 type Parser s = Parsec Void s
 
@@ -54,7 +56,7 @@ castling pos
 data From = File Int
           | Rank Int
           | Square Int
-          deriving (Show)
+          deriving (Eq, Show)
 
 data SANStatus = Check | Checkmate deriving (Eq, Read, Show)
 
@@ -189,25 +191,24 @@ relaxedSAN pos = (castling pos <|> normal) <* optional sanStatus where
       pAt from' == pc && to == to' && prm == prm'
   pAt = snd . fromJust . pieceAt pos
 
-fromSAN :: (Stream s, SANToken (Token s), IsString (Tokens s))
+fromSAN :: (VisualStream s, TraversableStream s, SANToken (Token s), IsString (Tokens s))
         => Position -> s -> Either String Ply
-fromSAN pos s = case parse (relaxedSAN pos) "" s of
-  Right m -> Right m
-  Left err -> Left $ errorBundlePretty err
+fromSAN pos = first errorBundlePretty . parse (relaxedSAN pos) ""
 
-toSAN :: Position -> Ply -> String
-toSAN pos m | m `elem` legalPlies pos = unsafeToSAN pos m
-            | otherwise          = error "Game.Chess.toSAN: Illegal move"
+toSAN :: IsString s => Position -> Ply -> s
+toSAN pos m
+  | m `elem` legalPlies pos = fromString $ unsafeToSAN pos m
+  | otherwise          = error "Game.Chess.toSAN: Illegal move"
 
-varToSAN :: Position -> [Ply] -> String
+varToSAN :: IsString s => Position -> [Ply] -> s
 varToSAN _ [] = ""
 varToSAN pos plies
   | color pos == Black && length plies == 1
-  = show (moveNumber pos) <> "..." <> toSAN pos (head plies)
+  = fromString $ show (moveNumber pos) <> "..." <> toSAN pos (head plies)
   | color pos == Black
-  = show (moveNumber pos) <> "..." <> toSAN pos (head plies) <> " " <> fromWhite (doPly pos (head plies)) (tail plies)
+  = fromString $ show (moveNumber pos) <> "..." <> toSAN pos (head plies) <> " " <> fromWhite (doPly pos (head plies)) (tail plies)
   | otherwise
-  = fromWhite pos plies
+  = fromString $ fromWhite pos plies
  where
   fromWhite pos' = unwords . concat
                  . zipWith f [moveNumber pos' ..] . chunksOf 2 . snd

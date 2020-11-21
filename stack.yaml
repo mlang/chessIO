@@ -1,5 +1,6 @@
-resolver: lts-16.18
+resolver: lts-16.22
 packages:
 - .
 extra-deps:
+- megaparsec-9.0.1
 - o-clock-1.2.0

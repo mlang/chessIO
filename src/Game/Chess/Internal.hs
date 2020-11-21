@@ -26,6 +26,7 @@ import Data.String ( IsString(..) )
 import Data.Vector.Unboxed (Vector, (!))
 import qualified Data.Vector.Unboxed as Vector
 import Data.Word ( Word16, Word64 )
+import Foreign.Storable
 import Game.Chess.QuadBitboard (QuadBitboard)
 import qualified Game.Chess.QuadBitboard as QBB
 import Text.Read (readMaybe)
@@ -178,14 +179,13 @@ occupied = QBB.occupied
 
 foldBits :: (a -> Int -> a) -> a -> Word64 -> a
 foldBits _ a 0 = a
-foldBits f !a n = foldBits f (f a lsb) (n .&. (n-1)) where
-  !lsb = countTrailingZeros n
+foldBits f !a n = foldBits f (f a $ countTrailingZeros n) $ n .&. succ n
 
 bitScanForward, bitScanReverse :: Word64 -> Int
 bitScanForward = countTrailingZeros
 bitScanReverse = (63 -) . countLeadingZeros
 
-newtype Ply = Ply Word16 deriving (Eq)
+newtype Ply = Ply Word16 deriving (Eq, Storable)
 
 instance Show Ply where
   show = toUCI
@@ -216,34 +216,50 @@ unpack (Ply x) = ( fromIntegral ((x `unsafeShiftR` 6) .&. 0b111111)
 
 fromPolyglot :: Position -> Ply -> Ply
 fromPolyglot pos pl@(unpack -> (from, to, _)) = case color pos of
-  White | from == toIndex E1 && canCastleKingside pos && to == toIndex H1
-          -> from `move` G1
-        | from == toIndex E1 && canCastleQueenside pos && to == toIndex A1
-          -> from `move` C1
-  Black | from == toIndex E8 && canCastleKingside pos && to == toIndex H8
-          -> from `move` G8
-        | from == toIndex E8 && canCastleQueenside pos && to == toIndex A8
-          -> from `move` C8
+  White | from == toIndex E1
+        , canCastleKingside pos
+        , to == toIndex H1
+        -> wKscm
+        | from == toIndex E1
+        , canCastleQueenside pos
+        , to == toIndex A1
+        -> wQscm
+  Black | from == toIndex E8
+        , canCastleKingside pos
+        , to == toIndex H8
+        -> bKscm
+        | from == toIndex E8
+        , canCastleQueenside pos
+        , to == toIndex A8
+        -> bQscm
   _ -> pl
 
 toPolyglot :: Position -> Ply -> Ply
 toPolyglot pos pl@(unpack -> (from, to, _)) = case color pos of
-  White | from == toIndex E1 && canCastleKingside pos && to == toIndex G1
-          -> from `move` H1
-        | from == toIndex E1 && canCastleQueenside pos && to == toIndex C1
-          -> from `move` A1
-  Black | from == toIndex E8 && canCastleKingside pos && to == toIndex G8
-          -> from `move` H8
-        | from == toIndex E8 && canCastleQueenside pos && to == toIndex C8
-          -> from `move` A8
+  White | from == toIndex E1
+        , canCastleKingside pos
+        , to == toIndex G1
+        -> from `move` H1
+        | from == toIndex E1
+        , canCastleQueenside pos
+        , to == toIndex C1
+        -> from `move` A1
+  Black | from == toIndex E8
+        , canCastleKingside pos
+        , to == toIndex G8
+        -> from `move` H8
+        | from == toIndex E8
+        , canCastleQueenside pos
+        , to == toIndex C8
+        -> from `move` A8
   _ -> pl
 
 -- | Parse a move in the format used by the Universal Chess Interface protocol.
 fromUCI :: Position -> String -> Maybe Ply
 fromUCI pos (fmap (splitAt 2) . splitAt 2 -> (from, (to, promo)))
-  | length from == 2 && length to == 2 && null promo
+  | null promo
   = move <$> readCoord from <*> readCoord to >>= relativeTo pos
-  | length from == 2 && length to == 2 && length promo == 1
+  | otherwise
   = (\f t p -> move f t `promoteTo` p) <$> readCoord from
                                        <*> readCoord to
                                        <*> readPromo promo
@@ -258,7 +274,6 @@ fromUCI pos (fmap (splitAt 2) . splitAt 2 -> (from, (to, promo)))
   readPromo "b" = Just Bishop
   readPromo "n" = Just Knight
   readPromo _ = Nothing
-fromUCI _ _ = Nothing
 
 -- | Convert a move to the format used by the Universal Chess Interface protocol.
 toUCI :: Ply -> String
@@ -409,9 +424,9 @@ legalPlies pos@Position{color, qbb, flags} = filter legalPly $
   wShort ml | canCastleKingside' pos occ = wKscm : ml
             | otherwise             = ml
   wLong ml  | canCastleQueenside' pos occ = wQscm : ml
-            | otherwise              = ml
+            | otherwise                   = ml
   bShort ml | canCastleKingside' pos occ = bKscm : ml
-            | otherwise             = ml
+            | otherwise                  = ml
   bLong ml  | canCastleQueenside' pos occ = bQscm : ml
             | otherwise              = ml
   mkM !from ms !to = move from to : ms

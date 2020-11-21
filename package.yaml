@@ -23,10 +23,9 @@ dependencies:
 - containers
 - extra
 - file-embed
-- megaparsec
+- megaparsec >= 9.0
 - MonadRandom
 - o-clock
-- parser-combinators
 - prettyprinter
 - process
 - random
