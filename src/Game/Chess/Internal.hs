@@ -179,7 +179,7 @@ occupied = QBB.occupied
 
 foldBits :: (a -> Int -> a) -> a -> Word64 -> a
 foldBits _ a 0 = a
-foldBits f !a n = foldBits f (f a $ countTrailingZeros n) $ n .&. succ n
+foldBits f !a n = foldBits f (f a $ countTrailingZeros n) $ n .&. pred n
 
 bitScanForward, bitScanReverse :: Word64 -> Int
 bitScanForward = countTrailingZeros
