@@ -2,8 +2,9 @@
 
 ## chessIO 0.5.0.0
 
-- Split SAN parsing code into a separate module
-- Use Maybe to indicate that bestmove in UCI can be empty
+- Split SAN parsing code into a separate module.
+- Adapt to VisualStream change in Megaparsec >= 9.
+- Use Maybe to indicate that bestmove in UCI can be empty.
 
 ## chessIO 0.4.0.0
 
