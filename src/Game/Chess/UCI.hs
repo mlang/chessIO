@@ -184,9 +184,9 @@ command pos = skipSpace *> choice
                                 <|> LowerBound <$ "lowerbound"
                                  )
     pure $ Score s b
-  pv = fmap (PV . snd) $ foldM toPly (pos, []) =<< sepBy mv skipSpace
+  pv = fmap (PV . reverse . snd) $ foldM toPly (pos, []) =<< sepBy mv skipSpace
   toPly (pos, xs) s = case fromUCI pos s of
-    Just m -> pure (unsafeDoPly pos m, xs <> [m])
+    Just m -> pure (unsafeDoPly pos m, m : xs)
     Nothing -> fail $ "Failed to parse move " <> s
   currmove = fmap (fromUCI pos) mv >>= \case
     Just m -> pure $ CurrMove m
