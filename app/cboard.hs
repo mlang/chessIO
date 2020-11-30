@@ -32,7 +32,7 @@ import Game.Chess.UCI
       start,
       stop,
       Engine,
-      Info(Score, PV) )
+      BestMove, Info(Score, PV) )
 import System.Console.Haskeline
     ( defaultSettings,
       getExternalPrint,
@@ -107,10 +107,12 @@ midgame = do
       pl <- liftIO . evalRandIO $ r
       addPly e pl
       (bmc, _) <- search e [movetime (ms 100)]
-      liftIO $ do
-        (bm, _) <- atomically . readTChan $ bmc
-        addPly e bm
-      midgame
+      bm <- liftIO . atomically . readTChan $ bmc
+      case bm of
+        Just (bm', _) -> do
+          addPly e bm'
+          midgame
+        Nothing -> outputBoard
     Nothing -> outputBoard
 
 outputBoard :: InputT (StateT S IO) ()
@@ -158,9 +160,11 @@ loop = do
                 externalPrint $ show s <> ": " <> varToSAN pos pv
               _ -> pure ()
           tid <- liftIO . forkIO $ do
-            (bm, _) <- atomically . readTChan $ bmc
+            bm <- atomically . readTChan $ bmc
             killThread itid
-            externalPrint $ "Best move: " <> toSAN pos bm
+            case bm of
+              Just (bm', _) -> externalPrint $ "Best move: " <> toSAN pos bm'
+              Nothing -> pure ()
           lift $ modify' $ \s -> s { mover = Just tid }
         loop
       | "stop" == input -> do
@@ -231,16 +235,19 @@ printBoard externalPrint pos = externalPrint . init . unlines $
 
 doBestMove :: (String -> IO ())
            -> IORef (Maybe Ply)
-           -> TChan (Ply, Maybe Ply)
+           -> TChan BestMove
            -> Engine
            -> IO ()
 doBestMove externalPrint hintRef bmc e = do
-  (bm, pndr) <- atomically . readTChan $ bmc
-  pos <- currentPosition e
-  externalPrint $ "< " <> toSAN pos bm
-  addPly e bm
-  currentPosition e >>= printBoard externalPrint
-  writeIORef hintRef pndr
+  bm <- atomically . readTChan $ bmc
+  case bm of
+    Just (bm', pndr) -> do
+      pos <- currentPosition e
+      externalPrint $ "< " <> toSAN pos bm'
+      addPly e bm'
+      currentPosition e >>= printBoard externalPrint
+      writeIORef hintRef pndr
+    Nothing -> pure ()
 
 printPV :: (String -> IO ()) -> TChan [Info] -> IO ()
 printPV externalPrint ic = forever $ do

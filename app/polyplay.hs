@@ -4,7 +4,6 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Monad
 import Control.Monad.Random
-import Data.Maybe (isJust, maybe)
 import Data.IORef
 import Data.List
 import Data.String
@@ -66,8 +65,8 @@ data Runtime = Runtime {
 }
 
 data Player s = Player Engine (Maybe s)
-data Active = Searching (TChan (Ply, Maybe Ply)) (TChan [Info])
-data Passive = Pondering Ply (TChan (Ply, Maybe Ply)) (TChan [Info])
+data Active = Searching (TChan (Maybe (Ply, Maybe Ply))) (TChan [Info])
+data Passive = Pondering Ply (TChan (Maybe (Ply, Maybe Ply))) (TChan [Info])
 
 opts :: Parser Polyplay
 opts = Polyplay <$> option auto (long "hash" <> metavar "MB" <> value 1024)
@@ -140,18 +139,18 @@ play rt@Runtime{book, history, active, passive, clock} = do
             Player e1 Nothing -> do
               addPly e1 pl
               pure $ Player e1 Nothing
-            Player e1 (Just (Searching bmc ic)) -> do
+            Player e1 (Just (Searching bmc _ic)) -> do
               stop e1
-              atomically . readTChan $ bmc
+              void . atomically . readTChan $ bmc
               addPly e1 pl
               pure $ Player e1 Nothing
           p1 <- case passive of
             Player e2 Nothing -> do
               addPly e2 pl
               pure $ Player e2 Nothing
-            Player e2 (Just (Pondering _ bmc ic)) -> do
+            Player e2 (Just (Pondering _ bmc _ic)) -> do
               stop e2
-              atomically . readTChan $ bmc
+              void . atomically . readTChan $ bmc
               replacePly e2 pl
               pure $ Player e2 Nothing
           clock' <- flipClock clock
@@ -170,38 +169,41 @@ play rt@Runtime{book, history, active, passive, clock} = do
                 case find isScore i of
                   Just (Score s _) -> writeIORef sc (Just s)
                   _ -> pure ()
-              (bm, pndr) <- atomically . readTChan $ bmc
+              mbm <- atomically . readTChan $ bmc
               killThread itid
               sc <- readIORef sc
-              let history' = fmap (<> [bm]) history
-              clock' <- flipClock clock
-              addPly e1 bm
-              p1 <- case passive of
-                Player e2 Nothing -> do
-                  addPly e2 bm
-                  putStrLn $ "Move: " <> toSAN pos bm <> " (" <> show sc <> ")"
-                  pure $ Player e2 Nothing
-                Player e2 (Just (Pondering pndr bmc ic)) -> do
-                  if bm == pndr
-                  then do
-                    ponderhit e2
-                    putStrLn $ "Ponderhit: " <> toSAN pos bm <> " (" <> show sc <> ")"
-                    pure $ Player e2 (Just (Searching bmc ic))
-                  else do
-                    stop e2
-                    atomically . readTChan $ bmc
-                    replacePly e2 bm
-                    putStrLn $ "Pondermiss: " <> toSAN pos bm <> " (" <> show sc <> ")"
-                    pure $ Player e2 Nothing
-              p2 <- case pndr of
-                Just pndr -> do
-                  addPly e1 pndr
-                  let (Just wt, Just bt) = clockTimes clock'
-                  (bmc, ic) <- search e1 [ponder, timeleft White wt, timeleft Black bt]
-                  pure $ Player e1 (Just (Pondering pndr bmc ic))
-                Nothing -> 
-                  pure $ Player e1 Nothing
-              play $ rt { history = history', active = p1, passive = p2, clock = clock' }
+              case mbm of
+                Just (bm, pndr) -> do
+                  let history' = fmap (<> [bm]) history
+                  clock' <- flipClock clock
+                  addPly e1 bm
+                  p1 <- case passive of
+                    Player e2 Nothing -> do
+                      addPly e2 bm
+                      putStrLn $ "Move: " <> toSAN pos bm <> " (" <> show sc <> ")"
+                      pure $ Player e2 Nothing
+                    Player e2 (Just (Pondering pndr bmc ic)) -> do
+                      if bm == pndr
+                        then do
+                          ponderhit e2
+                          putStrLn $ "Ponderhit: " <> toSAN pos bm <> " (" <> show sc <> ")"
+                          pure $ Player e2 (Just (Searching bmc ic))
+                        else do
+                          stop e2
+                          atomically . readTChan $ bmc
+                          replacePly e2 bm
+                          putStrLn $ "Pondermiss: " <> toSAN pos bm <> " (" <> show sc <> ")"
+                          pure $ Player e2 Nothing
+                  p2 <- case pndr of
+                    Just pndr -> do
+                      addPly e1 pndr
+                      let (Just wt, Just bt) = clockTimes clock'
+                      (bmc, ic) <- search e1 [ponder, timeleft White wt, timeleft Black bt]
+                      pure $ Player e1 (Just (Pondering pndr bmc ic))
+                    Nothing -> 
+                      pure $ Player e1 Nothing
+                  play $ rt { history = history', active = p1, passive = p2, clock = clock' }
+                Nothing -> pure (snd history, Win . opponent . color $ pos)
 
 toForest :: [Ply] -> Forest Ply
 toForest [] = []

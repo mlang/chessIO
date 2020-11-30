@@ -2,7 +2,7 @@ module Game.Chess.UCI (
   -- * Exceptions
   UCIException(..)
   -- * The Engine data type
-, Engine, name, author
+, Engine, BestMove, name, author
   -- * Starting a UCI engine
 , start, start'
   -- * Engine options
@@ -24,7 +24,7 @@ module Game.Chess.UCI (
 
 import Control.Applicative
 import Control.Concurrent
-import Control.Concurrent.STM
+import Control.Concurrent.STM hiding (check)
 import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
@@ -49,6 +49,8 @@ import System.Process
 import Time.Rational
 import Time.Units
 
+type BestMove = Maybe (Ply, Maybe Ply)
+
 data Engine = Engine {
   inH :: Handle
 , outH :: Handle
@@ -61,7 +63,7 @@ data Engine = Engine {
 , isReady :: MVar ()
 , isSearching :: IORef Bool
 , infoChan :: TChan [Info]
-, bestMoveChan :: TChan (Ply, Maybe Ply)
+, bestMoveChan :: TChan BestMove
 , game :: IORef (Position, [Ply])
 }
 
@@ -80,13 +82,13 @@ data UCIException = IllegalMove Ply deriving Show
 
 instance Exception UCIException
 
-data Command = Name ByteString
-             | Author ByteString
-             | Option ByteString Option
+data Command = Name !ByteString
+             | Author !ByteString
+             | Option !ByteString !Option
              | UCIOk
              | ReadyOK
              | Info [Info]
-             | BestMove !(Ply, Maybe Ply)
+             | BestMove !BestMove
              deriving (Show)
 
 data Info = PV [Ply]
@@ -129,7 +131,7 @@ command pos = skipSpace *> choice
   , "uciok" $> UCIOk
   , "readyok" $> ReadyOK
   , "info" `kv` fmap Info (sepBy1 infoItem skipSpace)
-  , "bestmove" `kv` bestmove
+  , "bestmove" `kv` ("(none)" $> BestMove Nothing <|> bestmove)
   ] <* skipSpace
  where
   name = Name <$> kv "name" takeByteString
@@ -170,7 +172,7 @@ command pos = skipSpace *> choice
          <|> NPS <$> kv "nps" decimal
          <|> HashFull <$> kv "hashfull" decimal
          <|> TBHits <$> kv "tbhits" decimal
-         <|> Elapsed . ms . fromIntegral <$> kv "time" decimal
+         <|> Elapsed . ms . fromInteger <$> kv "time" decimal
          <|> kv "pv" pv
          <|> kv "currmove" currmove
          <|> CurrMoveNumber <$> kv "currmovenumber" decimal
@@ -202,9 +204,9 @@ command pos = skipSpace *> choice
     ponder <- optional (skipSpace *> kv "ponder" mv)
     case fromUCI pos m of
       Just m' -> case ponder of
-        Nothing -> pure $ BestMove (m', Nothing)
+        Nothing -> pure . BestMove . Just $ (m', Nothing)
         Just p -> case fromUCI (doPly pos m') p of
-          Just p' -> pure $ BestMove (m', Just p')
+          Just p' -> pure . BestMove . Just $ (m', Just p')
           Nothing -> fail $ "Failed to parse ponder move " <> p
       Nothing -> fail $ "Failed to parse best move " <> m
   kv k v = k *> skipSpace *> v
@@ -320,7 +322,7 @@ searching Engine{isSearching} = liftIO $ readIORef isSearching
 -- | Instruct the engine to begin searching.
 search :: MonadIO m
        => Engine -> [SearchParam]
-       -> m (TChan (Ply, Maybe Ply), TChan [Info])
+       -> m (TChan BestMove, TChan [Info])
 search e@Engine{isSearching} params = liftIO $ do
   chans <- atomically $ (,) <$> dupTChan (bestMoveChan e)
                             <*> dupTChan (infoChan e)
