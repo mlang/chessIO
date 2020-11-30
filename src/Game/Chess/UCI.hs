@@ -186,7 +186,7 @@ command pos = skipSpace *> choice
     pure $ Score s b
   pv = fmap (PV . snd) $ foldM toPly (pos, []) =<< sepBy mv skipSpace
   toPly (pos, xs) s = case fromUCI pos s of
-    Just m -> pure (doPly pos m, xs <> [m])
+    Just m -> pure (unsafeDoPly pos m, xs <> [m])
     Nothing -> fail $ "Failed to parse move " <> s
   currmove = fmap (fromUCI pos) mv >>= \case
     Just m -> pure $ CurrMove m
