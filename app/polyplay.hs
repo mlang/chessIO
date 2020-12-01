@@ -65,8 +65,8 @@ data Runtime = Runtime {
 }
 
 data Player s = Player Engine (Maybe s)
-data Active = Searching (TChan (Maybe (Ply, Maybe Ply))) (TChan [Info])
-data Passive = Pondering Ply (TChan (Maybe (Ply, Maybe Ply))) (TChan [Info])
+data Active = Searching (TChan BestMove) (TChan [Info])
+data Passive = Pondering Ply (TChan BestMove) (TChan [Info])
 
 opts :: Parser Polyplay
 opts = Polyplay <$> option auto (long "hash" <> metavar "MB" <> value 1024)
