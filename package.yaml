@@ -54,7 +54,8 @@ default-extensions:
 - ViewPatterns
 
 extra-source-files:
-- README.rst
+- README.md
+- CHANGELOG.md
 - book/twic-9g.bin
 
 ghc-options:
