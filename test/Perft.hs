@@ -12,6 +12,9 @@ import System.Directory
 import System.Exit
 import System.IO
 
+type Depth = Int
+type Testsuite = [(Position, [(Depth, PerftResult)])]
+
 main :: IO ()
 main = do
   start <- getCurrentTime
@@ -43,10 +46,10 @@ instance Semigroup PerftResult where
 instance Monoid PerftResult where
   mempty = PerftResult 0
 
-showResult :: Int -> PerftResult -> String
+showResult :: Depth -> PerftResult -> String
 showResult depth PerftResult{nodes} = show depth <> " " <> show nodes
 
-perft :: Int -> Position -> PerftResult
+perft :: Depth -> Position -> PerftResult
 perft 0 _ = PerftResult 1
 perft 1 p = PerftResult . fromIntegral . length $ legalPlies p
 perft n p
@@ -55,7 +58,7 @@ perft n p
   | otherwise
   = fold . parMap rdeepseq (perft (pred n) . unsafeDoPly p) $ legalPlies p
 
-runTestSuite :: [(Position, [(Int, PerftResult)])] -> IO (Maybe PerftResult)
+runTestSuite :: Testsuite -> IO (Maybe PerftResult)
 runTestSuite = fmap (getAp . foldMap Ap) . traverse (uncurry (test mempty)) where
   test sum pos ((depth, expected) : more)
     | result == expected
@@ -73,7 +76,7 @@ runTestSuite = fmap (getAp . foldMap Ap) . traverse (uncurry (test mempty)) wher
          fen = toFEN pos
   test sum _ [] = pure (Just sum)
 
-readTestSuite :: FilePath -> IO [(Position, [(Int, PerftResult)])]
+readTestSuite :: FilePath -> IO Testsuite
 readTestSuite fp = do
   epd <- readFile fp
   pure $ fmap readData . (\ws -> (fromJust (fromFEN (unwords $ take 6 ws)), drop 6 ws)) . words <$> lines epd
