@@ -181,7 +181,7 @@ tagsDoc = vsep . fmap tagpair where
     e c = T.singleton c
 
 moveDoc :: RAVOrder (Doc ann) -> Position -> (Outcome, Forest PlyData) -> Doc ann
-moveDoc ro pos (o,ts) = fillSep (go pos True ts <> [pretty o]) <> line where
+moveDoc ro p (o,f) = fillSep (go p True f <> [pretty o]) <> line where
   go _ _ [] = []
   go pos pmn (t:ts)
     | color pos == White || pmn
@@ -192,11 +192,11 @@ moveDoc ro pos (o,ts) = fillSep (go pos True ts <> [pretty o]) <> line where
     pl = ply . rootLabel $ t
     san = pretty $ unsafeToSAN pos pl
     pos' = unsafeDoPly pos pl
-    pnag = nag <$> prefixNAG (rootLabel t)
+    pnag = prettynag <$> prefixNAG (rootLabel t)
     mn = pretty (moveNumber pos) <> if color pos == White then "." else "..."
     rav = ro (parens . fillSep . go pos True) ts
-    snag = nag <$> suffixNAG (rootLabel t)
-  nag n = "$" <> pretty n
+    snag = prettynag <$> suffixNAG (rootLabel t)
+  prettynag n = "$" <> pretty n
 
 weightedForest :: PGN -> Forest (Rational, Ply)
 weightedForest (PGN games) = merge . concatMap rate $ snd <$> filter ok games
@@ -206,6 +206,7 @@ weightedForest (PGN games) = merge . concatMap rate $ snd <$> filter ok games
     w c | o == Win c = 1
         | o == Win (opponent c) = -1
         | o == Draw = 1 % 2
+        | otherwise = 0
     f pos (Node a ts') = Node (w (color pos), ply a) $
       f (unsafeDoPly pos (ply a)) <$> ts'
   trunk [] = []

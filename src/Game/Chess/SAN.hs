@@ -181,8 +181,8 @@ relaxedSAN pos = (castling pos <|> normal) <* optional sanStatus where
   capture = option False $ chunk "x" $> True
   ms = legalPlies pos
   possible pc from to prm = filter (f from) ms where
-    f (Just (Square from)) (unpack -> (from', to', prm')) =
-      pAt from' == pc && from' == from && to' == to && prm' == prm
+    f (Just (Square sq)) (unpack -> (from', to', prm')) =
+      pAt from' == pc && from' == sq && to' == to && prm' == prm
     f (Just (File ff)) (unpack -> (from', to', prm')) =
       pAt from' == pc && from' `mod` 8 == ff && to == to' && prm == prm'
     f (Just (Rank fr)) (unpack -> (from', to', prm')) =
@@ -238,7 +238,7 @@ sanCoords pos (pc,lms) m@(unpack -> (from, to, _)) =
     | capture = "x" <> toCoord to
     | otherwise = toCoord to
   ms = filter (isMoveTo to) lms
-  isMoveTo to (unpack -> (_, to', _)) = to == to'
+  isMoveTo sq (unpack -> (_, to', _)) = sq == to'
   fEq (unpack -> (from', _, _)) = from' `mod` 8 == fromFile
   rEq (unpack -> (from', _, _)) = from' `div` 8 == fromRank
   (fromRank, fromFile) = toRF from
