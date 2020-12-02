@@ -5,6 +5,7 @@
 - Split SAN parsing code into a separate module.
 - Adapt to VisualStream change in Megaparsec >= 9.
 - Use Maybe to indicate that bestmove in UCI can be empty.
+- instance Storable QuadBitboard
 
 ## chessIO 0.4.0.0
 

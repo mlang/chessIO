@@ -42,12 +42,14 @@ import Data.String (IsString(..))
 import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Generic.Mutable as M
 import Data.Vector.Unboxed (Vector, MVector, Unbox)
+import Foreign.Storable
 import GHC.Enum
     ( boundedEnumFrom,
       boundedEnumFromThen,
       predError,
       succError,
       toEnumError )
+import GHC.Ptr (castPtr, plusPtr)
 import Numeric (showHex)
 
 data QuadBitboard = QBB { black :: {-# UNPACK #-} !Word64
@@ -55,6 +57,16 @@ data QuadBitboard = QBB { black :: {-# UNPACK #-} !Word64
                         , nbk :: {-# UNPACK #-} !Word64
                         , rqk :: {-# UNPACK #-} !Word64
                         } deriving (Eq)
+
+instance Storable QuadBitboard where
+  sizeOf _ = 32
+  alignment _ = 8
+  peek p = QBB <$> peek (castPtr p) <*> peek (castPtr $ p `plusPtr` 8) <*> peek (castPtr $ p `plusPtr` 16) <*> peek (castPtr $ p `plusPtr` 24)
+  poke p QBB{black, pbq, nbk, rqk} = do
+    poke (castPtr $ p) black
+    poke (castPtr $ p `plusPtr` 8) pbq
+    poke (castPtr $ p `plusPtr` 16) nbk
+    poke (castPtr $ p `plusPtr` 24) rqk
 
 newtype instance MVector s QuadBitboard = MV_QuadBitboard (MVector s (Word64, Word64, Word64, Word64))
 newtype instance Vector    QuadBitboard = V_QuadBitboard (Vector (Word64, Word64, Word64, Word64))
@@ -201,7 +213,7 @@ square !sq !nb = QBB (f 0) (f 1) (f 2) (f 3) where
 
 (!) :: QuadBitboard -> Int -> Word4
 (!) QBB{..} sq = fromIntegral $ f black 0 .|. f pbq 1 .|. f nbk 2 .|. f rqk 3 where
-  f bb n = ((bb `unsafeShiftR` sq) .&. 1) `unsafeShiftL` n
+  f !bb !n = ((bb `unsafeShiftR` sq) .&. 1) `unsafeShiftL` n
 
 setNibble :: Bits nibble => QuadBitboard -> Int -> nibble -> QuadBitboard
 setNibble QBB{..} sq nb = QBB (f 0 black) (f 1 pbq) (f 2 nbk) (f 3 rqk) where
