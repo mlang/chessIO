@@ -21,7 +21,9 @@ import Data.Bits
     FiniteBits(countLeadingZeros, countTrailingZeros) )
 import Data.Char ( ord, chr )
 import Data.Ix ( Ix(inRange) )
-import Data.Maybe ( fromJust, isJust )
+import Data.List (nub, sortOn)
+import Data.Maybe ( fromJust, isJust, listToMaybe )
+import Data.Ord (Down(..))
 import Data.String ( IsString(..) )
 import Data.Vector.Unboxed (Vector, (!))
 import qualified Data.Vector.Unboxed as Vector
@@ -112,8 +114,21 @@ data Position = Position {
   -- ^ number of the full move
 }
 
+-- Article 9.2 states that a position is considered
+-- identical to another if the same player is on move, the same types of
+-- pieces of the same colors occupy the same squares, and the same moves
+-- are available to each player; in particular, each player has the same
+-- castling and en passant capturing rights.
 instance Eq Position where
   a == b = qbb a == qbb b && color a == color b && flags a == flags b
+
+repetitions :: [Position] -> Maybe (Int, Position)
+repetitions p = listToMaybe . sortOn (Down . fst) $ fmap f (nub p) where
+  f x = (count x p, x)
+  count x = length . filter (== x)
+
+instance Show Position where
+  show p = '"' : toFEN p <> ['"']
 
 -- | Construct a position from Forsyth-Edwards-Notation.
 fromFEN :: String -> Maybe Position
