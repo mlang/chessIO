@@ -43,6 +43,7 @@ default-extensions:
 - GeneralizedNewtypeDeriving
 - LambdaCase
 - MultiParamTypeClasses
+- MultiWayIf
 - NamedFieldPuns
 - NumericUnderscores
 - RecordWildCards
