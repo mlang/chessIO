@@ -16,6 +16,7 @@ import Game.Chess.PGN
 import Game.Chess.Polyglot.Book
 import Game.Chess.UCI
 import Options.Applicative
+import System.IO (hPutStrLn, stderr)
 import Time.Units
 
 data Clock = Clock !Color !NominalDiffTime !NominalDiffTime !UTCTime
@@ -84,7 +85,7 @@ run :: (Runtime -> IO ()) -> Polyplay -> IO ()
 run f Polyplay{..} = do
   book <- readPolyglotFile bookFile
   start engineProgram engineArgs >>= \case
-    Nothing -> putStrLn "Engine failed to start."
+    Nothing -> putLog "Engine failed to start."
     Just e1 -> do
       _ <- setOptionSpinButton "Hash" hashSize e1
       _ <- setOptionSpinButton "Threads" threadCount e1
@@ -93,7 +94,7 @@ run f Polyplay{..} = do
         Nothing -> pure ()
       isready e1
       start engineProgram engineArgs >>= \case
-        Nothing -> putStrLn "Engine failed to start secondary engine."
+        Nothing -> putLog "Engine failed to start secondary engine."
         Just e2 -> do
           _ <- setOptionSpinButton "Hash" hashSize e2
           _ <- setOptionSpinButton "Threads" threadCount e2
@@ -158,7 +159,7 @@ play rt@Runtime{book, history, active, passive, clock} = do
                    replacePly e2 pl
                    pure $ Player e2 Nothing
                clock' <- flipClock clock
-               putStrLn $ "Book: " <> toSAN pos pl
+               putLog $ "Book: " <> toSAN pos pl
                play (rt { history = history', active = p1, passive = p2, clock = clock' })
              Nothing -> do
                case active of
@@ -184,19 +185,19 @@ play rt@Runtime{book, history, active, passive, clock} = do
                        p1 <- case passive of
                          Player e2 Nothing -> do
                            addPly e2 bm
-                           putStrLn $ "Move: " <> toSAN pos bm <> " (" <> show sc <> ")"
+                           putLog $ "Move: " <> toSAN pos bm <> " (" <> show sc <> ")"
                            pure $ Player e2 Nothing
                          Player e2 (Just (Pondering pndr bmc ic)) -> do
                            if bm == pndr
                              then do
                                ponderhit e2
-                               putStrLn $ "Ponderhit: " <> toSAN pos bm <> " (" <> show sc <> ")"
+                               putLog $ "Ponderhit: " <> toSAN pos bm <> " (" <> show sc <> ")"
                                pure $ Player e2 (Just (Searching bmc ic))
                              else do
                                stop e2
                                atomically . readTChan $ bmc
                                replacePly e2 bm
-                               putStrLn $ "Pondermiss: " <> toSAN pos bm <> " (" <> show sc <> ")"
+                               putLog $ "Pondermiss: " <> toSAN pos bm <> " (" <> show sc <> ")"
                                pure $ Player e2 Nothing
                        p2 <- case pndr of
                          Just pndr -> do
@@ -215,3 +216,6 @@ toForest (x:xs) = [Node x $ toForest xs]
 isScore :: Info -> Bool
 isScore Score{} = True
 isScore _ = False
+
+putLog :: String -> IO ()
+putLog = hPutStrLn stderr
