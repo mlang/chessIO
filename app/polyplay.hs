@@ -84,7 +84,7 @@ main = run polyplay =<< execParser (info (opts <**> helper) mempty)
 run :: (Runtime -> IO ()) -> Polyplay -> IO ()
 run f Polyplay{..} = do
   book <- readPolyglotFile bookFile
-  start engineProgram engineArgs >>= \case
+  start' (sec 30) putLog engineProgram engineArgs >>= \case
     Nothing -> putLog "Engine failed to start."
     Just e1 -> do
       _ <- setOptionSpinButton "Hash" hashSize e1
@@ -93,7 +93,7 @@ run f Polyplay{..} = do
         Just fp -> void $ setOptionString "SyzygyPath" (fromString fp) e1
         Nothing -> pure ()
       isready e1
-      start engineProgram engineArgs >>= \case
+      start' (sec 30) putLog engineProgram engineArgs >>= \case
         Nothing -> putLog "Engine failed to start secondary engine."
         Just e2 -> do
           _ <- setOptionSpinButton "Hash" hashSize e2
