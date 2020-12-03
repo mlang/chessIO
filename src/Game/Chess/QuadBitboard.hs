@@ -62,7 +62,7 @@ data QuadBitboard = QBB { black :: {-# UNPACK #-} !Word64
 insufficientMaterial :: QuadBitboard -> Bool
 insufficientMaterial qbb@QBB{black, pbq, nbk, rqk} =
   noPawnsNorQueens && eachSideHasOneKing && noRooks &&
-  (oneSideHasAtMostOneMinorPiece || opposingBishopsOnEuqallyColoredSquares)
+  (oneSideHasAtMostOneMinorPiece || opposingBishopsOnEquallyColoredSquares)
  where
   eachSideHasOneKing = popCount (wKings qbb) == 1 && popCount (bKings qbb) == 1
   noPawnsNorQueens = pbq `xor` bishops qbb == 0
@@ -70,7 +70,7 @@ insufficientMaterial qbb@QBB{black, pbq, nbk, rqk} =
   oneSideHasAtMostOneMinorPiece =
     (popCount (nbk .&. complement black) == 1 && atMostOneMinorPiece black) ||
     (popCount (nbk .&. black) == 1 && atMostOneMinorPiece (complement black))
-  opposingBishopsOnEuqallyColoredSquares =
+  opposingBishopsOnEquallyColoredSquares =
     popCount (knights qbb) == 0 &&
     popCount (nbk .&. black) == 2 && popCount (nbk .&. complement black) == 2 &&
     even (countTrailingZeros (wBishops qbb)) ==
