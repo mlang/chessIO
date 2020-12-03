@@ -21,7 +21,7 @@ module Game.Chess (
 , PieceType(..), Castle(..)
 , Position, startpos, color, moveNumber, halfMoveClock, pieceAt, inCheck
 , castlingRights, canCastleKingside, canCastleQueenside
-, repetitions
+, insufficientMaterial, repetitions
   -- ** Converting from/to Forsyth-Edwards-Notation
 , fromFEN, toFEN
   -- ** Position tree

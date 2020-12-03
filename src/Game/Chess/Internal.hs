@@ -130,6 +130,9 @@ repetitions p = listToMaybe . sortOn (Down . fst) $ fmap f (nub p) where
 instance Show Position where
   show p = '"' : toFEN p <> ['"']
 
+insufficientMaterial :: Position -> Bool
+insufficientMaterial Position{qbb} = QBB.insufficientMaterial qbb
+
 -- | Construct a position from Forsyth-Edwards-Notation.
 fromFEN :: String -> Maybe Position
 fromFEN fen

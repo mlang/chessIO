@@ -5,6 +5,7 @@ module Game.Chess.QuadBitboard (
 , pawns, knights, bishops, rooks, queens, kings
 , wPawns, wKnights, wBishops, wRooks, wQueens, wKings
 , bPawns, bKnights, bBishops, bRooks, bQueens, bKings
+, insufficientMaterial
 , toString
   -- * Square codes
 , Word4(..)
@@ -33,7 +34,7 @@ import Control.Applicative (liftA2)
 import Data.Binary ( Word8, Word64, Binary(put, get) )
 import Data.Bits
     ( Bits(xor, complement, bit, unsafeShiftR, (.&.), unsafeShiftL,
-           (.|.), testBit, setBit, clearBit),
+           (.|.), testBit, setBit, clearBit, popCount),
       FiniteBits(..) )
 import Data.Char (ord, toLower)
 import Data.Ix ( Ix(inRange) )
@@ -57,6 +58,24 @@ data QuadBitboard = QBB { black :: {-# UNPACK #-} !Word64
                         , nbk :: {-# UNPACK #-} !Word64
                         , rqk :: {-# UNPACK #-} !Word64
                         } deriving (Eq)
+
+insufficientMaterial :: QuadBitboard -> Bool
+insufficientMaterial qbb@QBB{black, pbq, nbk, rqk} =
+  noPawnsNorQueens && eachSideHasOneKing && noRooks &&
+  (oneSideHasAtMostOneMinorPiece || opposingBishopsOnEuqallyColoredSquares)
+ where
+  eachSideHasOneKing = popCount (wKings qbb) == 1 && popCount (bKings qbb) == 1
+  noPawnsNorQueens = pbq `xor` bishops qbb == 0
+  noRooks = popCount rqk == 2
+  oneSideHasAtMostOneMinorPiece =
+    (popCount (nbk .&. complement black) == 1 && atMostOneMinorPiece black) ||
+    (popCount (nbk .&. black) == 1 && atMostOneMinorPiece (complement black))
+  opposingBishopsOnEuqallyColoredSquares =
+    popCount (knights qbb) == 0 &&
+    popCount (nbk .&. black) == 2 && popCount (nbk .&. complement black) == 2 &&
+    even (countTrailingZeros (wBishops qbb)) ==
+    even (countTrailingZeros (bBishops qbb))
+  atMostOneMinorPiece mask = popCount (nbk .&. mask) `elem` [1,2]
 
 instance Storable QuadBitboard where
   sizeOf _ = 32
