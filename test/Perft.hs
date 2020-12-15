@@ -24,10 +24,11 @@ main = do
       suite <- readTestSuite "perftsuite.epd"
       runTestSuite suite
     else do
-      for_ [0..6] $ \n -> do
-        putStrLn $ showResult n (perft n startpos)
+      fmap (Just . fold) . for [0..6] $ \n -> do
+        let r = perft n startpos
+        putStrLn $ showResult n r
         hFlush stdout
-      pure Nothing
+        pure r
   end <- getCurrentTime
   case result of
     Just PerftResult{nodes} -> putStrLn $
