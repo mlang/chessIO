@@ -24,10 +24,11 @@ import           Data.Void (Void)
 import           Data.Word ( Word8 )
 import Game.Chess.Internal ( Castle(Queenside, Kingside),
                              Ply, Position(color, moveNumber), Color(Black, White),
-                             PieceType(..), isCapture, pieceAt, toRF, toCoord,
+                             PieceType(..), isCapture, pieceAt,
                              promoteTo, unpack, doPly, unsafeDoPly, legalPlies,
                              inCheck, canCastleKingside, canCastleQueenside,
                              wKscm, wQscm, bKscm, bQscm )
+import Game.Chess.Internal.Square (toIndex, toRF, toCoord)
 import Text.Megaparsec ( optional, (<|>), empty, (<?>), chunk, parse,
                          errorBundlePretty, choice, option, Parsec,
                          MonadParsec(try, token),
@@ -73,7 +74,7 @@ sanPiece = token sanPieceToken mempty <?> "piece"
 fileP, rankP, squareP :: (Stream s, SANToken (Token s)) => Parser s Int
 fileP = token fileToken mempty <?> "file"
 rankP = token rankToken mempty <?> "rank"
-squareP = liftA2 (\f r -> r*8+f) fileP rankP <?> "square"
+squareP = liftA2 (flip $ curry toIndex) fileP rankP <?> "square"
 
 promotionPiece :: (Stream s, SANToken (Token s)) => Parser s PieceType
 promotionPiece = token promotionPieceToken mempty <?> "Q, R, B, N"

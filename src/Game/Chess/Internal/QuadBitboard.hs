@@ -1,7 +1,7 @@
-module Game.Chess.QuadBitboard (
+module Game.Chess.Internal.QuadBitboard (
   -- * The QuadBitboard data type
-  QuadBitboard(..)
-, white, occupied, pnr
+  QuadBitboard
+, occupied, black, white
 , pawns, knights, bishops, rooks, queens, kings
 , wPawns, wKnights, wBishops, wRooks, wQueens, wKings
 , bPawns, bKnights, bBishops, bRooks, bQueens, bKings
@@ -15,7 +15,7 @@ module Game.Chess.QuadBitboard (
 , pattern BlackPawn, pattern BlackKnight, pattern BlackBishop
 , pattern BlackRook, pattern BlackQueen, pattern BlackKing
   -- * Construction
-, empty, standard, square
+, empty, standard
   -- * Access
 , (!), setNibble
   -- * Transformations
@@ -31,33 +31,128 @@ module Game.Chess.QuadBitboard (
 ) where
 
 import Control.Applicative (liftA2)
-import Data.Binary ( Word8, Word64, Binary(put, get) )
+import Data.Bifunctor (first)
+import Data.Binary ( Binary(put, get) )
 import Data.Bits
-    ( Bits(xor, complement, bit, unsafeShiftR, (.&.), unsafeShiftL,
-           (.|.), testBit, setBit, clearBit, popCount),
-      FiniteBits(..) )
+    ( Bits((.|.), (.&.), xor, complement
+          , unsafeShiftR, unsafeShiftL, testBit, setBit, clearBit, popCount)
+    , FiniteBits(..) )
 import Data.Char (ord, toLower)
 import Data.Ix ( Ix(inRange) )
-import Data.List (groupBy, intercalate)
-import Data.String (IsString(..))
+import Data.List ( groupBy, intercalate )
+import Data.String ( IsString(..) )
 import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Generic.Mutable as M
 import Data.Vector.Unboxed (Vector, MVector, Unbox)
+import Data.Word (Word8, Word64)
 import Foreign.Storable
+import Game.Chess.Internal.Square (toIndex, toRF, Sq(A8))
 import GHC.Enum
     ( boundedEnumFrom,
       boundedEnumFromThen,
       predError,
       succError,
       toEnumError )
-import GHC.Ptr (castPtr, plusPtr)
+import GHC.Exts (IsList(Item, fromList, toList))
+import GHC.Ptr ( castPtr, plusPtr )
 import Numeric (showHex)
 
-data QuadBitboard = QBB { black :: {-# UNPACK #-} !Word64
-                        , pbq :: {-# UNPACK #-} !Word64
-                        , nbk :: {-# UNPACK #-} !Word64
-                        , rqk :: {-# UNPACK #-} !Word64
-                        } deriving (Eq)
+data QuadBitboard = QBB { black, pbq, nbk, rqk :: {-# UNPACK #-} !Word64 }
+                    deriving Eq
+
+occupied, pnr, white, pawns, knights, bishops, rooks, queens, kings :: QuadBitboard -> Word64
+occupied = liftA2 (.|.) pbq $ liftA2 (.|.) nbk rqk
+pnr      = liftA2  xor  pbq $ liftA2  xor  nbk rqk
+white    = liftA2  xor  occupied black
+pawns    = liftA2 (.&.) pnr pbq
+knights  = liftA2 (.&.) pnr nbk
+bishops  = liftA2 (.&.) pbq nbk
+rooks    = liftA2 (.&.) pnr rqk
+queens   = liftA2 (.&.) pbq rqk
+kings    = liftA2 (.&.) nbk rqk
+
+wPawns, wKnights, wBishops, wRooks, wQueens, wKings :: QuadBitboard -> Word64
+wPawns   = liftA2 (.&.) pawns (complement . black)
+wKnights = liftA2 (.&.) knights (complement . black)
+wBishops = liftA2 (.&.) bishops (complement . black)
+wRooks   = liftA2 (.&.) rooks (complement . black)
+wQueens  = liftA2 (.&.) queens (complement . black)
+wKings   = liftA2 (.&.) kings (complement . black)
+
+bPawns, bKnights, bBishops, bRooks, bQueens, bKings :: QuadBitboard -> Word64
+bPawns   = liftA2 (.&.) pawns black
+bKnights = liftA2 (.&.) knights black
+bBishops = liftA2 (.&.) bishops black
+bRooks   = liftA2 (.&.) rooks black
+bQueens  = liftA2 (.&.) queens black
+bKings   = liftA2 (.&.) kings black
+
+{-# INLINE pnr #-}
+{-# INLINE occupied #-}
+{-# INLINE white #-}
+{-# INLINE pawns #-}
+{-# INLINE knights #-}
+{-# INLINE bishops #-}
+{-# INLINE rooks #-}
+{-# INLINE queens #-}
+{-# INLINE kings #-}
+{-# INLINE wPawns #-}
+{-# INLINE wKnights #-}
+{-# INLINE wBishops #-}
+{-# INLINE wRooks #-}
+{-# INLINE wQueens #-}
+{-# INLINE wKings #-}
+{-# INLINE bPawns #-}
+{-# INLINE bKnights #-}
+{-# INLINE bBishops #-}
+{-# INLINE bRooks #-}
+{-# INLINE bQueens #-}
+{-# INLINE bKings #-}
+
+pattern NoPiece :: Word4
+pattern NoPiece     = 0
+
+pattern WhitePawn, WhiteKnight, WhiteBishop, WhiteRook, WhiteQueen, WhiteKing
+  :: Word4
+pattern WhitePawn   = 2
+pattern WhiteKnight = 4
+pattern WhiteBishop = 6
+pattern WhiteRook   = 8
+pattern WhiteQueen  = 10
+pattern WhiteKing   = 12
+
+pattern BlackPawn, BlackKnight, BlackBishop, BlackRook, BlackQueen, BlackKing
+  :: Word4
+pattern BlackPawn   = 3
+pattern BlackKnight = 5
+pattern BlackBishop = 7
+pattern BlackRook   = 9
+pattern BlackQueen  = 11
+pattern BlackKing   = 13
+
+instance IsList QuadBitboard where
+  type Item QuadBitboard = (Sq, Word4)
+  fromList = mconcat . map (uncurry singleton . first toIndex)
+  toList qbb = go maxBound [] where
+    go sq xs
+      | sq /= minBound = go (pred sq) xs'
+      | otherwise      = xs'
+     where nb = qbb ! toIndex sq
+           xs' | nb /= NoPiece = (sq, nb) : xs
+               | otherwise     = xs
+
+empty, standard :: QuadBitboard
+empty = QBB 0 0 0 0
+standard = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
+
+-- | bitwise XOR
+instance Semigroup QuadBitboard where
+  {-# INLINE (<>) #-}
+  QBB b0 b1 b2 b3 <> QBB b0' b1' b2' b3' =
+    QBB (b0 `xor` b0') (b1 `xor` b1') (b2 `xor` b2') (b3 `xor` b3')
+
+instance Monoid QuadBitboard where
+  mempty = empty
 
 insufficientMaterial :: QuadBitboard -> Bool
 insufficientMaterial qbb@QBB{black, pbq, nbk, rqk} =
@@ -124,63 +219,24 @@ instance G.Vector Vector QuadBitboard where
     $ G.elemseq (undefined :: Vector a) b3
     z
 
-occupied, pnr, white :: QuadBitboard -> Word64
-occupied QBB{pbq, nbk, rqk} = pbq  .|.  nbk  .|.  rqk
-pnr      QBB{pbq, nbk, rqk} = pbq `xor` nbk `xor` rqk
-white                       = liftA2 xor occupied black
-
-pawns, knights, bishops, rooks, queens, kings :: QuadBitboard -> Word64
-pawns   = liftA2 (.&.) pnr pbq
-knights = liftA2 (.&.) pnr nbk
-bishops = liftA2 (.&.) pbq nbk
-rooks   = liftA2 (.&.) pnr rqk
-queens  = liftA2 (.&.) pbq rqk
-kings   = liftA2 (.&.) nbk rqk
-
-wPawns, wKnights, wBishops, wRooks, wQueens, wKings :: QuadBitboard -> Word64
-wPawns   = liftA2 (.&.) pawns (complement . black)
-wKnights = liftA2 (.&.) knights (complement . black)
-wBishops = liftA2 (.&.) bishops (complement . black)
-wRooks   = liftA2 (.&.) rooks (complement . black)
-wQueens  = liftA2 (.&.) queens (complement . black)
-wKings   = liftA2 (.&.) kings (complement . black)
-
-bPawns, bKnights, bBishops, bRooks, bQueens, bKings :: QuadBitboard -> Word64
-bPawns   = liftA2 (.&.) pawns black
-bKnights = liftA2 (.&.) knights black
-bBishops = liftA2 (.&.) bishops black
-bRooks   = liftA2 (.&.) rooks black
-bQueens  = liftA2 (.&.) queens black
-bKings   = liftA2 (.&.) kings black
-
-{-# INLINE pnr #-}
-{-# INLINE occupied #-}
-{-# INLINE white #-}
-{-# INLINE pawns #-}
-{-# INLINE knights #-}
-{-# INLINE bishops #-}
-{-# INLINE rooks #-}
-{-# INLINE queens #-}
-{-# INLINE kings #-}
-{-# INLINE wPawns #-}
-{-# INLINE wKnights #-}
-{-# INLINE wBishops #-}
-{-# INLINE wRooks #-}
-{-# INLINE wQueens #-}
-{-# INLINE wKings #-}
-{-# INLINE bPawns #-}
-{-# INLINE bKnights #-}
-{-# INLINE bBishops #-}
-{-# INLINE bRooks #-}
-{-# INLINE bQueens #-}
-{-# INLINE bKings #-}
-
-empty, standard :: QuadBitboard
-empty = QBB 0 0 0 0
-standard = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
-
 newtype Word4 = W4 Word8
-              deriving (Bits, Eq, Integral, Ix, Num, Ord, Read, Real, Show)
+              deriving (Bits, Eq, Integral, Ix, Num, Ord, Read, Real)
+
+instance Show Word4 where
+  show NoPiece     = "NoPiece"
+  show WhiteKing   = "WhiteKing"
+  show WhitePawn   = "WhitePawn"
+  show WhiteKnight = "WhiteKnight"
+  show WhiteBishop = "WhiteBishop"
+  show WhiteRook   = "WhiteRook"
+  show WhiteQueen  = "WhiteQueen"
+  show BlackKing   = "BlackKing"
+  show BlackPawn   = "BlackPawn"
+  show BlackKnight = "BlackKnight"
+  show BlackBishop = "BlackBishop"
+  show BlackRook   = "BlackRook"
+  show BlackQueen  = "BlackQueen"
+  show (W4 n)      = "W4 " <> show n
 
 instance Bounded Word4 where
   minBound = 0
@@ -199,35 +255,14 @@ instance Enum Word4 where
 
 instance FiniteBits Word4 where
   finiteBitSize _ = 4
-  countLeadingZeros (W4 x) = countLeadingZeros x
+  countLeadingZeros (W4 x) = countLeadingZeros x - 4
   countTrailingZeros (W4 x) = countTrailingZeros x
 
-pattern NoPiece :: Word4
-pattern NoPiece     = 0
-
-pattern WhitePawn, WhiteKnight, WhiteBishop, WhiteRook, WhiteQueen, WhiteKing
-  :: Word4
-pattern WhitePawn   = 2
-pattern WhiteKnight = 4
-pattern WhiteBishop = 6
-pattern WhiteRook   = 8
-pattern WhiteQueen  = 10
-pattern WhiteKing   = 12
-
-pattern BlackPawn, BlackKnight, BlackBishop, BlackRook, BlackQueen, BlackKing
-  :: Word4
-pattern BlackPawn   = 3
-pattern BlackKnight = 5
-pattern BlackBishop = 7
-pattern BlackRook   = 9
-pattern BlackQueen  = 11
-pattern BlackKing   = 13
-
--- | law: square i x ! i = x where inRange (0,63) i && inRange (0,15) x
-{-# INLINE square #-}
-square :: Int -> Word4 -> QuadBitboard
-square !sq !nb = QBB (f 0) (f 1) (f 2) (f 3) where
-  !b = bit sq
+-- | law: singleton i x ! i = x where inRange (0,63) i && inRange (0,15) x
+{-# INLINE singleton #-}
+singleton :: Int -> Word4 -> QuadBitboard
+singleton !sq !nb = QBB (f 0) (f 1) (f 2) (f 3) where
+  !b = 1 `unsafeShiftL` sq
   f !n = fromIntegral ((nb `unsafeShiftR` n) .&. 1) * b
 
 (!) :: QuadBitboard -> Int -> Word4
@@ -244,12 +279,12 @@ instance Binary QuadBitboard where
   put QBB{..} = put black *> put pbq *> put nbk *> put rqk
 
 instance IsString QuadBitboard where
-  fromString = go (7, 0) mempty where
+  fromString = go (toRF A8) mempty where
     go _ !qbb "" = qbb
     go (!r,_) qbb ('/':xs) = go (r - 1, 0) qbb xs
-    go (!r,!f) !qbb (x:xs)
-      | inRange ('1','8') x = go (r, f + (ord x - ord '0')) qbb xs
-      | otherwise = go (r, f + 1) (qbb <> square (r*8+f) nb) xs where
+    go rf@(!r,!f) !qbb (x:xs)
+      | inRange ('1','8') x = go (r, f + ord x - ord '0') qbb xs
+      | otherwise = go (r, f + 1) (qbb <> singleton (toIndex rf) nb) xs where
         nb = case x of
           'P' -> WhitePawn
           'N' -> WhiteKnight
@@ -265,15 +300,6 @@ instance IsString QuadBitboard where
           'k' -> BlackKing
           _ -> error $ "QuadBitBoard.fromString: Illegal FEN character " <> show x
 
--- | bitwise XOR
-instance Semigroup QuadBitboard where
-  {-# INLINE (<>) #-}
-  QBB b0 b1 b2 b3 <> QBB b0' b1' b2' b3' =
-    QBB (b0 `xor` b0') (b1 `xor` b1') (b2 `xor` b2') (b3 `xor` b3')
-
-instance Monoid QuadBitboard where
-  mempty = empty
-
 instance Show QuadBitboard where
   show QBB{..} =
      "QBB {black = 0x" <> showHex black
@@ -286,7 +312,7 @@ toString qbb = intercalate "/" $ rank <$> [7, 6..0] where
   rank r = concatMap countEmpty . groupBy spaces $ charAt r <$> [0..7]
   countEmpty xs | head xs == spc = show $ length xs
                 | otherwise      = xs
-  spaces x y = x == y && x == spc
+  spaces x y = x == spc && x == y
   charAt r f = maybe spc (if odd nb then toLower else id) $
     lookup (nb `div` 2) $ zip [1..] "PNBRQK"
    where nb = qbb ! (r*8+f)
@@ -299,7 +325,7 @@ move qbb fromSq toSq = qbb <> move' fromSq (qbb ! fromSq) toSq (qbb ! toSq)
 
 move' :: Int -> Word4 -> Int -> Word4 -> QuadBitboard
 move' fromSq fromCode toSq toCode =
-  square fromSq fromCode <> square toSq (fromCode `xor` toCode)
+  singleton fromSq fromCode <> singleton toSq (fromCode `xor` toCode)
 
 whiteKingsideCastle, whiteQueensideCastle, blackKingsideCastle, blackQueensideCastle
   :: QuadBitboard
@@ -311,9 +337,9 @@ blackQueensideCastle = move' 60 BlackKing 58 NoPiece <> move' 56 BlackRook 59 No
 enPassant :: Int -> Int -> QuadBitboard
 enPassant fromSq toSq
   | fromSq < toSq
-  = move' fromSq WhitePawn toSq NoPiece <> square (toSq-8) BlackPawn
+  = move' fromSq WhitePawn toSq NoPiece <> singleton (toSq-8) BlackPawn
   | otherwise
-  = move' fromSq BlackPawn toSq NoPiece <> square (toSq+8) WhitePawn
+  = move' fromSq BlackPawn toSq NoPiece <> singleton (toSq+8) WhitePawn
 
 whitePromotion, blackPromotion :: QuadBitboard -> Int -> Int -> Word4 -> QuadBitboard
 whitePromotion qbb fromSq toSq promoCode =
@@ -323,6 +349,6 @@ blackPromotion qbb fromSq toSq promoCode =
 
 whitePromotion', blackPromotion' :: Int -> Int -> Word4 -> Word4 -> QuadBitboard
 whitePromotion' fromSq toSq toCode promoCode =
-  square fromSq WhitePawn <> square toSq (toCode `xor` promoCode)
+  singleton fromSq WhitePawn <> singleton toSq (toCode `xor` promoCode)
 blackPromotion' fromSq toSq toCode promoCode =
-  square fromSq BlackPawn <> square toSq (toCode `xor` promoCode)
+  singleton fromSq BlackPawn <> singleton toSq (toCode `xor` promoCode)

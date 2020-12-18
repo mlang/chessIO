@@ -40,6 +40,7 @@ default-extensions:
 - BlockArguments
 - DeriveGeneric
 - FlexibleContexts
+- FlexibleInstances
 - GeneralizedNewtypeDeriving
 - LambdaCase
 - MultiParamTypeClasses
@@ -70,7 +71,6 @@ library:
   - Game.Chess.PGN
   - Game.Chess.Polyglot.Book
   - Game.Chess.Polyglot.Hash
-  - Game.Chess.QuadBitboard
   - Game.Chess.UCI
 
 executables:

@@ -9,6 +9,7 @@ module Game.Chess.Polyglot.Book (
 , bookPlies
 , bookForest
 , findPosition
+, pv
 ) where
 
 import Control.Arrow
@@ -19,7 +20,9 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString.Internal as BS
 import qualified Data.ByteString as BS
 import Data.FileEmbed
+import Data.Foldable (fold)
 import Data.List
+import Data.Maybe (listToMaybe)
 import Data.Ord
 import qualified Data.Vector.Storable as VS
 import Data.Tree
@@ -71,9 +74,11 @@ defaultBook, twic :: PolyglotBook
 defaultBook = twic
 twic = fromByteString $(embedFile "book/twic-9g.bin")
 
----- | Predicted Variation.  Return the most popular game.
---pv :: PolyglotBook -> [Ply]
---pv b = head . concatMap paths $ bookForest b startpos
+-- | Predicted Variation.  Return the most popular game.
+pv :: PolyglotBook -> Position -> Maybe [Ply]
+pv b = listToMaybe . concatMap (foldTree f) . bookForest b where
+  f a [] = [[a]]
+  f a xs = (a :) <$> fold xs
 
 -- | A Polyglot opening book.
 newtype PolyglotBook = Book (VS.Vector BookEntry) deriving (Eq)
@@ -117,11 +122,6 @@ makeBook = fromList . concatMap (foldTree f . annot startpos) . weightedForest
 bookForest :: PolyglotBook -> Position -> Forest Ply
 bookForest b p = tree <$> bookPlies b p where
   tree pl = Node pl . bookForest b $ unsafeDoPly p pl
-
---paths :: Tree a -> [[a]]
---paths = foldTree f where
---  f a [] = [[a]]
---  f a xs = (a :) <$> concat xs
 
 -- | Pick a random ply from the book.
 bookPly :: RandomGen g => PolyglotBook -> Position -> Maybe (Rand g Ply)

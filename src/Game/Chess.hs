@@ -39,6 +39,7 @@ module Game.Chess (
 , plyTree, plyForest
 ) where
 
+import Game.Chess.Internal.Square
 import Game.Chess.Internal
 import Game.Chess.SAN
 import Game.Chess.Tree

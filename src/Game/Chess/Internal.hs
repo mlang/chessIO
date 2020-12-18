@@ -29,8 +29,9 @@ import Data.Vector.Unboxed (Vector, (!))
 import qualified Data.Vector.Unboxed as Vector
 import Data.Word ( Word16, Word64 )
 import Foreign.Storable
-import Game.Chess.QuadBitboard (QuadBitboard)
-import qualified Game.Chess.QuadBitboard as QBB
+import Game.Chess.Internal.Square (IsSquare(toIndex, toRF), Sq(..), toCoord)
+import Game.Chess.Internal.QuadBitboard (QuadBitboard)
+import qualified Game.Chess.Internal.QuadBitboard as QBB
 import Text.Read (readMaybe)
 
 capturing :: Position -> Ply -> Maybe PieceType
@@ -73,44 +74,13 @@ opponent Black = White
 
 data Piece = Piece !Color !PieceType deriving (Eq, Show)
 
-data Sq = A1 | B1 | C1 | D1 | E1 | F1 | G1 | H1
-        | A2 | B2 | C2 | D2 | E2 | F2 | G2 | H2
-        | A3 | B3 | C3 | D3 | E3 | F3 | G3 | H3
-        | A4 | B4 | C4 | D4 | E4 | F4 | G4 | H4
-        | A5 | B5 | C5 | D5 | E5 | F5 | G5 | H5
-        | A6 | B6 | C6 | D6 | E6 | F6 | G6 | H6
-        | A7 | B7 | C7 | D7 | E7 | F7 | G7 | H7
-        | A8 | B8 | C8 | D8 | E8 | F8 | G8 | H8
-        deriving (Bounded, Enum, Eq, Ix, Ord, Show)
-
-class IsSquare sq where
-  toIndex :: sq -> Int
-
-toRF :: IsSquare sq => sq -> (Int, Int)
-toRF sq = toIndex sq `divMod` 8
-
-toCoord :: (IsSquare sq, IsString s) => sq -> s
-toCoord (toRF -> (r,f)) = fromString [chr (f + ord 'a'), chr (r + ord '1')]
-
-instance IsSquare Sq where
-  toIndex = fromEnum
-
-instance IsSquare Int where
-  toIndex = id
-
-isDark :: IsSquare sq => sq -> Bool
-isDark (toIndex -> sq) = (0xaa55aa55aa55aa55 :: Word64) `testBit` sq
-
-isLight :: IsSquare sq => sq -> Bool
-isLight = not . isDark
-
 data Position = Position {
   qbb :: {-# UNPACK #-} !QuadBitboard
 , color :: !Color
   -- ^ active color
-, flags :: !Word64
-, halfMoveClock :: !Int
-, moveNumber :: !Int
+, flags :: {-# UNPACK #-} !Word64
+, halfMoveClock :: {-# UNPACK #-} !Int
+, moveNumber :: {-# UNPACK #-} !Int
   -- ^ number of the full move
 }
 
@@ -123,7 +93,7 @@ instance Eq Position where
   a == b = qbb a == qbb b && color a == color b && flags a == flags b
 
 repetitions :: [Position] -> Maybe (Int, Position)
-repetitions p = listToMaybe . sortOn (Down . fst) $ fmap f (nub p) where
+repetitions p = listToMaybe . sortOn (Down . fst) . fmap f $ nub p where
   f x = (count x p, x)
   count x = length . filter (== x)
 
@@ -131,7 +101,7 @@ instance Show Position where
   show p = '"' : toFEN p <> ['"']
 
 insufficientMaterial :: Position -> Bool
-insufficientMaterial Position{qbb} = QBB.insufficientMaterial qbb
+insufficientMaterial = QBB.insufficientMaterial . qbb
 
 -- | Construct a position from Forsyth-Edwards-Notation.
 fromFEN :: String -> Maybe Position
@@ -167,9 +137,13 @@ fromFEN fen
 
 -- | Convert a position to Forsyth-Edwards-Notation.
 toFEN :: Position -> String
-toFEN (Position bb c flgs hm mn) = unwords [
-    QBB.toString bb
-  , showColor c, showCst (flgs `clearMask` epMask), showEP (flgs .&. epMask), show hm, show mn
+toFEN Position{qbb, color, flags, halfMoveClock, moveNumber} = unwords
+  [ QBB.toString qbb
+  , showColor color
+  , showCst (flags `clearMask` epMask)
+  , showEP (flags .&. epMask)
+  , show halfMoveClock
+  , show moveNumber
   ]
  where
   showColor White = "w"
@@ -185,8 +159,7 @@ toFEN (Position bb c flgs hm mn) = unwords [
     bqs (v, xs) | v `testMask` crbQs = (v, 'q':xs)
                 | otherwise          = (v, xs)
   showEP 0 = "-"
-  showEP x = chr (f + ord 'a') : [chr (r + ord '1')] where
-    (r, f) = toRF $ bitScanForward x
+  showEP x = toCoord (bitScanForward x)
 
 occupiedBy :: Color -> QuadBitboard -> Word64
 occupiedBy White = QBB.white

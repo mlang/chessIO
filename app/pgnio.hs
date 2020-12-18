@@ -6,12 +6,13 @@ import System.Exit
 import System.IO
 
 main :: IO ()
-main = getArgs >>= \case
-  [fp] -> readPGNFile fp >>= \case
-    Right pgn -> do
-      hPutPGN stdout breadthFirst pgn
-      exitSuccess
-    Left err -> do
-      hPutStr stderr err
-      exitWith (ExitFailure 1)
-  _ -> hPutStrLn stderr "Specify PGN file as argument"
+main = getArgs >>= readPGNFiles >>= \case
+  Right pgn -> do
+    hPutPGN stdout breadthFirst pgn
+    exitSuccess
+  Left err -> do
+    hPutStr stderr err
+    exitWith $ ExitFailure 1
+
+readPGNFiles :: [FilePath] -> IO (Either String PGN)
+readPGNFiles = fmap (fmap mconcat . sequenceA) . traverse readPGNFile
