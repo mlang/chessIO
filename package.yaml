@@ -95,6 +95,11 @@ executables:
     - chessIO
     - optparse-applicative
     - time
+  book2pgn:
+    main:         book2pgn.hs
+    source-dirs:  app
+    dependencies:
+    - chessIO
 
 tests:
   perft:

@@ -4,12 +4,13 @@ module Game.Chess.Polyglot.Book (
   PolyglotBook
 , defaultBook, twic
 , fromByteString, toByteString
-, readPolyglotFile, writePolyglotFile, makeBook
+, readPolyglotFile, writePolyglotFile
+, makeBook, toPGN
 , bookPly
 , bookPlies
 , bookForest
+, variations
 , findPosition
-, pv
 ) where
 
 import Control.Arrow
@@ -24,6 +25,7 @@ import Data.Foldable (fold)
 import Data.List
 import Data.Maybe (listToMaybe)
 import Data.Ord
+import Data.String (IsString(fromString))
 import qualified Data.Vector.Storable as VS
 import Data.Tree
 import Data.Word
@@ -74,12 +76,6 @@ defaultBook, twic :: PolyglotBook
 defaultBook = twic
 twic = fromByteString $(embedFile "book/twic-9g.bin")
 
--- | Predicted Variation.  Return the most popular game.
-pv :: PolyglotBook -> Position -> Maybe [Ply]
-pv b = listToMaybe . concatMap (foldTree f) . bookForest b where
-  f a [] = [[a]]
-  f a xs = (a :) <$> fold xs
-
 -- | A Polyglot opening book.
 newtype PolyglotBook = Book (VS.Vector BookEntry) deriving (Eq)
 
@@ -107,6 +103,11 @@ fromList = Book . VS.fromList . sort
 
 --toList :: PolyglotBook -> [BookEntry]
 --toList (Book v) = VS.toList v
+
+toPGN :: PolyglotBook -> Position -> PGN
+toPGN b p = PGN [gameFromForest meta (bookForest b p) Undecided] where
+  meta | p == startpos = []
+       | otherwise     = [("FEN", fromString $ toFEN p)]
 
 makeBook :: PGN -> PolyglotBook
 makeBook = fromList . concatMap (foldTree f . annot startpos) . weightedForest
@@ -137,6 +138,12 @@ bookPlies :: PolyglotBook -> Position -> [Ply]
 bookPlies b pos
   | halfMoveClock pos > 150 = []
   | otherwise = ply <$> findPosition b pos
+
+-- | Predicted Variations.  Return the most popular game.
+variations :: PolyglotBook -> Position -> [[Ply]]
+variations b = concatMap (foldTree f) . bookForest b where
+  f a [] = [[a]]
+  f a xs = (a :) <$> fold xs
 
 findPosition :: PolyglotBook -> Position -> [BookEntry]
 findPosition (Book v) pos = fmap conv . VS.toList .
