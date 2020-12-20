@@ -23,7 +23,6 @@ import qualified Data.ByteString as BS
 import Data.FileEmbed
 import Data.Foldable (fold)
 import Data.List
-import Data.Maybe (listToMaybe)
 import Data.Ord
 import Data.String (IsString(fromString))
 import qualified Data.Vector.Storable as VS
@@ -121,7 +120,7 @@ makeBook = fromList . concatMap (foldTree f . annot startpos) . weightedForest
     = concat xs
 
 bookForest :: PolyglotBook -> Position -> Forest Ply
-bookForest b = (fmap.fmap) (head . fmap snd) . forest [] where
+bookForest b = (fmap.fmap) (snd . head) . forest [] where
   forest pls p = tree pls p <$> filter (not . seen pls p) (bookPlies b p)
   tree pls p pl = Node pls' . forest pls' $ unsafeDoPly p pl where
     pls' = (p, pl) : pls
