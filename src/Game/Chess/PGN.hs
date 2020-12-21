@@ -2,7 +2,8 @@
 module Game.Chess.PGN (
   readPGNFile, gameFromForest, PGN(..), Game, Outcome(..)
 , hPutPGN, pgnDoc, RAVOrder, breadthFirst, depthFirst, gameDoc
-, weightedForest) where
+, weightedForest
+) where
 
 import Control.Monad
 import Data.Bifunctor
@@ -44,6 +45,15 @@ data Outcome = Win Color
              | Undecided
              deriving (Eq, Show)
 
+instance Ord Outcome where
+  Win _ `compare` Win _ = EQ
+  Win _ `compare` _ = GT
+  _ `compare` Win _ = LT
+  Draw `compare` Draw = EQ
+  Draw `compare` _ = GT
+  _ `compare` Draw = LT
+  Undecided `compare` Undecided = EQ
+
 instance Pretty Outcome where
   pretty (Win White) = "1-0"
   pretty (Win Black) = "0-1"
@@ -52,7 +62,7 @@ instance Pretty Outcome where
 
 data PlyData = PlyData {
   prefixNAG :: ![Int]
-, ply :: !Ply
+, pgnPly :: !Ply
 , suffixNAG :: ![Int]
 } deriving (Eq, Show)
 
@@ -173,7 +183,7 @@ gameDoc ro (tl, mt)
       | otherwise = startpos
 
 tagsDoc :: [(ByteString, Text)] -> Doc ann
-tagsDoc = vsep . fmap tagpair where
+tagsDoc = fuse Shallow . vsep . fmap tagpair where
   tagpair (k, esc -> v) = brackets $ pretty (BS.unpack k) <+> dquotes (pretty v)
   esc = T.concatMap e where
     e '\\' = T.pack "\\\\"
@@ -189,7 +199,7 @@ moveDoc ro p (o,f) = fillSep (go p True f <> [pretty o]) <> line where
     | otherwise
     = pnag <> (san:snag) <> rav <> go pos' (not . null $ rav) (subForest t)
    where
-    pl = ply . rootLabel $ t
+    pl = pgnPly . rootLabel $ t
     san = pretty $ unsafeToSAN pos pl
     pos' = unsafeDoPly pos pl
     pnag = prettynag <$> prefixNAG (rootLabel t)
@@ -199,16 +209,15 @@ moveDoc ro p (o,f) = fillSep (go p True f <> [pretty o]) <> line where
   prettynag n = "$" <> pretty n
 
 weightedForest :: PGN -> Forest (Rational, Ply)
-weightedForest (PGN games) = merge . concatMap rate $ snd <$> filter ok games
- where
+weightedForest (PGN games) = merge . concatMap rate $ snd <$> filter ok games where
   ok (tags, (o, _)) = isNothing (lookup "FEN" tags) && o /= Undecided
   rate (o, ts) = f startpos <$> trunk ts where
     w c | o == Win c = 1
         | o == Win (opponent c) = -1
         | o == Draw = 1 % 2
         | otherwise = 0
-    f pos (Node a ts') = Node (w (color pos), ply a) $
-      f (unsafeDoPly pos (ply a)) <$> ts'
+    f pos (Node a ts') = Node (w (color pos), pgnPly a) $
+      f (unsafeDoPly pos (pgnPly a)) <$> ts'
   trunk [] = []
   trunk (x:_) = [x { subForest = trunk (subForest x)}]
   merge [] = []
