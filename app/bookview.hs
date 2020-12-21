@@ -1,28 +1,35 @@
 {-# LANGUAGE TemplateHaskell #-}
-import Control.Monad (void)
-import Data.List (elemIndex, intersperse)
+import Control.Monad ( void )
+import Data.List ( elemIndex, intersperse )
 import Data.List.Extra ( chunksOf, foldl' )
-import Data.Maybe (fromJust, fromMaybe)
-import Data.Tree (Tree(..))
-import Data.Tree.Zipper (TreePos, Full, label, fromForest, nextTree, next, prev, firstChild, parent, forest)
+import Data.Maybe ( fromJust, fromMaybe )
+import Data.Tree ( Tree(..) )
+import Data.Tree.Zipper ( TreePos, Full
+                        , label, forest, fromForest, nextTree
+                        )
+import qualified Data.Tree.Zipper as TreePos ( next, prev, firstChild, parent )
 import qualified Data.Vector as Vec
-import Game.Chess
-import Game.Chess.Polyglot.Book
-import Game.Chess.Tree
-import Lens.Micro
-import Lens.Micro.TH
+import Game.Chess ( Color(..), PieceType(..), Sq(..), toIndex, isDark
+                  , Position, startpos, pieceAt
+                  , Ply, plyTarget, doPly, toSAN, varToSAN
+                  )
+import Game.Chess.Polyglot.Book ( defaultBook, bookForest )
+import Game.Chess.Tree ( pathTree )
+import Lens.Micro ( over, (&), (^.), (.~) )
+import Lens.Micro.TH ( makeLenses )
 import qualified Graphics.Vty as V
 
-import qualified Brick.Types as T
-import qualified Brick.Main as M
-import qualified Brick.Widgets.Center as C
-import qualified Brick.Widgets.Border as B
+import Brick.Main ( App(..), defaultMain, continue, halt )
 import qualified Brick.Focus as F
 import qualified Brick.Widgets.List as L
-import Brick.AttrMap (AttrMap, AttrName, attrMap)
+import Brick.AttrMap (AttrName, attrMap)
 import Brick.Util (on)
-import Brick.Types (Widget)
-import Brick.Widgets.Core ( showCursor, withAttr, hLimit, hBox, vBox, str, strWrap, (<=>))
+import Brick.Types ( EventM, Next, Widget, Location(Location), BrickEvent( VtyEvent ) )
+import Brick.Widgets.Core ( showCursor, withAttr, hLimit, hBox, vBox, str, strWrap
+                          , (<=>)
+                          )
+import Brick.Widgets.Center ( hCenter )
+import Brick.Widgets.Border ( border )
 
 data Name = Board | List deriving (Show, Ord, Eq)
 
@@ -48,10 +55,10 @@ plyList st = L.list List (Vec.fromList plies) 1 & L.listSelectedL .~ n where
 selectedAttr :: AttrName
 selectedAttr = "selected"
 
-board :: Position -> Maybe Int -> Widget Name
-board pos tgt = vBox $ map (hBox . spacer . map pc) squares where
+renderPosition :: Position -> Maybe Int -> Widget Name
+renderPosition pos tgt = vBox $ map (hBox . spacer . map pc) squares where
   squares = reverse $ chunksOf 8 [A1 .. H8]
-  c sq | Just t <- tgt, t == toIndex sq = showCursor Board $ T.Location (0,0)
+  c sq | Just t <- tgt, t == toIndex sq = showCursor Board $ Location (0,0)
        | otherwise                      = id
   pc sq = c sq $ case pieceAt pos sq of
     Just (White, Pawn)   -> str "P"
@@ -70,8 +77,15 @@ board pos tgt = vBox $ map (hBox . spacer . map pc) squares where
             | otherwise  -> str " "
   spacer = (str " " :) . (<> [str " "]) . intersperse (str " ")
 
-bookview :: M.App St e Name
-bookview = M.App { .. } where
+next, prev, firstChild, parent, nextCursor :: St -> EventM Name (Next St)
+next = continue . over treePos (fromMaybe <*> TreePos.next)
+prev = continue . over treePos (fromMaybe <*> TreePos.prev)
+firstChild = continue . over treePos (fromMaybe <*> TreePos.firstChild)
+parent = continue . over treePos (fromMaybe <*> TreePos.parent)
+nextCursor = continue . over focusRing F.focusNext
+
+app :: App St e Name
+app = App { .. } where
   appStartEvent = pure
   appDraw st = [ui] where
     ui = hBox [hLimit 9 list, hLimit 23 game]
@@ -79,22 +93,26 @@ bookview = M.App { .. } where
     drawPly p foc = putCursorIf foc (0,0)
                   . withAttrIf foc selectedAttr
                   . str . toSAN p 
-    putCursorIf True loc = showCursor List $ T.Location loc
+    putCursorIf True loc = showCursor List $ Location loc
     putCursorIf False _  = id
     withAttrIf True attr = withAttr attr
     withAttrIf False _   = id
-    game = C.hCenter (B.border (board (position st) (Just . targetSquare $ st)))
-       <=> B.border var
+    game = hCenter (border board) <=> border var
+    board = renderPosition (position st) (Just . targetSquare $ st)
     var = strWrap . varToSAN startpos $ st ^. treePos & label
-  appHandleEvent st (T.VtyEvent e) = case e of
-    V.EvKey V.KDown []        -> M.continue $ st & treePos %~ (fromMaybe <*> next)
-    V.EvKey V.KUp []          -> M.continue $ st & treePos %~ (fromMaybe <*> prev)
-    V.EvKey V.KRight []       -> M.continue $ st & treePos %~ (fromMaybe <*> firstChild)
-    V.EvKey V.KLeft []        -> M.continue $ st & treePos %~ (fromMaybe <*> parent)
-    V.EvKey (V.KChar '\t') [] -> M.continue $ st & focusRing %~ F.focusNext
-    V.EvKey V.KEsc []         -> M.halt st
-    _                         -> M.continue st
-  appHandleEvent st _ = M.continue st
+  appHandleEvent st (VtyEvent e) = case e of
+    V.EvKey V.KDown []        -> next st
+    V.EvKey (V.KChar 'j') []  -> next st
+    V.EvKey V.KUp []          -> prev st
+    V.EvKey (V.KChar 'k') []  -> prev st
+    V.EvKey V.KRight []       -> firstChild st
+    V.EvKey (V.KChar 'l') []  -> firstChild st
+    V.EvKey V.KLeft []        -> parent st
+    V.EvKey (V.KChar 'h') []  -> parent st
+    V.EvKey (V.KChar '\t') [] -> nextCursor st
+    V.EvKey V.KEsc []         -> halt st
+    _                         -> continue st
+  appHandleEvent st _          = continue st
   appAttrMap = const $ attrMap V.defAttr
              [(selectedAttr, V.white `on` V.green)
              ]
@@ -107,4 +125,4 @@ initialState = St tp fr where
   fr = F.focusRing [List, Board]
 
 main :: IO ()
-main = void $ M.defaultMain bookview initialState
+main = void $ defaultMain app initialState
