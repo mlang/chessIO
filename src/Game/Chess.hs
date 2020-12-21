@@ -17,7 +17,7 @@ package name chessIO.
 module Game.Chess (
   -- * Chess positions
   Color(..), opponent
-, Sq(..), isLight, isDark
+, IsSquare(toIndex, toRF), Sq(..), isLight, isDark
 , PieceType(..), Castle(..)
 , Position, startpos, color, moveNumber, halfMoveClock, pieceAt, inCheck
 , castlingRights, canCastleKingside, canCastleQueenside
@@ -27,7 +27,7 @@ module Game.Chess (
   -- ** Position tree
 , positionTree, positionForest
   -- * Chess moves
-, Ply(..)
+, Ply(..), plySource, plyTarget, plyPromotion
   -- ** Converting from/to algebraic notation
 , strictSAN, relaxedSAN, fromSAN, toSAN, unsafeToSAN, varToSAN, fromUCI, toUCI
 , fromPolyglot, toPolyglot

@@ -194,6 +194,18 @@ promoteTo (Ply x) = Ply . set where
   set Queen  = x .&. 0xfff .|. 0x4000
   set _      = x
 
+plySource, plyTarget :: Ply -> Int
+plySource (Ply x) = fromIntegral ((x `unsafeShiftR` 6) .&. 0b111111)
+plyTarget (Ply x) = fromIntegral (x .&. 0b111111)
+
+plyPromotion :: Ply -> Maybe PieceType
+plyPromotion (Ply x) = case x `unsafeShiftR` 12 of
+  1 -> Just Knight
+  2 -> Just Bishop
+  3 -> Just Rook
+  4 -> Just Queen
+  _ -> Nothing
+
 unpack :: Ply -> (Int, Int, Maybe PieceType)
 unpack (Ply x) = ( fromIntegral ((x `unsafeShiftR` 6) .&. 0b111111)
                  , fromIntegral (x .&. 0b111111)

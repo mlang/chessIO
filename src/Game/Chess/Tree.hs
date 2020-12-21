@@ -19,4 +19,4 @@ variationForest :: Position -> Forest [Ply]
 variationForest = fmap pathTree . plyForest
 
 pathTree :: Tree a -> Tree [a]
-pathTree = foldTree $ \a xs -> Node [a] $ (fmap . fmap) (a :) xs
+pathTree = foldTree $ \a -> Node [a] . (fmap . fmap) (a :)

@@ -71,6 +71,7 @@ library:
   - Game.Chess.PGN
   - Game.Chess.Polyglot.Book
   - Game.Chess.Polyglot.Hash
+  - Game.Chess.Tree
   - Game.Chess.UCI
 
 executables:
@@ -100,6 +101,18 @@ executables:
     source-dirs:  app
     dependencies:
     - chessIO
+  bookview:
+    main:         bookview.hs
+    source-dirs:  app
+    ghc-options: -threaded
+    dependencies:
+    - chessIO
+    - brick
+    - rosezipper
+    - vty
+    - microlens
+    - microlens-th
+
 
 tests:
   perft:

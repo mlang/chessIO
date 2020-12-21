@@ -120,11 +120,11 @@ makeBook = fromList . concatMap (foldTree f . annot startpos) . weightedForest
     = concat xs
 
 bookForest :: PolyglotBook -> Position -> Forest Ply
-bookForest b = (fmap.fmap) (snd . head) . forest [] where
-  forest pls p = tree pls p <$> filter (not . seen pls p) (bookPlies b p)
-  tree pls p pl = Node pls' . forest pls' $ unsafeDoPly p pl where
-    pls' = (p, pl) : pls
-  seen pls p pl = doPly p pl `elem` map fst pls
+bookForest b = (fmap . fmap) (snd . head) . forest [] where
+  forest pls p = tree pls p <$> filter (not . seen pls) (plies p)
+  tree pls p (pl, p') = Node pls' $ forest pls' p' where pls' = (p, pl) : pls
+  plies p = f <$> bookPlies b p where f pl = (pl, doPly p pl)
+  seen pls (_, p') = p' `elem` map fst pls
 
 -- | Pick a random ply from the book.
 bookPly :: RandomGen g => PolyglotBook -> Position -> Maybe (Rand g Ply)
