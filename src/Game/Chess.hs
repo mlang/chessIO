@@ -24,8 +24,6 @@ module Game.Chess (
 , insufficientMaterial, repetitions
   -- ** Converting from/to Forsyth-Edwards-Notation
 , fromFEN, toFEN
-  -- ** Position tree
-, positionTree, positionForest
   -- * Chess moves
 , Ply(..), plySource, plyTarget, plyPromotion
   -- ** Converting from/to algebraic notation
@@ -35,11 +33,8 @@ module Game.Chess (
 , legalPlies
   -- ** Executing moves
 , doPly, unsafeDoPly
-  -- ** Move trees
-, plyTree, plyForest
 ) where
 
 import Game.Chess.Internal.Square
+import Game.Chess.Internal.SAN
 import Game.Chess.Internal
-import Game.Chess.SAN
-import Game.Chess.Tree

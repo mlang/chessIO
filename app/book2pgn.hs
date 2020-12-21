@@ -1,6 +1,6 @@
 import Game.Chess
 import Game.Chess.PGN
-import Game.Chess.Polyglot.Book
+import Game.Chess.Polyglot
 import System.IO
 
 main :: IO ()

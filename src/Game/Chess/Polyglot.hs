@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Game.Chess.Polyglot.Book (
+module Game.Chess.Polyglot (
   PolyglotBook
 , defaultBook, twic
 , fromByteString, toByteString

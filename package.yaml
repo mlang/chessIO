@@ -69,8 +69,7 @@ library:
   exposed-modules:
   - Game.Chess
   - Game.Chess.PGN
-  - Game.Chess.Polyglot.Book
-  - Game.Chess.Polyglot.Hash
+  - Game.Chess.Polyglot
   - Game.Chess.Tree
   - Game.Chess.UCI
 

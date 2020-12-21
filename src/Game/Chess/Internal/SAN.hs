@@ -1,5 +1,5 @@
 {-# LANGUAGE PolyKinds, FlexibleInstances, GADTs, ScopedTypeVariables #-}
-module Game.Chess.SAN (
+module Game.Chess.Internal.SAN (
   strictSAN, relaxedSAN, fromSAN,
   toSAN, unsafeToSAN, varToSAN
 ) where

@@ -1,4 +1,8 @@
-module Game.Chess.Tree where
+module Game.Chess.Tree (
+  positionTree, positionForest
+, plyTree, plyForest
+, pathTree
+) where
 
 import Data.Tree ( Tree(Node), Forest, foldTree )
 import Game.Chess.Internal
@@ -14,9 +18,6 @@ plyForest pos = plyTree pos <$> legalPlies pos
 
 plyTree :: Position -> Ply -> Tree Ply
 plyTree pos ply = Node ply . plyForest $ unsafeDoPly pos ply
-
-variationForest :: Position -> Forest [Ply]
-variationForest = fmap pathTree . plyForest
 
 pathTree :: Tree a -> Tree [a]
 pathTree = foldTree $ \a -> Node [a] . (fmap . fmap) (a :)

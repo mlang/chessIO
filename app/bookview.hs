@@ -13,7 +13,7 @@ import Game.Chess ( Color(..), PieceType(..), Sq(..), toIndex, isDark
                   , Position, startpos, pieceAt
                   , Ply, plyTarget, doPly, toSAN, varToSAN
                   )
-import Game.Chess.Polyglot.Book ( defaultBook, bookForest )
+import Game.Chess.Polyglot ( defaultBook, bookForest )
 import Game.Chess.Tree ( pathTree )
 import Lens.Micro ( over, (&), (^.), (.~) )
 import Lens.Micro.TH ( makeLenses )
@@ -25,8 +25,8 @@ import qualified Brick.Widgets.List as L
 import Brick.AttrMap (AttrName, attrMap)
 import Brick.Util (on)
 import Brick.Types ( EventM, Next, Widget, Location(Location), BrickEvent( VtyEvent ) )
-import Brick.Widgets.Core ( showCursor, withAttr, hLimit, hBox, vBox, str, strWrap
-                          , (<=>)
+import Brick.Widgets.Core ( showCursor, withAttr, hLimit, vLimit, hBox, vBox, str, strWrap
+                          , (<+>), (<=>)
                           )
 import Brick.Widgets.Center ( hCenter )
 import Brick.Widgets.Border ( border )
@@ -56,7 +56,10 @@ selectedAttr :: AttrName
 selectedAttr = "selected"
 
 renderPosition :: Position -> Maybe Int -> Widget Name
-renderPosition pos tgt = vBox $ map (hBox . spacer . map pc) squares where
+renderPosition pos tgt = ranks <+> border board <=> files where
+  ranks = vBox (str " " : map (str . show) [8, 7..1] <> [str " "])
+  files = str "   a b c d e f g h  "
+  board = hLimit 17 . vLimit 8 . vBox $ map (hBox . spacer . map pc) squares
   squares = reverse $ chunksOf 8 [A1 .. H8]
   c sq | Just t <- tgt, t == toIndex sq = showCursor Board $ Location (0,0)
        | otherwise                      = id
@@ -97,7 +100,7 @@ app = App { .. } where
     putCursorIf False _  = id
     withAttrIf True attr = withAttr attr
     withAttrIf False _   = id
-    game = hCenter (border board) <=> border var
+    game = hCenter board <=> border var
     board = renderPosition (position st) (Just . targetSquare $ st)
     var = strWrap . varToSAN startpos $ st ^. treePos & label
   appHandleEvent st (VtyEvent e) = case e of

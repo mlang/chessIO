@@ -13,7 +13,7 @@ import Data.Time.Clock
 import Data.Tree
 import Game.Chess
 import Game.Chess.PGN
-import Game.Chess.Polyglot.Book
+import Game.Chess.Polyglot
 import Game.Chess.UCI
 import Options.Applicative
 import System.IO (hPutStrLn, stderr)

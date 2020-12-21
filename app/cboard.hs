@@ -18,7 +18,7 @@ import Game.Chess
       unsafeToSAN, Color(Black, White),
       PieceType(King, Pawn, Knight, Bishop, Rook, Queen),
       Ply, Position, Sq(H8, A1), varToSAN )
-import Game.Chess.Polyglot.Book
+import Game.Chess.Polyglot
     ( PolyglotBook, defaultBook, readPolyglotFile, bookPlies, bookPly )
 import Game.Chess.UCI
     ( addPly,
