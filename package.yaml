@@ -83,11 +83,6 @@ executables:
     - chessIO
     - haskeline
     - mtl
-  pgnio:
-    main:         pgnio.hs
-    source-dirs:  app
-    dependencies:
-    - chessIO
   polyplay:
     main:         polyplay.hs
     source-dirs:  app
@@ -95,23 +90,18 @@ executables:
     - chessIO
     - optparse-applicative
     - time
-  book2pgn:
-    main:         book2pgn.hs
-    source-dirs:  app
-    dependencies:
-    - chessIO
-  bookview:
-    main:         bookview.hs
+  cbookview:
+    main:         cbookview.hs
     source-dirs:  app
     ghc-options: -threaded
     dependencies:
     - chessIO
-    - brick
     - rosezipper
+    - filepath
+    - brick
     - vty
     - microlens
     - microlens-th
-    - filepath
 
 tests:
   perft:
