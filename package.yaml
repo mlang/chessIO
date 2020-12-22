@@ -111,7 +111,7 @@ executables:
     - vty
     - microlens
     - microlens-th
-
+    - filepath
 
 tests:
   perft:

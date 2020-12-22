@@ -18,6 +18,7 @@ import Game.Chess ( Color(..), PieceType(..), Sq(..), toIndex, isDark
                   , Ply, plyTarget, doPly, toSAN, varToSAN
                   )
 import Game.Chess.Polyglot ( defaultBook, bookForest, readPolyglotFile )
+import Game.Chess.PGN
 import Game.Chess.Tree ( plyForest, pathTree )
 import Lens.Micro ( over, (&), (^.), (.~) )
 import Lens.Micro.TH ( makeLenses )
@@ -34,6 +35,7 @@ import Brick.Widgets.Core ( showCursor, withAttr, hLimit, vLimit, hBox, vBox, st
                           )
 import Brick.Widgets.Center ( hCenter )
 import Brick.Widgets.Border ( border )
+import System.FilePath
 import System.Environment ( getArgs )
 
 data Name = List | Board deriving (Show, Ord, Eq)
@@ -156,9 +158,16 @@ main = do
   as <- getArgs
   case as of
     [] -> void $ defaultMain app initialState
-    [fp] -> do
-      book <- readPolyglotFile fp
-      case loadForest (bookForest book) startpos initialState of
-        Just state -> void $ defaultMain app state
-        Nothing -> putStrLn "No moves found in book"
+    [fp] -> case takeExtension fp of
+      ".bin" -> do
+        book <- readPolyglotFile fp
+        case loadForest (bookForest book) startpos initialState of
+          Just st -> void $ defaultMain app st
+          Nothing -> putStrLn "No moves found in book"
+      ".pgn" -> readPGNFile fp >>= \case
+        Right pgn -> case loadForest (const $ pgnForest pgn) startpos initialState of
+          Just st -> void $ defaultMain app st
+          Nothing -> putStrLn "No moves found in PGN"
+        Left err -> putStrLn err
+      ext -> putStrLn $ "Unknown extension " <> ext <> ", only .bin (polyglot) and .pgn is supposed"
     _ -> putStrLn "Too many arguments."

@@ -1,6 +1,6 @@
 {-# LANGUAGE GADTs #-}
 module Game.Chess.PGN (
-  readPGNFile, gameFromForest, PGN(..), Game, Outcome(..)
+  readPGNFile, gameFromForest, pgnForest, PGN(..), Game, Outcome(..)
 , hPutPGN, pgnDoc, RAVOrder, breadthFirst, depthFirst, gameDoc
 , weightedForest
 ) where
@@ -44,6 +44,18 @@ data Outcome = Win Color
              | Draw
              | Undecided
              deriving (Eq, Show)
+
+pgnForest :: PGN -> Forest Ply
+pgnForest (PGN gs) = merge $ concatMap ((fmap . fmap) pgnPly . snd . snd) gs
+
+merge :: Eq a => Forest a -> Forest a
+merge = foldl mergeTree [] where
+  merge' l r = l { subForest = foldl mergeTree (subForest l) (subForest r) }
+  mergeTree [] y = [y]
+  mergeTree (x:xs) y
+    | rootLabel x == rootLabel y = x `merge'` y : xs
+    | otherwise = x : xs `mergeTree` y
+
 
 instance Ord Outcome where
   Win _ `compare` Win _ = EQ
