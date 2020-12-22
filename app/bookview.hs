@@ -1,13 +1,17 @@
 {-# LANGUAGE TemplateHaskell #-}
+import Prelude hiding (last)
 import Control.Monad ( void )
+import Data.Foldable ( foldl' )
 import Data.List ( elemIndex, intersperse )
-import Data.List.Extra ( chunksOf, foldl' )
+import Data.List.Extra ( chunksOf )
+import Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NonEmpty
 import Data.Maybe ( fromJust, fromMaybe )
 import Data.Tree ( Tree(..), Forest )
 import Data.Tree.Zipper ( TreePos, Full
-                        , label, forest, fromForest, nextTree
+                        , label, forest, fromForest, nextTree, prevTree
                         )
-import qualified Data.Tree.Zipper as TreePos ( next, prev, firstChild, parent )
+import qualified Data.Tree.Zipper as TreePos
 import qualified Data.Vector as Vec
 import Game.Chess ( Color(..), PieceType(..), Sq(..), toIndex, isDark
                   , Position, startpos, pieceAt
@@ -30,32 +34,32 @@ import Brick.Widgets.Core ( showCursor, withAttr, hLimit, vLimit, hBox, vBox, st
                           )
 import Brick.Widgets.Center ( hCenter )
 import Brick.Widgets.Border ( border )
-import System.Environment
+import System.Environment ( getArgs )
 
-data Name = Board | List deriving (Show, Ord, Eq)
+data Name = List | Board deriving (Show, Ord, Eq)
 
 data St = St { _initialPosition :: Position
-             , _treePos :: TreePos Full [Ply]
+             , _treePos :: TreePos Full (NonEmpty Ply)
              , _focusRing :: F.FocusRing Name
              }
 
 makeLenses ''St
 
 position, previousPosition :: St -> Position
-position st = foldl' doPly (st^.initialPosition) $ st^.treePos & label
-previousPosition st = foldl' doPly (st^.initialPosition) $ st^.treePos & label & init
+position st = foldl' doPly (st^.initialPosition) (st^.treePos&label)
+previousPosition st = foldl' doPly (st^.initialPosition) (st^.treePos&label&NonEmpty.init)
 
 targetSquare :: St -> Int
-targetSquare = plyTarget . last . label . _treePos
+targetSquare = plyTarget . NonEmpty.last . label . _treePos
 
-elemList :: Eq a => n -> [a] -> a -> L.List n a
-elemList n xs x = L.list n (Vec.fromList xs) 1 & L.listSelectedL .~ i where
+elemList :: Eq a => n -> a -> [a] -> L.List n a
+elemList n x xs = L.list n (Vec.fromList xs) 1 & L.listSelectedL .~ i where
   i = x `elemIndex` xs
 
 plyList :: St -> L.List Name Ply
-plyList st = elemList List plies ply where
-  ply = st ^. treePos & label & last
-  plies = st ^. treePos & forest & fmap (last . rootLabel)
+plyList (_treePos -> tp) = elemList List ply plies where
+  ply = NonEmpty.last . label $ tp
+  plies = fmap (NonEmpty.last . rootLabel) . forest $ tp
 
 selectedAttr :: AttrName
 selectedAttr = "selected"
@@ -85,11 +89,12 @@ renderPosition pos tgt = ranks <+> border board <=> files where
             | otherwise  -> str " "
   spacer = (str " " :) . (<> [str " "]) . intersperse (str " ")
 
-next, prev, firstChild, parent, nextCursor :: St -> EventM Name (Next St)
+next, prev, firstChild, parent, root, nextCursor :: St -> EventM Name (Next St)
 next = continue . over treePos (fromMaybe <*> TreePos.next)
 prev = continue . over treePos (fromMaybe <*> TreePos.prev)
 firstChild = continue . over treePos (fromMaybe <*> TreePos.firstChild)
 parent = continue . over treePos (fromMaybe <*> TreePos.parent)
+root = continue . over treePos TreePos.root
 nextCursor = continue . over focusRing F.focusNext
 
 allPlies, internalBook :: St -> EventM Name (Next St)
@@ -111,7 +116,7 @@ app = App { .. } where
     withAttrIf False _   = id
     game = hCenter board <=> border var
     board = renderPosition (position st) (Just . targetSquare $ st)
-    var = strWrap . varToSAN (st^.initialPosition) $ st^.treePos & label
+    var = strWrap . varToSAN (st^.initialPosition) $ st^.treePos & label & NonEmpty.toList
   appHandleEvent st (VtyEvent e) = case e of
     V.EvKey V.KDown []        -> next st
     V.EvKey (V.KChar 'j') []  -> next st
@@ -121,6 +126,7 @@ app = App { .. } where
     V.EvKey (V.KChar 'l') []  -> firstChild st
     V.EvKey V.KLeft []        -> parent st
     V.EvKey (V.KChar 'h') []  -> parent st
+    V.EvKey V.KHome []        -> root st
     V.EvKey (V.KChar '\t') [] -> nextCursor st
     V.EvKey (V.KChar 'a') []  -> allPlies st
     V.EvKey (V.KChar 'd') []  -> internalBook st
