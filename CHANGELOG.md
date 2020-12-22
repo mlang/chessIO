@@ -9,7 +9,7 @@
 - Move all internal modules into Internal/.
 - Rename `Game.Chess.Polyglot.Book` to just `Game.Chess.Polyglot` and don't
   expose `Game.Chess.Polyglot.Hash`.
-- New tool `bookview`: terminal chess book opening explorer.
+- New tool `cbookview`: terminal chess book opening explorer.
 
 ## chessIO 0.5.0.0
 
