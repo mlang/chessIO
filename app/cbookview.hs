@@ -70,7 +70,7 @@ renderPosition :: Position -> Color -> Maybe Int -> Widget Name
 renderPosition pos persp tgt = ranks <+> border board <=> files where
   rev :: [a] -> [a]
   rev = if persp == Black then reverse else id
-  ranks = vBox (str " " : map (str . show) (rev [8, 7..1]) <> [str " "])
+  ranks = vBox (str " " : map (str . show) (rev [8 :: Int, 7..1]) <> [str " "])
   files = str $ rev "   a b c d e f g h   "
   board = hLimit 17 . vLimit 8 . vBox $ map (hBox . spacer . map pc) squares
   squares = reverse $ chunksOf 8 $ rev [A1 .. H8]
