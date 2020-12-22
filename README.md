@@ -28,3 +28,14 @@ protocol.
 
 To launch a chess engine, simply pass its executable name and arguments
 to cboard. For instance, `cboard stockfish`.
+
+## Opening book explorer
+
+`cbookview` is a terminal application to explore commonly played openings.
+Passing a polyglot opening book file (with extension `.bin`) will allow you to
+explore the plies contained in that book file interactively.
+You can also open a PGN file (extension `.pgn`) which will be presented like
+it was an opening book.  In other words, all the moves played in that PGN file will
+be merged into a single forest of plies.  When exporing PGN files, no
+particular order of plies is imposed.  When exploring a polyglot file
+the most popular moves will always come first.
