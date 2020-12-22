@@ -3,7 +3,7 @@ import Control.Monad ( void )
 import Data.List ( elemIndex, intersperse )
 import Data.List.Extra ( chunksOf, foldl' )
 import Data.Maybe ( fromJust, fromMaybe )
-import Data.Tree ( Tree(..) )
+import Data.Tree ( Tree(..), Forest )
 import Data.Tree.Zipper ( TreePos, Full
                         , label, forest, fromForest, nextTree
                         )
@@ -13,8 +13,8 @@ import Game.Chess ( Color(..), PieceType(..), Sq(..), toIndex, isDark
                   , Position, startpos, pieceAt
                   , Ply, plyTarget, doPly, toSAN, varToSAN
                   )
-import Game.Chess.Polyglot ( defaultBook, bookForest )
-import Game.Chess.Tree ( pathTree )
+import Game.Chess.Polyglot ( defaultBook, bookForest, readPolyglotFile )
+import Game.Chess.Tree ( plyForest, pathTree )
 import Lens.Micro ( over, (&), (^.), (.~) )
 import Lens.Micro.TH ( makeLenses )
 import qualified Graphics.Vty as V
@@ -30,27 +30,32 @@ import Brick.Widgets.Core ( showCursor, withAttr, hLimit, vLimit, hBox, vBox, st
                           )
 import Brick.Widgets.Center ( hCenter )
 import Brick.Widgets.Border ( border )
+import System.Environment
 
 data Name = Board | List deriving (Show, Ord, Eq)
 
-data St = St { _treePos :: TreePos Full [Ply]
+data St = St { _initialPosition :: Position
+             , _treePos :: TreePos Full [Ply]
              , _focusRing :: F.FocusRing Name
              }
 
 makeLenses ''St
 
 position, previousPosition :: St -> Position
-position = foldl' doPly startpos . label . _treePos
-previousPosition = foldl' doPly startpos . init . label . _treePos
+position st = foldl' doPly (st^.initialPosition) $ st^.treePos & label
+previousPosition st = foldl' doPly (st^.initialPosition) $ st^.treePos & label & init
 
 targetSquare :: St -> Int
 targetSquare = plyTarget . last . label . _treePos
 
+elemList :: Eq a => n -> [a] -> a -> L.List n a
+elemList n xs x = L.list n (Vec.fromList xs) 1 & L.listSelectedL .~ i where
+  i = x `elemIndex` xs
+
 plyList :: St -> L.List Name Ply
-plyList st = L.list List (Vec.fromList plies) 1 & L.listSelectedL .~ n where
+plyList st = elemList List plies ply where
   ply = st ^. treePos & label & last
   plies = st ^. treePos & forest & fmap (last . rootLabel)
-  n = ply `elemIndex` plies
 
 selectedAttr :: AttrName
 selectedAttr = "selected"
@@ -87,6 +92,10 @@ firstChild = continue . over treePos (fromMaybe <*> TreePos.firstChild)
 parent = continue . over treePos (fromMaybe <*> TreePos.parent)
 nextCursor = continue . over focusRing F.focusNext
 
+allPlies, internalBook :: St -> EventM Name (Next St)
+allPlies = continue . (fromMaybe <*> loadForest plyForest startpos)
+internalBook = continue . (fromMaybe <*> loadForest (bookForest defaultBook) startpos)
+
 app :: App St e Name
 app = App { .. } where
   appStartEvent = pure
@@ -102,7 +111,7 @@ app = App { .. } where
     withAttrIf False _   = id
     game = hCenter board <=> border var
     board = renderPosition (position st) (Just . targetSquare $ st)
-    var = strWrap . varToSAN startpos $ st ^. treePos & label
+    var = strWrap . varToSAN (st^.initialPosition) $ st^.treePos & label
   appHandleEvent st (VtyEvent e) = case e of
     V.EvKey V.KDown []        -> next st
     V.EvKey (V.KChar 'j') []  -> next st
@@ -113,6 +122,8 @@ app = App { .. } where
     V.EvKey V.KLeft []        -> parent st
     V.EvKey (V.KChar 'h') []  -> parent st
     V.EvKey (V.KChar '\t') [] -> nextCursor st
+    V.EvKey (V.KChar 'a') []  -> allPlies st
+    V.EvKey (V.KChar 'd') []  -> internalBook st
     V.EvKey V.KEsc []         -> halt st
     _                         -> continue st
   appHandleEvent st _          = continue st
@@ -121,11 +132,27 @@ app = App { .. } where
              ]
   appChooseCursor = F.focusRingCursor _focusRing
 
+loadForest :: (Position -> Forest Ply) -> Position -> St -> Maybe St
+loadForest f p st = case f p of
+  [] -> Nothing
+  ts -> Just $ st & initialPosition .~ p & treePos .~ tp where
+    tp = fromJust . nextTree . fromForest . fmap pathTree $ ts
+
 initialState :: St
-initialState = St tp fr where
+initialState = St pos tp fr where
   tp = fromJust . nextTree . fromForest . fmap pathTree . bookForest defaultBook
-     $ startpos
+     $ pos
+  pos = startpos
   fr = F.focusRing [List, Board]
 
 main :: IO ()
-main = void $ defaultMain app initialState
+main = do
+  as <- getArgs
+  case as of
+    [] -> void $ defaultMain app initialState
+    [fp] -> do
+      book <- readPolyglotFile fp
+      case loadForest (bookForest book) startpos initialState of
+        Just state -> void $ defaultMain app state
+        Nothing -> putStrLn "No moves found in book"
+    _ -> putStrLn "Too many arguments."
