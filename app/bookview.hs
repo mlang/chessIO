@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 import Prelude hiding (last)
 import Control.Monad ( void )
-import Data.Foldable ( foldl' )
+import Data.Foldable ( foldl', toList )
 import Data.List ( elemIndex, intersperse )
 import Data.List.Extra ( chunksOf )
 import Data.List.NonEmpty (NonEmpty)
@@ -14,7 +14,7 @@ import Data.Tree.Zipper ( TreePos, Full
 import qualified Data.Tree.Zipper as TreePos
 import qualified Data.Vector as Vec
 import Game.Chess ( Color(..), PieceType(..), Sq(..), toIndex, isDark
-                  , Position, startpos, pieceAt
+                  , Position, color, startpos, pieceAt
                   , Ply, plyTarget, doPly, toSAN, varToSAN
                   )
 import Game.Chess.Polyglot ( defaultBook, bookForest, readPolyglotFile )
@@ -48,8 +48,8 @@ data St = St { _initialPosition :: Position
 makeLenses ''St
 
 position, previousPosition :: St -> Position
-position st = foldl' doPly (st^.initialPosition) (st^.treePos&label)
-previousPosition st = foldl' doPly (st^.initialPosition) (st^.treePos&label&NonEmpty.init)
+position st = foldl' doPly (st^.initialPosition) (st^.treePos & label)
+previousPosition st = foldl' doPly (st^.initialPosition) (st^.treePos & label & NonEmpty.init)
 
 targetSquare :: St -> Int
 targetSquare = plyTarget . NonEmpty.last . label . _treePos
@@ -66,12 +66,14 @@ plyList (_treePos -> tp) = elemList List ply plies where
 selectedAttr :: AttrName
 selectedAttr = "selected"
 
-renderPosition :: Position -> Maybe Int -> Widget Name
-renderPosition pos tgt = ranks <+> border board <=> files where
-  ranks = vBox (str " " : map (str . show) [8, 7..1] <> [str " "])
-  files = str "   a b c d e f g h  "
+renderPosition :: Position -> Color -> Maybe Int -> Widget Name
+renderPosition pos persp tgt = ranks <+> border board <=> files where
+  rev :: [a] -> [a]
+  rev = if persp == Black then reverse else id
+  ranks = vBox (str " " : map (str . show) (rev [8, 7..1]) <> [str " "])
+  files = str $ rev "   a b c d e f g h   "
   board = hLimit 17 . vLimit 8 . vBox $ map (hBox . spacer . map pc) squares
-  squares = reverse $ chunksOf 8 [A1 .. H8]
+  squares = reverse $ chunksOf 8 $ rev [A1 .. H8]
   c sq | Just t <- tgt, t == toIndex sq = showCursor Board $ Location (0,0)
        | otherwise                      = id
   pc sq = c sq $ case pieceAt pos sq of
@@ -123,8 +125,8 @@ app = App { .. } where
     putCursorIf False _  = id
     withAttrIf True attr = withAttr attr
     withAttrIf False _   = id
-    board = renderPosition (position st) (Just . targetSquare $ st)
-    var = strWrap . varToSAN (st^.initialPosition) $ st^.treePos & label & NonEmpty.toList
+    board = renderPosition (position st) (color (previousPosition st)) (Just . targetSquare $ st)
+    var = strWrap . varToSAN (st^.initialPosition) $ st^.treePos & label & toList
   appHandleEvent st (VtyEvent e) = case e of
     V.EvKey V.KDown []        -> next st
     V.EvKey (V.KChar 'j') []  -> next st
