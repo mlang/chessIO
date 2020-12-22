@@ -107,7 +107,14 @@ app :: App St e Name
 app = App { .. } where
   appStartEvent = pure
   appDraw st = [ui] where
-    ui = hBox [hLimit 9 list, hLimit 23 game]
+    ui = hBox [ hLimit 9 list
+              , hLimit 23 $ hCenter board
+              , hCenter . hLimit 40 $ str " " <=> var
+              ]
+      <=> hBox [str "Up/Down (kj) = change ply, Left/Right (hl) = back/forward"
+               , hCenter $ str " "
+               , str "ESC = Quit"
+               ]
     list = L.renderList (drawPly (previousPosition st)) True (plyList st)
     drawPly p foc = putCursorIf foc (0,0)
                   . withAttrIf foc selectedAttr
@@ -116,7 +123,6 @@ app = App { .. } where
     putCursorIf False _  = id
     withAttrIf True attr = withAttr attr
     withAttrIf False _   = id
-    game = hCenter board <=> border var
     board = renderPosition (position st) (Just . targetSquare $ st)
     var = strWrap . varToSAN (st^.initialPosition) $ st^.treePos & label & NonEmpty.toList
   appHandleEvent st (VtyEvent e) = case e of
