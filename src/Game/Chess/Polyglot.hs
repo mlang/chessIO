@@ -1,11 +1,15 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Game.Chess.Polyglot (
+  -- * Data type
   PolyglotBook
+  -- * Built-in books
 , defaultBook, twic
+  -- * Load and save
 , fromByteString, toByteString
 , readPolyglotFile, writePolyglotFile
 , makeBook, toPGN
+  -- * Lookup
 , bookPly
 , bookPlies
 , bookForest
