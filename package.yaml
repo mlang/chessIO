@@ -8,12 +8,13 @@ copyright:   "2020 Mario Lang"
 
 synopsis:    Basic chess library
 category:    Game
-description: A simple library for generating legal chess moves.
+description: A simple and fast library for generating legal chess moves.
   Also includes a module for communication with external processes that
   speak the UCI (Universal Chess Interface) protocol, a PGN parser/pretty printer,
   and Polyglot opening book support.
   On top of that, provides a console frontend program (cboard) that can be used
-  to interactively play against UCI engines.
+  to interactively play against UCI engines, and a terminal program (cbookview)
+  to explore commonly played chess openings.
 
 dependencies:
 - attoparsec
@@ -61,7 +62,6 @@ extra-source-files:
 - book/twic-9g.bin
 
 ghc-options:
-- -Wall
 - -O2
 
 library:
