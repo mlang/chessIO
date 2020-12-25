@@ -1,6 +1,6 @@
 # Releases
 
-## chessIO (unreleased)
+## chessIO 0.6.0.0
 
 - Optimize `foldBits`.
 - Avoid cycles in `bookForest`.
