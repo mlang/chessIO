@@ -2,13 +2,12 @@
 
 ## chessIO (unreleased)
 
-- Add strict apply to internal `foldBits` function which improves performance
-  and memory footprint.
+- Optimize `foldBits`.
 - Avoid cycles in `bookForest`.
 - Don't reexport tree related functions from Game.Chess.
-- Move all internal modules into Internal/.
-- Rename `Game.Chess.Polyglot.Book` to just `Game.Chess.Polyglot` and don't
-  expose `Game.Chess.Polyglot.Hash`.
+- Split SAN functions into new exposed module Chess.Game.SAN.
+- Rename `Game.Chess.Polyglot.Book` to `Game.Chess.Polyglot`.
+- New functions `plySource` and `plyTarget`.
 - New tool `cbookview`: terminal chess book opening explorer.
 
 ## chessIO 0.5.0.0

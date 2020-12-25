@@ -14,12 +14,13 @@ import Data.IORef ( newIORef, readIORef, writeIORef, IORef )
 import Data.List ( find, isPrefixOf )
 import Data.List.Extra ( chunksOf )
 import Game.Chess
-    ( fromFEN, fromUCI, isDark, legalPlies, pieceAt, startpos, fromSAN, toSAN,
-      unsafeToSAN, Color(Black, White),
+    ( fromFEN, fromUCI, isDark, legalPlies, pieceAt, startpos,
+      Color(Black, White),
       PieceType(King, Pawn, Knight, Bishop, Rook, Queen),
-      Ply, Position, Sq(H8, A1), varToSAN )
+      Ply, Position, Sq(H8, A1) )
 import Game.Chess.Polyglot
     ( PolyglotBook, defaultBook, readPolyglotFile, bookPlies, bookPly )
+import Game.Chess.SAN ( fromSAN, toSAN, unsafeToSAN, varToSAN )
 import Game.Chess.UCI
     ( addPly,
       currentPosition,

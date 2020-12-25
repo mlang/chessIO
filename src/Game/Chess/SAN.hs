@@ -1,7 +1,11 @@
 {-# LANGUAGE PolyKinds, FlexibleInstances, GADTs, ScopedTypeVariables #-}
-module Game.Chess.Internal.SAN (
-  strictSAN, relaxedSAN, fromSAN,
-  toSAN, unsafeToSAN, varToSAN
+module Game.Chess.SAN (
+  -- " Conversion
+  fromSAN, toSAN, unsafeToSAN
+  -- * Parsers
+, SANToken, strictSAN, relaxedSAN
+  -- * Utilities
+, varToSAN
 ) where
 
 import           Control.Applicative (Applicative(liftA2))

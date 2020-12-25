@@ -70,6 +70,7 @@ library:
   - Game.Chess
   - Game.Chess.PGN
   - Game.Chess.Polyglot
+  - Game.Chess.SAN
   - Game.Chess.Tree
   - Game.Chess.UCI
 

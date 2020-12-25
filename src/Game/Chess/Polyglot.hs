@@ -30,7 +30,7 @@ import Data.Tree
 import Data.Word
 import Foreign.ForeignPtr (castForeignPtr, plusForeignPtr)
 import Foreign.Storable
-import Game.Chess
+import Game.Chess.Internal
 import Game.Chess.PGN
 import Game.Chess.Polyglot.Hash
 import GHC.Ptr (Ptr, castPtr, plusPtr)

@@ -24,6 +24,7 @@ import Data.Tree
 import Data.Word
 import Data.Void
 import Game.Chess
+import Game.Chess.SAN
 import System.IO
 import Text.Megaparsec
 import Text.Megaparsec.Byte

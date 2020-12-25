@@ -15,10 +15,11 @@ import qualified Data.Tree.Zipper as TreePos
 import qualified Data.Vector as Vec
 import Game.Chess ( Color(..), PieceType(..), Sq(..), toIndex, isDark
                   , Position, color, startpos, pieceAt
-                  , Ply, plyTarget, doPly, toSAN, varToSAN
+                  , Ply, plyTarget, doPly
                   )
 import Game.Chess.Polyglot ( defaultBook, bookForest, readPolyglotFile )
-import Game.Chess.PGN
+import Game.Chess.PGN ( readPGNFile, pgnForest )
+import Game.Chess.SAN ( toSAN, varToSAN )
 import Game.Chess.Tree ( plyForest, pathTree )
 import Lens.Micro ( over, (&), (^.), (.~) )
 import Lens.Micro.TH ( makeLenses )
