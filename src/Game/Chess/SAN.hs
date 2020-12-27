@@ -1,6 +1,6 @@
 {-# LANGUAGE PolyKinds, FlexibleInstances, GADTs, ScopedTypeVariables #-}
 module Game.Chess.SAN (
-  -- " Conversion
+  -- * Conversion
   fromSAN, toSAN, unsafeToSAN
   -- * Parsers
 , SANToken, strictSAN, relaxedSAN
