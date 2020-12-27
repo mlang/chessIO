@@ -1,4 +1,14 @@
 {-# LANGUAGE PolyKinds, FlexibleInstances, GADTs, ScopedTypeVariables #-}
+{-|
+Module      : Game.Chess.SAN
+Description : Standard Algebraic Notation
+Copyright   : (c) Mario Lang, 2020
+License     : BSD3
+Maintainer  : mlang@blind.guru
+Stability   : experimental
+
+Parsers and printers for [Algebraic Notation](https://en.wikipedia.org/wiki/Algebraic_notation_%28chess%29).
+-}
 module Game.Chess.SAN (
   -- * Conversion
   fromSAN, toSAN, unsafeToSAN

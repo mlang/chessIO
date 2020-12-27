@@ -1,3 +1,14 @@
+{-|
+Module      : Game.Chess.UCI
+Description : Universal Chess Interface
+Copyright   : (c) Mario Lang, 2020
+License     : BSD3
+Maintainer  : mlang@blind.guru
+Stability   : experimental
+
+The Universal Chess Interface (UCI) is a protocol for communicating with
+external Chess engines.
+-}
 module Game.Chess.UCI (
   -- * Exceptions
   UCIException(..)
