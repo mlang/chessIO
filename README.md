@@ -61,7 +61,7 @@ f6
 
 
 
-Up/Down (kj) = change ply, Left/Right (hl) = back/forward                 ESC = Quit```
+Up/Down (kj) = change ply, Left/Right (hl) = back/forward                 ESC = Quit
 ```
 
 Moving the cursor down the list of book moves will also update the
