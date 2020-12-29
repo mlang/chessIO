@@ -152,23 +152,23 @@ app = App { .. } where
     withAttrIf False _     = id
     board = renderPosition (position st) (color (previousPosition st)) (Just . targetSquare $ st) selectedStyle
     var = strWrap . varToSAN (st^.initialPosition) $ st^.treePos & label & toList
-  appHandleEvent st (VtyEvent e) = case e of
-    V.EvKey V.KDown []        -> next st
-    V.EvKey (V.KChar 'j') []  -> next st
-    V.EvKey V.KUp []          -> prev st
-    V.EvKey (V.KChar 'k') []  -> prev st
-    V.EvKey V.KRight []       -> firstChild st
-    V.EvKey (V.KChar 'l') []  -> firstChild st
-    V.EvKey V.KLeft []        -> parent st
-    V.EvKey (V.KChar 'h') []  -> parent st
-    V.EvKey V.KHome []        -> root st
-    V.EvKey (V.KChar '\t') [] -> nextCursor st
-    V.EvKey (V.KChar 'a') []  -> allPlies st
-    V.EvKey (V.KChar 'd') []  -> internalBook st
-    V.EvKey (V.KChar '+') []  -> nextStyle st
-    V.EvKey (V.KChar '-') []  -> prevStyle st
-    V.EvKey V.KEsc []         -> halt st
-    _                         -> continue st
+  appHandleEvent st (VtyEvent e) = st & case e of
+    V.EvKey V.KDown []        -> next
+    V.EvKey (V.KChar 'j') []  -> next
+    V.EvKey V.KUp []          -> prev
+    V.EvKey (V.KChar 'k') []  -> prev
+    V.EvKey V.KRight []       -> firstChild
+    V.EvKey (V.KChar 'l') []  -> firstChild
+    V.EvKey V.KLeft []        -> parent
+    V.EvKey (V.KChar 'h') []  -> parent
+    V.EvKey V.KHome []        -> root
+    V.EvKey (V.KChar '\t') [] -> nextCursor
+    V.EvKey (V.KChar 'a') []  -> allPlies
+    V.EvKey (V.KChar 'd') []  -> internalBook
+    V.EvKey (V.KChar '+') []  -> nextStyle
+    V.EvKey (V.KChar '-') []  -> prevStyle
+    V.EvKey V.KEsc []         -> halt
+    _                         -> continue
   appHandleEvent st _          = continue st
   appAttrMap = const $ attrMap V.defAttr
              [(selectedAttr, V.white `on` V.green)
