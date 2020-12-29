@@ -507,6 +507,11 @@ castlingRights Position{flags} = wks . wqs . bks . bqs $ [] where
   bqs xs | flags `testMask` crbQs = (Black, Queenside):xs
          | otherwise              = xs
 
+enPassantSquare :: Position -> Maybe Sq
+enPassantSquare Position{flags} = case flags .&. epMask of
+  0 -> Nothing
+  x -> Just $ toEnum $ bitScanForward x
+
 canCastleKingside, canCastleQueenside :: Position -> Bool
 canCastleKingside pos@Position{qbb} = canCastleKingside' pos (occupied qbb)
 canCastleQueenside pos@Position{qbb} = canCastleQueenside' pos (occupied qbb)
