@@ -2,6 +2,7 @@
 import Prelude hiding (last)
 import Control.Monad ( void )
 import Data.Foldable ( foldl', toList )
+import Data.Ix
 import Data.List ( elemIndex, intersperse )
 import Data.List.Extra ( chunksOf )
 import Data.List.NonEmpty (NonEmpty)
@@ -39,10 +40,13 @@ import Brick.Widgets.Border ( border )
 import System.FilePath
 import System.Environment ( getArgs )
 
-data Name = List | Board deriving (Show, Ord, Eq)
+data Name = List | Board | BoardStyle deriving (Show, Ord, Eq)
+
+type Style a = Position -> Sq -> Widget a
 
 data St = St { _initialPosition :: Position
              , _treePos :: TreePos Full (NonEmpty Ply)
+             , _boardStyle :: L.List Name (String, Style Name)
              , _focusRing :: F.FocusRing Name
              }
 
@@ -67,8 +71,8 @@ plyList (_treePos -> tp) = elemList List ply plies where
 selectedAttr :: AttrName
 selectedAttr = "selected"
 
-renderPosition :: Position -> Color -> Maybe Int -> Widget Name
-renderPosition pos persp tgt = ranks <+> border board <=> files where
+renderPosition :: Position -> Color -> Maybe Int -> Style Name -> Widget Name
+renderPosition pos persp tgt sty = ranks <+> border board <=> files where
   rev :: [a] -> [a]
   rev = if persp == Black then reverse else id
   ranks = vBox (str " " : map (str . show) (rev [8 :: Int, 7..1]) <> [str " "])
@@ -77,22 +81,33 @@ renderPosition pos persp tgt = ranks <+> border board <=> files where
   squares = reverse $ chunksOf 8 $ rev [A1 .. H8]
   c sq | Just t <- tgt, t == toIndex sq = showCursor Board $ Location (0,0)
        | otherwise                      = id
-  pc sq = c sq $ case pieceAt pos sq of
-    Just (White, Pawn)   -> str "P"
-    Just (White, Knight) -> str "N"
-    Just (White, Bishop) -> str "B"
-    Just (White, Rook)   -> str "R"
-    Just (White, Queen)  -> str "Q"
-    Just (White, King)   -> str "K"
-    Just (Black, Pawn)   -> str "p"
-    Just (Black, Knight) -> str "n"
-    Just (Black, Bishop) -> str "b"
-    Just (Black, Rook)   -> str "r"
-    Just (Black, Queen)  -> str "q"
-    Just (Black, King)   -> str "k"
+  pc sq = c sq $ sty pos sq
+  spacer = (str " " :) . (<> [str " "]) . intersperse (str " ")
+
+allPieces :: ((Color, PieceType), (Color, PieceType))
+allPieces = ((Black, Pawn), (White, King))
+
+english :: Style a
+english pos sq = case pieceAt pos sq of
+  Just piece           -> str . pure $ "pnbrqkPNBRQK" !! index allPieces piece
+  Nothing | isDark sq  -> str "+"
+          | otherwise  -> str " "
+
+styles :: [(String, Style a)]
+styles = map where
+  map = [ ("English",  english)
+        , ("Deutsch",  german)
+        , ("Figurine", figurine)
+        ]
+  german pos sq = case pieceAt pos sq of
+    Just piece           -> str . pure $ "bsltdkBSLTDK" !! index allPieces piece
     Nothing | isDark sq  -> str "+"
             | otherwise  -> str " "
-  spacer = (str " " :) . (<> [str " "]) . intersperse (str " ")
+  figurine pos sq = case pieceAt pos sq of
+    Just piece           -> str . pure $ "♟♞♝♜♛♚♙♘♗♖♕♔" !! index allPieces piece
+    Nothing | isDark sq  -> str "+"
+            | otherwise  -> str " "
+
 
 next, prev, firstChild, parent, root, nextCursor :: St -> EventM Name (Next St)
 next = continue . over treePos (fromMaybe <*> TreePos.next)
@@ -106,6 +121,10 @@ allPlies, internalBook :: St -> EventM Name (Next St)
 allPlies = continue . (fromMaybe <*> loadForest plyForest startpos)
 internalBook = continue . (fromMaybe <*> loadForest (bookForest defaultBook) startpos)
 
+nextStyle, prevStyle :: St -> EventM Name (Next St)
+nextStyle = continue . over boardStyle L.listMoveDown
+prevStyle = continue . over boardStyle L.listMoveUp
+
 app :: App St e Name
 app = App { .. } where
   appStartEvent = pure
@@ -114,19 +133,24 @@ app = App { .. } where
               , hLimit 23 $ hCenter board
               , hCenter . hLimit 40 $ str " " <=> var
               ]
+      <=> hBox [str "Board style (+/- to change): ", style]
       <=> hBox [str "Up/Down (kj) = change ply, Left/Right (hl) = back/forward"
                , hCenter $ str " "
                , str "ESC = Quit"
                ]
+    style = vLimit 1 $ L.renderList drawStyle True (st^.boardStyle)
+    drawStyle foc (n, _) = putCursorIf foc BoardStyle (0,0) $ str n
+    selectedStyle = maybe english (snd . snd) $
+      st^.boardStyle & L.listSelectedElement
     list = L.renderList (drawPly (previousPosition st)) True (plyList st)
-    drawPly p foc = putCursorIf foc (0,0)
+    drawPly p foc = putCursorIf foc List (0,0)
                   . withAttrIf foc selectedAttr
                   . str . toSAN p 
-    putCursorIf True loc = showCursor List $ Location loc
-    putCursorIf False _  = id
-    withAttrIf True attr = withAttr attr
-    withAttrIf False _   = id
-    board = renderPosition (position st) (color (previousPosition st)) (Just . targetSquare $ st)
+    putCursorIf True n loc = showCursor n $ Location loc
+    putCursorIf False _ _  = id
+    withAttrIf True attr   = withAttr attr
+    withAttrIf False _     = id
+    board = renderPosition (position st) (color (previousPosition st)) (Just . targetSquare $ st) selectedStyle
     var = strWrap . varToSAN (st^.initialPosition) $ st^.treePos & label & toList
   appHandleEvent st (VtyEvent e) = case e of
     V.EvKey V.KDown []        -> next st
@@ -141,6 +165,8 @@ app = App { .. } where
     V.EvKey (V.KChar '\t') [] -> nextCursor st
     V.EvKey (V.KChar 'a') []  -> allPlies st
     V.EvKey (V.KChar 'd') []  -> internalBook st
+    V.EvKey (V.KChar '+') []  -> nextStyle st
+    V.EvKey (V.KChar '-') []  -> prevStyle st
     V.EvKey V.KEsc []         -> halt st
     _                         -> continue st
   appHandleEvent st _          = continue st
@@ -156,11 +182,12 @@ loadForest f p st = case f p of
     tp = fromJust . nextTree . fromForest . fmap pathTree $ ts
 
 initialState :: St
-initialState = St pos tp fr where
+initialState = St pos tp sl fr where
   tp = fromJust . nextTree . fromForest . fmap pathTree . bookForest defaultBook
      $ pos
   pos = startpos
-  fr = F.focusRing [List, Board]
+  fr = F.focusRing [List, Board, BoardStyle]
+  sl = L.list BoardStyle (Vec.fromList styles) 1
 
 main :: IO ()
 main = do
