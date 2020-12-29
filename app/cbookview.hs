@@ -118,15 +118,17 @@ withAttrIf False _     = id
 
 type Command = St -> EventM Name (Next St)
 
-next, prev, firstChild, parent, root :: Command
+next, prev, firstChild, parent, root, firstLeaf :: Command
 next       = continue . over treePos (fromMaybe <*> TreePos.next)
 prev       = continue . over treePos (fromMaybe <*> TreePos.prev)
 firstChild = continue . over treePos (fromMaybe <*> TreePos.firstChild)
 parent     = continue . over treePos (fromMaybe <*> TreePos.parent)
 root       = continue . over treePos TreePos.root
-
-nextCursor :: Command
+firstLeaf  = continue . over treePos go where
+  go tp = maybe tp go $ TreePos.firstChild tp
+nextCursor, prevCursor :: Command
 nextCursor = continue . over focusRing F.focusNext
+prevCursor = continue . over focusRing F.focusPrev
 
 allPlies, internalBook :: Command
 allPlies     = continue . (fromMaybe <*> loadForest plyForest startpos)
@@ -144,15 +146,17 @@ keyMap = cursor <> vi <> common where
     , (V.EvKey V.KRight [],      firstChild)
     , (V.EvKey V.KLeft [],       parent)
     , (V.EvKey V.KHome [],       root)
+    , (V.EvKey V.KEnd [],        firstLeaf)
     ]
   common =
-    [ (V.EvKey (V.KChar '\t') [], nextCursor)
-    , (V.EvKey (V.KChar 'a') [],  allPlies)
-    , (V.EvKey (V.KChar 'd') [],  internalBook)
-    , (V.EvKey (V.KChar '+') [],  nextStyle)
-    , (V.EvKey (V.KChar '-') [],  prevStyle)
-    , (V.EvKey V.KEsc [],         halt)
-    , (V.EvKey (V.KChar 'q') [],  halt)
+    [ (V.EvKey (V.KChar '\t') [],        nextCursor)
+    , (V.EvKey (V.KChar '\t') [V.MMeta], prevCursor)
+    , (V.EvKey (V.KChar 'a') [],         allPlies)
+    , (V.EvKey (V.KChar 'd') [],         internalBook)
+    , (V.EvKey (V.KChar '+') [],         nextStyle)
+    , (V.EvKey (V.KChar '-') [],         prevStyle)
+    , (V.EvKey V.KEsc [],                halt)
+    , (V.EvKey (V.KChar 'q') [],         halt)
     ]
   vi =
     [ (V.EvKey (V.KChar 'j') [], next)
