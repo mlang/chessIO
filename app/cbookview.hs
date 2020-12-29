@@ -108,22 +108,58 @@ styles = map where
     Nothing | isDark sq  -> str "+"
             | otherwise  -> str " "
 
+putCursorIf :: Bool -> n -> (Int, Int) -> Widget n -> Widget n
+putCursorIf True n loc = showCursor n $ Location loc
+putCursorIf False _ _  = id
 
-next, prev, firstChild, parent, root, nextCursor :: St -> EventM Name (Next St)
-next = continue . over treePos (fromMaybe <*> TreePos.next)
-prev = continue . over treePos (fromMaybe <*> TreePos.prev)
+withAttrIf :: Bool -> AttrName -> Widget n -> Widget n
+withAttrIf True attr   = withAttr attr
+withAttrIf False _     = id
+
+type Command = St -> EventM Name (Next St)
+
+next, prev, firstChild, parent, root :: Command
+next       = continue . over treePos (fromMaybe <*> TreePos.next)
+prev       = continue . over treePos (fromMaybe <*> TreePos.prev)
 firstChild = continue . over treePos (fromMaybe <*> TreePos.firstChild)
-parent = continue . over treePos (fromMaybe <*> TreePos.parent)
-root = continue . over treePos TreePos.root
+parent     = continue . over treePos (fromMaybe <*> TreePos.parent)
+root       = continue . over treePos TreePos.root
+
+nextCursor :: Command
 nextCursor = continue . over focusRing F.focusNext
 
-allPlies, internalBook :: St -> EventM Name (Next St)
-allPlies = continue . (fromMaybe <*> loadForest plyForest startpos)
+allPlies, internalBook :: Command
+allPlies     = continue . (fromMaybe <*> loadForest plyForest startpos)
 internalBook = continue . (fromMaybe <*> loadForest (bookForest defaultBook) startpos)
 
-nextStyle, prevStyle :: St -> EventM Name (Next St)
+nextStyle, prevStyle :: Command
 nextStyle = continue . over boardStyle L.listMoveDown
 prevStyle = continue . over boardStyle L.listMoveUp
+
+keyMap :: [(V.Event, Command)]
+keyMap = cursor <> vi <> common where
+  cursor =
+    [ (V.EvKey V.KDown [],       next)
+    , (V.EvKey V.KUp [],         prev)
+    , (V.EvKey V.KRight [],      firstChild)
+    , (V.EvKey V.KLeft [],       parent)
+    , (V.EvKey V.KHome [],       root)
+    ]
+  common =
+    [ (V.EvKey (V.KChar '\t') [], nextCursor)
+    , (V.EvKey (V.KChar 'a') [],  allPlies)
+    , (V.EvKey (V.KChar 'd') [],  internalBook)
+    , (V.EvKey (V.KChar '+') [],  nextStyle)
+    , (V.EvKey (V.KChar '-') [],  prevStyle)
+    , (V.EvKey V.KEsc [],         halt)
+    , (V.EvKey (V.KChar 'q') [],  halt)
+    ]
+  vi =
+    [ (V.EvKey (V.KChar 'j') [], next)
+    , (V.EvKey (V.KChar 'k') [], prev)
+    , (V.EvKey (V.KChar 'l') [], firstChild)
+    , (V.EvKey (V.KChar 'h') [], parent)
+    ]
 
 app :: App St e Name
 app = App { .. } where
@@ -146,30 +182,10 @@ app = App { .. } where
     drawPly p foc = putCursorIf foc List (0,0)
                   . withAttrIf foc selectedAttr
                   . str . toSAN p 
-    putCursorIf True n loc = showCursor n $ Location loc
-    putCursorIf False _ _  = id
-    withAttrIf True attr   = withAttr attr
-    withAttrIf False _     = id
     board = renderPosition (position st) (color (previousPosition st)) (Just . targetSquare $ st) selectedStyle
     var = strWrap . varToSAN (st^.initialPosition) $ st^.treePos & label & toList
-  appHandleEvent st (VtyEvent e) = st & case e of
-    V.EvKey V.KDown []        -> next
-    V.EvKey (V.KChar 'j') []  -> next
-    V.EvKey V.KUp []          -> prev
-    V.EvKey (V.KChar 'k') []  -> prev
-    V.EvKey V.KRight []       -> firstChild
-    V.EvKey (V.KChar 'l') []  -> firstChild
-    V.EvKey V.KLeft []        -> parent
-    V.EvKey (V.KChar 'h') []  -> parent
-    V.EvKey V.KHome []        -> root
-    V.EvKey (V.KChar '\t') [] -> nextCursor
-    V.EvKey (V.KChar 'a') []  -> allPlies
-    V.EvKey (V.KChar 'd') []  -> internalBook
-    V.EvKey (V.KChar '+') []  -> nextStyle
-    V.EvKey (V.KChar '-') []  -> prevStyle
-    V.EvKey V.KEsc []         -> halt
-    _                         -> continue
-  appHandleEvent st _          = continue st
+  appHandleEvent st (VtyEvent e) = fromMaybe continue (lookup e keyMap) st
+  appHandleEvent st _            = continue st
   appAttrMap = const $ attrMap V.defAttr
              [(selectedAttr, V.white `on` V.green)
              ]
