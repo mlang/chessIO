@@ -126,6 +126,7 @@ parent     = continue . over treePos (fromMaybe <*> TreePos.parent)
 root       = continue . over treePos TreePos.root
 firstLeaf  = continue . over treePos go where
   go tp = maybe tp go $ TreePos.firstChild tp
+
 nextCursor, prevCursor :: Command
 nextCursor = continue . over focusRing F.focusNext
 prevCursor = continue . over focusRing F.focusPrev
