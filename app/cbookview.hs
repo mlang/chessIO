@@ -15,7 +15,7 @@ import Data.Tree.Zipper ( TreePos, Full
 import qualified Data.Tree.Zipper as TreePos
 import qualified Data.Vector as Vec
 import Game.Chess ( Color(..), PieceType(..), Sq(..), toIndex, isDark
-                  , Position, color, startpos, pieceAt
+                  , Position, color, startpos, pieceAt, toFEN
                   , Ply, plyTarget, doPly
                   )
 import Game.Chess.Polyglot ( defaultBook, bookForest, readPolyglotFile )
@@ -174,6 +174,8 @@ app = App { .. } where
               , hLimit 23 $ hCenter board
               , hCenter . hLimit 40 $ str " " <=> var
               ]
+      <=> (str "FEN: " <+> fen)
+      <=> str " "
       <=> hBox [str "Board style (+/- to change): ", style]
       <=> hBox [str "Up/Down (kj) = change ply, Left/Right (hl) = back/forward"
                , hCenter $ str " "
@@ -189,6 +191,7 @@ app = App { .. } where
                   . str . toSAN p 
     board = renderPosition (position st) (color (previousPosition st)) (Just . targetSquare $ st) selectedStyle
     var = strWrap . varToSAN (st^.initialPosition) $ st^.treePos & label & toList
+    fen = str . toFEN $ position st
   appHandleEvent st (VtyEvent e) = fromMaybe continue (lookup e keyMap) st
   appHandleEvent st _            = continue st
   appAttrMap = const $ attrMap V.defAttr
