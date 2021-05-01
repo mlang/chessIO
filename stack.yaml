@@ -1,5 +1,8 @@
-resolver: lts-17.9
+resolver: lts-17.10
 packages:
 - .
 extra-deps:
 - o-clock-1.2.0
+flags:
+  brick:
+    demos: false
