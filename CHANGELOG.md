@@ -1,5 +1,13 @@
 # Releases
 
+## chessIO 0.6.1.0
+
+- Add enPassantSquare (thanks Tochi Obudulu).
+- cbookview:
+  - piece styles
+  - Key End now moves to the final position of the most popular game
+  - FEN string display
+
 ## chessIO 0.6.0.0
 
 - Optimize `foldBits`.
