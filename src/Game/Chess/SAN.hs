@@ -39,7 +39,7 @@ import           Data.Word ( Word8 )
 import Game.Chess.Internal ( Castle(Queenside, Kingside),
                              Ply, Position(color, moveNumber), Color(Black, White),
                              PieceType(..), isCapture, pieceAt,
-                             promoteTo, unpack, doPly, unsafeDoPly, legalPlies,
+                             promoteTo, plySource, plyTarget, unpack, doPly, unsafeDoPly, legalPlies,
                              inCheck, canCastleKingside, canCastleQueenside,
                              wKscm, wQscm, bKscm, bQscm )
 import Game.Chess.Internal.Square (toIndex, toRF, toCoord)
@@ -154,8 +154,8 @@ strictSAN pos = case legalPlies pos of
       [] -> fail $ show (color pos) <> " has no " <> show p <> " which could be moved"
       ms' -> target p ms'
   pieceFrom p (moveFrom -> from) = p == snd (fromJust (pieceAt pos from))
-  moveFrom (unpack -> (from, _, _)) = from
-  target p ms = coords p ms >>= \m@(unpack -> (_, to, _)) -> case p of
+  moveFrom (plySource -> from) = from
+  target p ms = coords p ms >>= \m@(plyTarget -> to) -> case p of
     Pawn | lastRank to -> promoteTo m <$> promotion
     _ -> pure m
   coords p ms = choice $ fmap (uncurry (<$) . fmap chunk) $
@@ -253,9 +253,9 @@ sanCoords pos (pc,lms) m@(unpack -> (from, to, _)) =
     | capture = "x" <> toCoord to
     | otherwise = toCoord to
   ms = filter (isMoveTo to) lms
-  isMoveTo sq (unpack -> (_, to', _)) = sq == to'
-  fEq (unpack -> (from', _, _)) = from' `mod` 8 == fromFile
-  rEq (unpack -> (from', _, _)) = from' `div` 8 == fromRank
+  isMoveTo sq (plyTarget -> to') = sq == to'
+  fEq (plySource -> from') = from' `mod` 8 == fromFile
+  rEq (plySource -> from') = from' `div` 8 == fromRank
   (fromRank, fromFile) = toRF from
   fileChar i = chr $ (i `mod` 8) + ord 'a'
   rankChar i = chr $ (i `div` 8) + ord '1'
@@ -302,8 +302,8 @@ unsafeToSAN pos m@(unpack -> (from, to, promo)) =
   ms = filter movesTo $ legalPlies pos
   movesTo (unpack -> (from', to', _)) =
     fmap snd (pieceAt pos from') == Just piece && to' == to
-  fEq (unpack -> (from', _, _)) = from' `mod` 8 == fromFile
-  rEq (unpack -> (from', _, _)) = from' `div` 8 == fromRank
+  fEq (plySource -> from') = from' `mod` 8 == fromFile
+  rEq (plySource -> from') = from' `div` 8 == fromRank
   (fromRank, fromFile) = toRF from
   fileChar i = chr $ (i `mod` 8) + ord 'a'
   rankChar i = chr $ (i `div` 8) + ord '1'

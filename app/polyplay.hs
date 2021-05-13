@@ -113,7 +113,7 @@ polyplay :: Runtime -> IO ()
 polyplay rt = do
   (h, o) <- play rt
   let wname = maybe "Unknown" decodeUtf8 $
-              case (active rt) of Player e _ -> name e
+              case active rt of Player e _ -> name e
   let bname = wname
   let g = gameFromForest [ ("White", wname)
                          , ("Black", bname)

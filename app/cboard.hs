@@ -142,12 +142,7 @@ loop = do
           Nothing -> outputStrLn "Sorry, no hint available"
         loop
       | "pass" == input -> do
-        unlessM (searching e) $ do
-          (bmc, _) <- search e [movetime (sec 2)]
-          hr <- lift $ gets hintRef
-          externalPrint <- getExternalPrint
-          tid <- liftIO . forkIO $ doBestMove externalPrint hr bmc e
-          lift $ modify' $ \s -> s { mover = Just tid }
+        unlessM (searching e) $ searchBestMove
         loop
       | input `elem` ["analyze", "analyse"] -> do
         unlessM (searching e) $ do

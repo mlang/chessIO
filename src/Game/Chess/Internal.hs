@@ -35,7 +35,7 @@ import qualified Game.Chess.Internal.QuadBitboard as QBB
 import Text.Read (readMaybe)
 
 capturing :: Position -> Ply -> Maybe PieceType
-capturing pos@Position{flags} (unpack -> (_, to, _))
+capturing pos@Position{flags} (plyTarget -> to)
   | (flags .&. epMask) `testBit` to = Just Pawn
   | otherwise = snd <$> pieceAt pos to
 
