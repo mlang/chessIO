@@ -153,8 +153,7 @@ strictSAN pos = case legalPlies pos of
     case filter (pieceFrom p) ms of
       [] -> fail $ show (color pos) <> " has no " <> show p <> " which could be moved"
       ms' -> target p ms'
-  pieceFrom p (moveFrom -> from) = p == snd (fromJust (pieceAt pos from))
-  moveFrom (plySource -> from) = from
+  pieceFrom p (plySource -> from) = p == snd (fromJust (pieceAt pos from))
   target p ms = coords p ms >>= \m@(plyTarget -> to) -> case p of
     Pawn | lastRank to -> promoteTo m <$> promotion
     _ -> pure m
