@@ -179,7 +179,7 @@ app = App { .. } where
       <=> hBox [str "Board style (+/- to change): ", style]
       <=> hBox [str "Up/Down (kj) = change ply, Left/Right (hl) = back/forward"
                , hCenter $ str " "
-               , str "ESC = Quit"
+               , str "ESC (q) = Quit"
                ]
     style = vLimit 1 $ L.renderList drawStyle True (st^.boardStyle)
     drawStyle foc (n, _) = putCursorIf foc BoardStyle (0,0) $ str n
