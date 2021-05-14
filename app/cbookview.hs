@@ -197,7 +197,7 @@ app = App { .. } where
   appAttrMap = const $ attrMap V.defAttr
              [(selectedAttr, V.white `on` V.green)
              ]
-  appChooseCursor = F.focusRingCursor _focusRing
+  appChooseCursor = F.focusRingCursor (^. focusRing)
 
 loadForest :: (Position -> Forest Ply) -> Position -> St -> Maybe St
 loadForest f p st = case f p of
