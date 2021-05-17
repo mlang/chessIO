@@ -148,8 +148,11 @@ toFEN Position{qbb, color, flags, halfMoveClock, moveNumber} = unwords
  where
   showColor White = "w"
   showColor Black = "b"
-  showCst 0 = "-"
-  showCst x = snd . wks . wqs . bks . bqs $ (x, "") where
+  showCst x
+    | str == "" = "-"
+    | otherwise = str
+   where 
+    str = snd . wks . wqs . bks . bqs $ (x, "")
     wks (v, xs) | v `testMask` crwKs = (v, 'K':xs)
                 | otherwise          = (v, xs)
     wqs (v, xs) | v `testMask` crwQs = (v, 'Q':xs)
