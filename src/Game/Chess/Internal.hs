@@ -325,12 +325,22 @@ doPly p m
 
 -- | An unsafe version of 'doPly'.  Only use this if you are sure the given move
 -- can be applied to the position.  This is useful if the move has been generated
--- by the 'moves' function.
+-- by the 'legalPlies' function.
 unsafeDoPly :: Position -> Ply -> Position
-unsafeDoPly pos@Position{color = White, halfMoveClock} m =
-  (unsafeDoPly' pos m) { color = Black, halfMoveClock = succ halfMoveClock }
-unsafeDoPly pos@Position{color = Black, moveNumber, halfMoveClock} m =
-  (unsafeDoPly' pos m) { color = White, moveNumber = succ moveNumber, halfMoveClock = succ halfMoveClock }
+unsafeDoPly pos@Position{color, halfMoveClock, moveNumber} m =
+  pos' { color = opponent color
+       , halfMoveClock = if isCapture pos m || isPawnPush pos m
+                         then 0
+                         else succ halfMoveClock
+       , moveNumber = if color == Black
+                      then succ moveNumber
+                      else moveNumber
+       }
+ where
+  pos' = unsafeDoPly' pos m
+  isPawnPush p m = case pieceAt p (plySource m) of
+    Just (_, Pawn) -> True
+    _         -> False
 
 unsafeDoPly' :: Position -> Ply -> Position
 unsafeDoPly' pos@Position{qbb, flags} m@(unpack -> (from, to, promo))
