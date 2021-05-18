@@ -57,7 +57,7 @@ position st = foldl' doPly (st^.initialPosition) (st^.treePos & label)
 previousPosition st = foldl' doPly (st^.initialPosition) (st^.treePos & label & NonEmpty.init)
 
 targetSquare :: St -> Int
-targetSquare = plyTarget . NonEmpty.last . label . _treePos
+targetSquare = plyTarget . NonEmpty.last . label . (^. treePos)
 
 elemList :: Eq a => n -> a -> [a] -> L.List n a
 elemList n x xs = L.list n (Vec.fromList xs) 1 & L.listSelectedL .~ i where

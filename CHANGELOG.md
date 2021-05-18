@@ -1,5 +1,10 @@
 # Releases
 
+## chessIO 0.6.1.1
+
+- Fix [half-move counter not being reset on pawn push or capture](https://github.com/mlang/chessIO/issues/2) (Thanks to Oleg Grenrus)
+- Fix [toFEN not emitting a dash when only king moved](https://github.com/mlang/chessIO/issues/3) (Thanks to Oleg Grenrus)
+
 ## chessIO 0.6.1.0
 
 - Add enPassantSquare (thanks Tochi Obudulu).
