@@ -2,7 +2,8 @@
 
 ## chessIO 0.6.2.0
 
-- Add IsString instance for Position based on fromFEN.
+- Add IsString instance for Position based on fromFEN
+- New functions: rankOf, fileOf, rankChar, fileChar, toCoord
 
 ## chessIO 0.6.1.1
 
