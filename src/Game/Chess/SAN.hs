@@ -42,7 +42,7 @@ import Game.Chess.Internal ( Castle(Queenside, Kingside),
                              promoteTo, plySource, plyTarget, unpack, doPly, unsafeDoPly, legalPlies,
                              inCheck, canCastleKingside, canCastleQueenside,
                              wKscm, wQscm, bKscm, bQscm )
-import Game.Chess.Internal.Square (toIndex, toRF, toCoord)
+import Game.Chess.Internal.Square (IsSquare(..), fileChar, rankChar, toCoord)
 import Text.Megaparsec ( optional, (<|>), empty, (<?>), chunk, parse,
                          errorBundlePretty, choice, option, Parsec,
                          MonadParsec(try, token),
@@ -198,9 +198,9 @@ relaxedSAN pos = (castling pos <|> normal) <* optional sanStatus where
     f (Just (Square sq)) (unpack -> (from', to', prm')) =
       pAt from' == pc && from' == sq && to' == to && prm' == prm
     f (Just (File ff)) (unpack -> (from', to', prm')) =
-      pAt from' == pc && from' `mod` 8 == ff && to == to' && prm == prm'
+      pAt from' == pc && fileOf from' == ff && to == to' && prm == prm'
     f (Just (Rank fr)) (unpack -> (from', to', prm')) =
-      pAt from' == pc && from' `div` 8 == fr && to == to' && prm == prm'
+      pAt from' == pc && rankOf from' == fr && to == to' && prm == prm'
     f Nothing (unpack -> (from', to', prm')) =
       pAt from' == pc && to == to' && prm == prm'
   pAt = snd . fromJust . pieceAt pos
@@ -212,7 +212,7 @@ fromSAN pos = first errorBundlePretty . parse (relaxedSAN pos) ""
 toSAN :: IsString s => Position -> Ply -> s
 toSAN pos m
   | m `elem` legalPlies pos = fromString $ unsafeToSAN pos m
-  | otherwise          = error "Game.Chess.toSAN: Illegal move"
+  | otherwise               = error "Game.Chess.toSAN: Illegal move"
 
 varToSAN :: IsString s => Position -> [Ply] -> s
 varToSAN _ [] = ""
@@ -236,28 +236,19 @@ sanCoords pos (pc,lms) m@(unpack -> (from, to, _)) =
  where
   capture = isCapture pos m
   source
-    | pc == Pawn && capture
-    = [fileChar from]
-    | pc == Pawn
-    = []
-    | length ms == 1
-    = []
-    | length (filter fEq ms) == 1
-    = [fileChar from]
-    | length (filter rEq ms) == 1
-    = [rankChar from]
-    | otherwise
-    = toCoord from
+    | pc == Pawn && capture       = [fileChar from]
+    | pc == Pawn                  = []
+    | length ms == 1              = []
+    | length (filter fEq ms) == 1 = [fileChar from]
+    | length (filter rEq ms) == 1 = [rankChar from]
+    | otherwise                   = toCoord from
   target
-    | capture = "x" <> toCoord to
+    | capture   = "x" <> toCoord to
     | otherwise = toCoord to
-  ms = filter (isMoveTo to) lms
-  isMoveTo sq (plyTarget -> to') = sq == to'
-  fEq (plySource -> from') = from' `mod` 8 == fromFile
-  rEq (plySource -> from') = from' `div` 8 == fromRank
+  ms = filter ((to ==) . plyTarget) lms
+  fEq (fileOf . plySource -> file) = file == fromFile
+  rEq (rankOf . plySource -> rank) = rank == fromRank
   (fromRank, fromFile) = toRF from
-  fileChar i = chr $ (i `mod` 8) + ord 'a'
-  rankChar i = chr $ (i `div` 8) + ord '1'
 
 unsafeToSAN :: Position -> Ply -> String
 unsafeToSAN pos m@(unpack -> (from, to, promo)) =
@@ -291,21 +282,16 @@ unsafeToSAN pos m@(unpack -> (from, to, promo)) =
     Just Rook   -> "R"
     Just Queen  -> "Q"
     _      -> ""
-  status | inCheck (color nextPos) nextPos && null (legalPlies nextPos)
-         = "#"
-         | inCheck (color nextPos) nextPos
-         = "+"
-         | otherwise
-         = ""
+  status | inCheck (color nextPos) nextPos && null (legalPlies nextPos) = "#"
+         | inCheck (color nextPos) nextPos                              = "+"
+         | otherwise                                                    = ""
   nextPos = unsafeDoPly pos m
   ms = filter movesTo $ legalPlies pos
   movesTo (unpack -> (from', to', _)) =
     fmap snd (pieceAt pos from') == Just piece && to' == to
-  fEq (plySource -> from') = from' `mod` 8 == fromFile
-  rEq (plySource -> from') = from' `div` 8 == fromRank
+  fEq (fileOf . plySource -> file) = file == fromFile
+  rEq (rankOf . plySource -> rank) = rank == fromRank
   (fromRank, fromFile) = toRF from
-  fileChar i = chr $ (i `mod` 8) + ord 'a'
-  rankChar i = chr $ (i `div` 8) + ord '1'
 
 {-# SPECIALISE relaxedSAN :: Position -> Parser Strict.ByteString Ply #-}
 {-# SPECIALISE relaxedSAN :: Position -> Parser Lazy.ByteString Ply #-}

@@ -1,5 +1,5 @@
 module Game.Chess.Internal.Square (
-  IsSquare(..), Sq(..), isDark, isLight, toCoord
+  IsSquare(..), Sq(..), isDark, isLight, fileChar, rankChar, toCoord
 ) where
 
 import Data.Bits (Bits(testBit))
@@ -12,6 +12,10 @@ class IsSquare sq where
   toIndex :: sq -> Int
   toRF :: sq -> (Int, Int)
   toRF sq = toIndex sq `divMod` 8
+  rankOf :: sq -> Int
+  rankOf sq = toIndex sq `div` 8
+  fileOf :: sq -> Int
+  fileOf sq = toIndex sq `mod` 8
 
 instance IsSquare Int where
   toIndex = id
@@ -19,6 +23,8 @@ instance IsSquare Int where
 instance IsSquare (Int, Int) where
   toIndex (r, f) = r*8 + f
   toRF = id
+  rankOf = fst
+  fileOf = snd
 
 data Sq = A1 | B1 | C1 | D1 | E1 | F1 | G1 | H1
         | A2 | B2 | C2 | D2 | E2 | F2 | G2 | H2
@@ -33,8 +39,12 @@ data Sq = A1 | B1 | C1 | D1 | E1 | F1 | G1 | H1
 instance IsSquare Sq where
   toIndex = fromEnum
 
+fileChar, rankChar :: IsSquare sq => sq -> Char
+fileChar = chr . (ord 'a' +) . fileOf
+rankChar = chr . (ord '1' +) . rankOf
+
 toCoord :: (IsSquare sq, IsString s) => sq -> s
-toCoord (toRF -> (r,f)) = fromString [chr (f + ord 'a'), chr (r + ord '1')]
+toCoord sq = fromString $ ($ sq) <$> [fileChar, rankChar]
 
 isDark :: IsSquare sq => sq -> Bool
 isDark sq = (0xaa55aa55aa55aa55 :: Word64) `testBit` toIndex sq

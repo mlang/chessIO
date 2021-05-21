@@ -1,5 +1,9 @@
 # Releases
 
+## chessIO 0.6.2.0
+
+- Add IsString instance for Position based on fromFEN.
+
 ## chessIO 0.6.1.1
 
 - Fix [half-move counter not being reset on pawn push or capture](https://github.com/mlang/chessIO/issues/2) (Thanks to Oleg Grenrus)

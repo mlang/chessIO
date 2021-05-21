@@ -40,13 +40,15 @@ capturing pos@Position{flags} (plyTarget -> to)
   | otherwise = snd <$> pieceAt pos to
 
 isCapture :: Position -> Ply -> Bool
-isCapture pos = isJust . capturing pos
+isCapture Position{qbb, flags} =
+  testBit (QBB.occupied qbb .|. (flags .&. epMask)) . plyTarget
 
 -- | The starting position as given by the FEN string
 --   "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1".
 startpos :: Position
-startpos = fromJust $
-  fromFEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+startpos = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+
+instance IsString Position where fromString = fromJust . fromFEN
 
 data PieceType = Pawn | Knight | Bishop | Rook | Queen | King deriving (Eq, Ix, Ord, Show)
 

@@ -313,9 +313,10 @@ toString qbb = intercalate "/" $ rank <$> [7, 6..0] where
   countEmpty xs | head xs == spc = show $ length xs
                 | otherwise      = xs
   spaces x y = x == spc && x == y
+  charAt :: Int -> Int -> Char
   charAt r f = maybe spc (if odd nb then toLower else id) $
     lookup (nb `div` 2) $ zip [1..] "PNBRQK"
-   where nb = qbb ! (r*8+f)
+   where nb = qbb ! toIndex (r, f)
   spc = ' '
 
 -- | Move a nibble.  Note that this function, while convenient, isn't very
