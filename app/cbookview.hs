@@ -18,6 +18,8 @@ import Game.Chess ( Color(..), PieceType(..), Sq(..), toIndex, isDark
                   , Position, color, startpos, pieceAt, toFEN
                   , Ply, plyTarget, doPly
                   )
+import Game.Chess.ECO (Opening(CO), defaultECO)
+import qualified Game.Chess.ECO as ECO
 import Game.Chess.Polyglot ( defaultBook, bookForest, readPolyglotFile )
 import Game.Chess.PGN ( readPGNFile, pgnForest )
 import Game.Chess.SAN ( toSAN, varToSAN )
@@ -32,7 +34,7 @@ import qualified Brick.Widgets.List as L
 import Brick.AttrMap (AttrName, attrMap)
 import Brick.Util (on)
 import Brick.Types ( EventM, Next, Widget, Location(Location), BrickEvent( VtyEvent ) )
-import Brick.Widgets.Core ( showCursor, withAttr, hLimit, vLimit, hBox, vBox, str, strWrap
+import Brick.Widgets.Core ( showCursor, withAttr, hLimit, vLimit, hBox, vBox, str, txt, strWrap, txtWrap
                           , (<+>), (<=>)
                           )
 import Brick.Widgets.Center ( hCenter )
@@ -172,7 +174,7 @@ app = App { .. } where
   appDraw st = [ui] where
     ui = hBox [ hLimit 9 list
               , hLimit 23 $ hCenter board
-              , hCenter . hLimit 40 $ str " " <=> var
+              , hCenter . hLimit 40 $ eco <=> str " " <=> var
               ]
       <=> (str "FEN: " <+> fen)
       <=> str " "
@@ -181,6 +183,8 @@ app = App { .. } where
                , hCenter $ str " "
                , str "ESC (q) = Quit"
                ]
+    eco = maybe (str " ") drawECO (ECO.lookup (position st) defaultECO)
+    drawECO CO{_code, _name} = txt _code <+> str " " <+> txtWrap _name
     style = vLimit 1 $ L.renderList drawStyle True (st^.boardStyle)
     drawStyle foc (n, _) = putCursorIf foc BoardStyle (0,0) $ str n
     selectedStyle = maybe english (snd . snd) $

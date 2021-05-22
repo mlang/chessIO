@@ -69,6 +69,7 @@ library:
   source-dirs: src
   exposed-modules:
   - Game.Chess
+  - Game.Chess.ECO
   - Game.Chess.PGN
   - Game.Chess.Polyglot
   - Game.Chess.SAN
