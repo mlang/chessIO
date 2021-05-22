@@ -38,6 +38,7 @@ import Data.Bits
           , unsafeShiftR, unsafeShiftL, testBit, setBit, clearBit, popCount)
     , FiniteBits(..) )
 import Data.Char (ord, toLower)
+import Data.Hashable
 import Data.Ix ( Ix(inRange) )
 import Data.List ( groupBy, intercalate )
 import Data.String ( IsString(..) )
@@ -299,6 +300,10 @@ instance IsString QuadBitboard where
           'q' -> BlackQueen
           'k' -> BlackKing
           _ -> error $ "QuadBitBoard.fromString: Illegal FEN character " <> show x
+
+instance Hashable QuadBitboard where
+  hashWithSalt s QBB{black, pbq, nbk, rqk} =
+    s `hashWithSalt` black `hashWithSalt` pbq `hashWithSalt` nbk `hashWithSalt` rqk
 
 instance Show QuadBitboard where
   show QBB{..} =

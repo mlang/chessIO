@@ -24,6 +24,7 @@ dependencies:
 - containers
 - extra
 - file-embed
+- hashable
 - megaparsec >= 9.0
 - MonadRandom
 - o-clock

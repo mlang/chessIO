@@ -20,6 +20,7 @@ import Data.Bits
   ( Bits((.&.), testBit, unsafeShiftR, unsafeShiftL, xor, (.|.), bit, complement),
     FiniteBits(countLeadingZeros, countTrailingZeros) )
 import Data.Char ( ord, chr )
+import Data.Hashable
 import Data.Ix ( Ix(inRange) )
 import Data.List (nub, sortOn)
 import Data.Maybe ( fromJust, isJust, listToMaybe )
@@ -53,6 +54,10 @@ instance IsString Position where fromString = fromJust . fromFEN
 data PieceType = Pawn | Knight | Bishop | Rook | Queen | King deriving (Eq, Ix, Ord, Show)
 
 data Color = Black | White deriving (Eq, Ix, Ord, Show)
+
+instance Hashable Color where
+  hashWithSalt s Black = s `hashWithSalt` (0 :: Int)
+  hashWithSalt s White = s `hashWithSalt` (1 :: Int)
 
 pieceAt :: IsSquare sq => Position -> sq -> Maybe (Color, PieceType)
 pieceAt Position{qbb} (toIndex -> sq) = case qbb QBB.! sq of
@@ -93,6 +98,10 @@ data Position = Position {
 -- castling and en passant capturing rights.
 instance Eq Position where
   a == b = qbb a == qbb b && color a == color b && flags a == flags b
+
+instance Hashable Position where
+  hashWithSalt s Position{qbb, color, flags} =
+    s `hashWithSalt` qbb `hashWithSalt` color `hashWithSalt` flags
 
 repetitions :: [Position] -> Maybe (Int, Position)
 repetitions p = listToMaybe . sortOn (Down . fst) . fmap f $ nub p where
