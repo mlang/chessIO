@@ -19,7 +19,7 @@ import Data.Ord
 import Data.Ratio
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Word
+import Data.Word (Word8)
 import Data.Void
 import Game.Chess
 import Game.Chess.SAN
@@ -29,28 +29,29 @@ import Text.Megaparsec.Byte
 import qualified Text.Megaparsec.Byte.Lexer as L
 
 defaultECO :: ECO
-defaultECO = case parse eco "scid.eco" $(embedFile "book/scid.eco") of
+defaultECO = case parse scid "book/scid.eco" $(embedFile "book/scid.eco") of
   Right x -> x
 
 data Opening = CO {
-  _code :: Text
-, _name :: Text
-, _plies :: [Ply]
+  coCode :: Text
+, coVariation :: Text
+, coPlies :: [Ply]
 } deriving (Show)
 
 type ECO = HashMap Position Opening
 
 opening :: Parser Opening
-opening = CO <$> lexeme code <*> lexeme str <*> lexeme (plies startpos)
+opening = CO <$> lexeme code <*> lexeme var <*> lexeme (plies startpos)
 
 code :: Parser Text
-code = f <$> alphaNumChar <*> many digitChar <*> optional alphaNumChar where
+code = p <?> "code" where
+  p = f <$> alphaNumChar <*> many digitChar <*> optional alphaNumChar
   f x xs y = let s = x : xs in T.pack . fmap (chr . fromEnum) $ case y of
     Nothing -> s
     Just y' -> s ++ [y']
 
-str :: Parser Text
-str = p <?> "string" where
+var :: Parser Text
+var = p <?> "string" where
   p = fmap (T.pack . fmap (chr . fromEnum)) $ single quoteChar *> many ch <* single quoteChar
   ch = single backslashChar *> (  single backslashChar $> backslashChar
                               <|> single quoteChar $> quoteChar
@@ -68,18 +69,18 @@ plies p = eol <|> line where
         fail $ "Invalid move number: " <> show n <> " /= " <> show (moveNumber p)
       _ -> pure ()
 
-eco :: Parser ECO
-eco = fmap hm $ spaceConsumer *> many opening <* eof
+scid :: Parser ECO
+scid = mkECO <$> p where p = spaceConsumer *> many opening <* eof
 
 readSCIDECOFile :: FilePath -> IO (Either String ECO)
-readSCIDECOFile fp = first errorBundlePretty . parse eco fp <$> BS.readFile fp
+readSCIDECOFile fp = first errorBundlePretty . parse scid fp <$> BS.readFile fp
 
 lookup :: Position -> ECO -> Maybe Opening
 lookup = HashMap.lookup
 
-hm :: [Opening] -> HashMap Position Opening
-hm = HashMap.fromList . fmap f where
-  f co = (foldl' doPly startpos $ _plies co, co)
+mkECO :: [Opening] -> HashMap Position Opening
+mkECO = HashMap.fromList . fmap f where
+  f co = (foldl' doPly startpos $ coPlies co, co)
 
 type Parser = Parsec Void ByteString
 

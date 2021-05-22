@@ -173,9 +173,9 @@ str :: Parser Text
 str = p <?> "string" where
   p = fmap (T.pack . fmap (chr . fromEnum)) $ single quoteChar *> many ch <* single quoteChar
   ch = single backslashChar *> (  single backslashChar $> backslashChar
-                          <|> single quoteChar $> quoteChar
-                           )
-   <|> anySingleBut quoteChar
+                              <|> single quoteChar $> quoteChar
+                               )
+    <|> anySingleBut quoteChar
 
 type RAVOrder a = (Forest PlyData -> a) -> Forest PlyData -> [a]
 

@@ -18,7 +18,7 @@ import Game.Chess ( Color(..), PieceType(..), Sq(..), toIndex, isDark
                   , Position, color, startpos, pieceAt, toFEN
                   , Ply, plyTarget, doPly
                   )
-import Game.Chess.ECO (Opening(CO), defaultECO)
+import Game.Chess.ECO (Opening(..), defaultECO)
 import qualified Game.Chess.ECO as ECO
 import Game.Chess.Polyglot ( defaultBook, bookForest, readPolyglotFile )
 import Game.Chess.PGN ( readPGNFile, pgnForest )
@@ -38,7 +38,7 @@ import Brick.Widgets.Core ( showCursor, withAttr, hLimit, vLimit, hBox, vBox, st
                           , (<+>), (<=>)
                           )
 import Brick.Widgets.Center ( hCenter )
-import Brick.Widgets.Border ( border )
+import Brick.Widgets.Border ( border, borderWithLabel )
 import System.FilePath
 import System.Environment ( getArgs )
 
@@ -173,9 +173,10 @@ app = App { .. } where
   appStartEvent = pure
   appDraw st = [ui] where
     ui = hBox [ hLimit 9 list
-              , hLimit 23 $ hCenter board
-              , hCenter . hLimit 40 $ eco <=> str " " <=> var
+              , hLimit 23 $ hCenter board <=> str " " <=> eco
+              , hCenter . hLimit 40 $ str " " <=> var
               ]
+      <=> str " "
       <=> (str "FEN: " <+> fen)
       <=> str " "
       <=> hBox [str "Board style (+/- to change): ", style]
@@ -184,7 +185,8 @@ app = App { .. } where
                , str "ESC (q) = Quit"
                ]
     eco = maybe (str " ") drawECO (ECO.lookup (position st) defaultECO)
-    drawECO CO{_code, _name} = txt _code <+> str " " <+> txtWrap _name
+    drawECO co = borderWithLabel (str "ECO " <+> txt (coCode co)) $
+      txtWrap (coVariation co)
     style = vLimit 1 $ L.renderList drawStyle True (st^.boardStyle)
     drawStyle foc (n, _) = putCursorIf foc BoardStyle (0,0) $ str n
     selectedStyle = maybe english (snd . snd) $
