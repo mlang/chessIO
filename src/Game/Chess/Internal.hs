@@ -194,7 +194,12 @@ bitScanReverse = (63 -) . countLeadingZeros
 newtype Ply = Ply Word16 deriving (Eq, Storable)
 
 instance Show Ply where
-  show = toUCI
+  show (unpack -> (from, to, promo)) = "move " <> show f <> " " <> show t <> p where
+    f = toEnum from :: Sq
+    t = toEnum to :: Sq
+    p = case promo of
+      Just piece -> " `promoteTo` " <> show piece
+      Nothing -> ""
 
 move :: (IsSquare from, IsSquare to) => from -> to -> Ply
 move (toIndex -> from) (toIndex -> to) =
