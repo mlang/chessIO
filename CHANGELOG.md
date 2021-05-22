@@ -5,6 +5,7 @@
 - instance IsString Position based on fromFEN
 - instance Hashable Position
 - New functions: rankOf, fileOf, rankChar, fileChar, toCoord
+- New module: Game.Chess.ECO
 
 ## chessIO 0.6.1.1
 
