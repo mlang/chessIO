@@ -48,6 +48,7 @@ import Text.Megaparsec ( optional, (<|>), empty, (<?>), chunk, parse,
                          MonadParsec(try, token),
                          Stream, TraversableStream, VisualStream,
                          Token, Tokens, chunkLength )
+import GHC.Stack (HasCallStack)
 
 type Parser s = Parsec Void s
 
@@ -209,7 +210,7 @@ fromSAN :: (VisualStream s, TraversableStream s, SANToken (Token s), IsString (T
         => Position -> s -> Either String Ply
 fromSAN pos = first errorBundlePretty . parse (relaxedSAN pos) ""
 
-toSAN :: IsString s => Position -> Ply -> s
+toSAN :: (HasCallStack, IsString s) => Position -> Ply -> s
 toSAN pos m
   | m `elem` legalPlies pos = fromString $ unsafeToSAN pos m
   | otherwise               = error "Game.Chess.toSAN: Illegal move"
