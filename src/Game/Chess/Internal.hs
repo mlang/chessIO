@@ -34,6 +34,7 @@ import Game.Chess.Internal.Square (IsSquare(toIndex, toRF), Sq(..), toCoord)
 import Game.Chess.Internal.QuadBitboard (QuadBitboard)
 import qualified Game.Chess.Internal.QuadBitboard as QBB
 import Text.Read (readMaybe)
+import GHC.Stack (HasCallStack)
 
 capturing :: Position -> Ply -> Maybe PieceType
 capturing pos@Position{flags} (plyTarget -> to)
@@ -337,7 +338,7 @@ shiftNNW w = w `unsafeShiftL` 15 .&. notHFile
 --
 -- This function checks if the move is actually legal and throws and error
 -- if it isn't.  See 'unsafeDoPly' for a version that omits the legality check.
-doPly :: Position -> Ply -> Position
+doPly :: HasCallStack => Position -> Ply -> Position
 doPly p m
   | m `elem` legalPlies p = unsafeDoPly p m
   | otherwise        = error "Game.Chess.doPly: Illegal move"
