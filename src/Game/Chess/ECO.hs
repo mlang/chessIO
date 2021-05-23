@@ -78,9 +78,9 @@ readSCIDECOFile fp = first errorBundlePretty . parse scid fp <$> BS.readFile fp
 lookup :: Position -> ECO -> Maybe Opening
 lookup = HashMap.lookup
 
-mkECO :: [Opening] -> HashMap Position Opening
-mkECO = HashMap.fromList . fmap f where
-  f co = (foldl' doPly startpos $ coPlies co, co)
+mkECO :: [Opening] -> ECO
+mkECO = HashMap.fromList . fmap (\co -> (pos co, co)) where
+  pos = foldl' doPly startpos . coPlies
 
 type Parser = Parsec Void ByteString
 
