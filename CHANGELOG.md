@@ -4,6 +4,7 @@
 
 - instance IsString Position based on fromFEN
 - instance Hashable Position
+- instance Unbox Ply
 - New functions: rankOf, fileOf, rankChar, fileChar, toCoord
 - New module: Game.Chess.ECO
 

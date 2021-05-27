@@ -26,8 +26,10 @@ import Data.List (nub, sortOn)
 import Data.Maybe ( fromJust, isJust, listToMaybe )
 import Data.Ord (Down(..))
 import Data.String ( IsString(..) )
-import Data.Vector.Unboxed (Vector, (!))
+import Data.Vector.Unboxed (Vector, MVector, (!), Unbox)
 import qualified Data.Vector.Unboxed as Vector
+import qualified Data.Vector.Generic as G
+import qualified Data.Vector.Generic.Mutable as M
 import Data.Word ( Word16, Word64 )
 import Foreign.Storable
 import Game.Chess.Internal.Square (IsSquare(toIndex, toRF), Sq(..), toCoord)
@@ -201,6 +203,36 @@ instance Show Ply where
     p = case promo of
       Just piece -> " `promoteTo` " <> show piece
       Nothing -> ""
+
+newtype instance MVector s Ply = MV_Ply (MVector s Word16)
+newtype instance Vector    Ply = V_Ply (Vector Word16)
+
+instance M.MVector MVector Ply where
+  basicLength (MV_Ply v) = M.basicLength v
+  basicUnsafeSlice i n (MV_Ply v) = MV_Ply $ M.basicUnsafeSlice i n v
+  basicOverlaps (MV_Ply v1) (MV_Ply v2) = M.basicOverlaps v1 v2
+  basicUnsafeNew n = MV_Ply <$> M.basicUnsafeNew n
+  basicInitialize (MV_Ply v) = M.basicInitialize v
+  basicUnsafeReplicate n (Ply pl) = MV_Ply <$> M.basicUnsafeReplicate n pl
+  basicUnsafeRead (MV_Ply v) i = Ply <$> M.basicUnsafeRead v i
+  basicUnsafeWrite (MV_Ply v) i (Ply pl) = M.basicUnsafeWrite v i pl
+  basicClear (MV_Ply v) = M.basicClear v
+  basicSet (MV_Ply v) (Ply pl) = M.basicSet v pl
+  basicUnsafeCopy (MV_Ply v1) (MV_Ply v2) = M.basicUnsafeCopy v1 v2
+  basicUnsafeMove (MV_Ply v1) (MV_Ply v2) = M.basicUnsafeMove v1 v2
+  basicUnsafeGrow (MV_Ply v) n = MV_Ply <$> M.basicUnsafeGrow v n
+
+instance G.Vector Vector Ply where
+  {-# INLINE basicUnsafeIndexM #-}
+  basicUnsafeFreeze (MV_Ply v) = V_Ply <$> G.basicUnsafeFreeze v
+  basicUnsafeThaw (V_Ply v) = MV_Ply <$> G.basicUnsafeThaw v
+  basicLength (V_Ply v) = G.basicLength v
+  basicUnsafeSlice i n (V_Ply v) = V_Ply $ G.basicUnsafeSlice  i n v
+  basicUnsafeIndexM (V_Ply v) i = Ply <$> G.basicUnsafeIndexM v i
+  basicUnsafeCopy (MV_Ply mv) (V_Ply v) = G.basicUnsafeCopy mv v
+  elemseq _ pl z = G.elemseq (undefined :: Vector a) pl $ z
+
+instance Unbox Ply
 
 move :: (IsSquare from, IsSquare to) => from -> to -> Ply
 move (toIndex -> from) (toIndex -> to) =
