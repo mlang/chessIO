@@ -2,6 +2,7 @@
 
 ## chessIO 0.7.0.0
 
+- Add HasCallStack to partial doPly and toSAN (thanks Oleg Grenrus)
 - instance IsString Position based on fromFEN
 - instance Hashable Position
 - instance Unbox Ply
