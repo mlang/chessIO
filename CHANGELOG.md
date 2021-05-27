@@ -1,6 +1,6 @@
 # Releases
 
-## chessIO 0.6.2.0
+## chessIO 0.7.0.0
 
 - instance IsString Position based on fromFEN
 - instance Hashable Position
