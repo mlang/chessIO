@@ -4,7 +4,7 @@ github:      "mlang/chessIO"
 license:     BSD3
 author:      "Mario Lang"
 maintainer:  "mlang@blind.guru"
-copyright:   "2020 Mario Lang"
+copyright:   "2021 Mario Lang"
 
 synopsis:    Basic chess library
 category:    Game
