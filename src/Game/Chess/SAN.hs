@@ -28,6 +28,7 @@ import           Data.Functor (($>))
 import           Data.List (sortOn)
 import           Data.List.Extra (chunksOf)
 import           Data.Maybe (fromJust)
+import           Data.MonoTraversable (MonoFoldable(otoList), Element)
 import           Data.Ord (Down(..))
 import           Data.Proxy ( Proxy(..) )
 import           Data.String (IsString(fromString))
@@ -215,19 +216,20 @@ toSAN pos m
   | m `elem` legalPlies pos = fromString $ unsafeToSAN pos m
   | otherwise               = error "Game.Chess.toSAN: Illegal move"
 
-varToSAN :: IsString s => Position -> [Ply] -> s
-varToSAN _ [] = ""
-varToSAN pos plies
-  | color pos == Black && length plies == 1
-  = fromString $ show (moveNumber pos) <> "..." <> toSAN pos (head plies)
-  | color pos == Black
-  = fromString $ show (moveNumber pos) <> "..." <> toSAN pos (head plies) <> " " <> fromWhite (doPly pos (head plies)) (tail plies)
-  | otherwise
-  = fromString $ fromWhite pos plies
- where
-  fromWhite pos' = unwords . concat
-                 . zipWith f [moveNumber pos' ..] . chunksOf 2 . snd
-                 . mapAccumL (curry (uncurry doPly &&& uncurry toSAN)) pos'
+varToSAN :: (MonoFoldable variation, Element variation ~ Ply, IsString string)
+         => Position -> variation -> string
+varToSAN p = fromString . go p . otoList where
+  go pos [] = ""
+  go pos plies
+    | color pos == Black && length plies == 1
+    = show (moveNumber pos) <> "..." <> toSAN pos (head plies)
+    | color pos == Black
+    = show (moveNumber pos) <> "..." <> toSAN pos (head plies) <> " " <> fromWhite (doPly pos (head plies)) (tail plies)
+    | otherwise
+    = fromWhite pos plies
+  fromWhite pos = unwords . concat
+                . zipWith f [moveNumber pos ..] . chunksOf 2 . snd
+                . mapAccumL (curry (uncurry doPly &&& uncurry toSAN)) pos
   f n (x:xs) = (show n <> "." <> x):xs
   f _ [] = []
 

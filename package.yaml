@@ -26,6 +26,7 @@ dependencies:
 - file-embed
 - hashable
 - megaparsec >= 9.0
+- mono-traversable
 - MonadRandom
 - o-clock
 - prettyprinter

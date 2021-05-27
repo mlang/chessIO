@@ -52,6 +52,7 @@ import Data.IORef
 import Data.Ix
 import Data.List
 import Data.String (IsString(..))
+import qualified Data.Vector.Unboxed as Unboxed
 import Game.Chess
 import Numeric.Natural
 import System.Exit (ExitCode)
@@ -102,19 +103,19 @@ data Command = Name !ByteString
              | BestMove !BestMove
              deriving (Show)
 
-data Info = PV [Ply]
-          | Depth Int
-          | SelDepth Int
-          | Elapsed (Time Millisecond)
-          | MultiPV Int
-          | Score Score (Maybe Bounds)
-          | Nodes Int
-          | NPS Int
-          | TBHits Int
-          | HashFull Int
-          | CurrMove Ply
-          | CurrMoveNumber Int
-          | String ByteString
+data Info = PV !(Unboxed.Vector Ply)
+          | Depth !Int
+          | SelDepth !Int
+          | Elapsed !(Time Millisecond)
+          | MultiPV !Int
+          | Score !Score (Maybe Bounds)
+          | Nodes !Int
+          | NPS !Int
+          | TBHits !Int
+          | HashFull !Int
+          | CurrMove !Ply
+          | CurrMoveNumber !Int
+          | String !ByteString
           deriving (Eq, Show)
 
 data Score = CentiPawns Int
@@ -195,7 +196,8 @@ command pos = skipSpace *> choice
                                 <|> LowerBound <$ "lowerbound"
                                  )
     pure $ Score s b
-  pv = fmap (PV . reverse . snd) $ foldM toPly (pos, []) =<< sepBy mv skipSpace
+  pv = fmap (PV . Unboxed.fromList . reverse . snd)
+     $ foldM toPly (pos, []) =<< sepBy mv skipSpace
   toPly (pos, xs) s = case fromUCI pos s of
     Just m -> pure (unsafeDoPly pos m, m : xs)
     Nothing -> fail $ "Failed to parse move " <> s

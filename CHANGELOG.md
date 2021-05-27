@@ -7,6 +7,7 @@
 - instance Unbox Ply
 - New functions: rankOf, fileOf, rankChar, fileChar, toCoord
 - New module: Game.Chess.ECO
+- Chess.Game.UCI: PV is now an unboxed vector
 
 ## chessIO 0.6.1.1
 
