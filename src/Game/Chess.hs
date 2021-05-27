@@ -36,7 +36,7 @@ module Game.Chess (
   -- ** Converting from/to Forsyth-Edwards-Notation
 , fromFEN, toFEN
   -- * Chess moves
-, Ply(..), plySource, plyTarget, plyPromotion
+, Ply, plySource, plyTarget, plyPromotion
   -- ** Convertion
 , fromUCI, toUCI, fromPolyglot, toPolyglot
   -- ** Move generation
