@@ -52,7 +52,9 @@ import Data.IORef
 import Data.Ix
 import Data.List
 import Data.String (IsString(..))
+import Data.STRef (newSTRef, readSTRef, modifySTRef, writeSTRef)
 import qualified Data.Vector.Unboxed as Unboxed
+import qualified Data.Vector.Unboxed.Mutable as Unboxed
 import Game.Chess
 import Numeric.Natural
 import System.Exit (ExitCode)
@@ -196,11 +198,9 @@ command pos = skipSpace *> choice
                                 <|> LowerBound <$ "lowerbound"
                                  )
     pure $ Score s b
-  pv = fmap (PV . Unboxed.fromList . reverse . snd)
-     $ foldM toPly (pos, []) =<< sepBy mv skipSpace
-  toPly (pos, xs) s = case fromUCI pos s of
-    Just m -> pure (unsafeDoPly pos m, m : xs)
-    Nothing -> fail $ "Failed to parse move " <> s
+  pv = varToVec pos <$> sepBy mv skipSpace >>= \case
+    Right v -> pure . PV $ v
+    Left s -> fail $ "Failed to parse move " <> s
   currmove = fmap (fromUCI pos) mv >>= \case
     Just m -> pure $ CurrMove m
     Nothing -> fail "Failed to parse move"
@@ -223,6 +223,24 @@ command pos = skipSpace *> choice
           Nothing -> fail $ "Failed to parse ponder move " <> p
       Nothing -> fail $ "Failed to parse best move " <> m
   kv k v = k *> skipSpace *> v
+
+varToVec :: Position -> [String] -> Either String (Unboxed.Vector Ply)
+varToVec p xs = Unboxed.createT $ do
+  v <- Unboxed.new $ length xs
+  i <- newSTRef 0
+  pos <- newSTRef p
+  res <- forM xs $ \x -> do
+    pos' <- readSTRef pos
+    case fromUCI pos' x of
+      Just pl -> do
+        i' <- readSTRef i
+        Unboxed.write v i' pl
+        modifySTRef i (+ 1)
+        writeSTRef pos (unsafeDoPly pos' pl)
+        pure . Right $ ()
+      Nothing -> do
+        pure . Left $ x
+  pure $ fmap (const v) (sequenceA res)
 
 -- | Start a UCI engine with the given executable name and command line arguments.
 start :: String -> [String] -> IO (Maybe Engine)
