@@ -229,7 +229,7 @@ varToVec p xs = Unboxed.createT $ do
   v <- Unboxed.new $ length xs
   i <- newSTRef 0
   pos <- newSTRef p
-  res <- forM xs $ \x -> do
+  fmap (fmap (const v) . sequenceA) $ forM xs $ \x -> do
     pos' <- readSTRef pos
     case fromUCI pos' x of
       Just pl -> do
@@ -240,7 +240,6 @@ varToVec p xs = Unboxed.createT $ do
         pure . Right $ ()
       Nothing -> do
         pure . Left $ x
-  pure $ fmap (const v) (sequenceA res)
 
 -- | Start a UCI engine with the given executable name and command line arguments.
 start :: String -> [String] -> IO (Maybe Engine)
