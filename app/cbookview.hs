@@ -5,10 +5,10 @@ import Data.Foldable ( foldl', toList )
 import Data.Ix
 import Data.List ( elemIndex, intersperse )
 import Data.List.Extra ( chunksOf )
-import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty ( NonEmpty, cons )
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Maybe ( fromJust, fromMaybe )
-import Data.Tree ( Tree(..), Forest )
+import Data.Tree ( Tree(..), Forest, foldTree )
 import Data.Tree.Zipper ( TreePos, Full
                         , label, forest, fromForest, nextTree, prevTree
                         )
@@ -23,7 +23,7 @@ import qualified Game.Chess.ECO as ECO
 import Game.Chess.Polyglot ( defaultBook, bookForest, readPolyglotFile )
 import Game.Chess.PGN ( readPGNFile, pgnForest )
 import Game.Chess.SAN ( toSAN, varToSAN )
-import Game.Chess.Tree ( plyForest, pathTree )
+import Game.Chess.Tree ( plyForest )
 import Lens.Micro ( over, (&), (^.), (.~) )
 import Lens.Micro.TH ( makeLenses )
 import qualified Graphics.Vty as V
@@ -218,6 +218,9 @@ initialState = St pos tp sl fr where
   pos = startpos
   fr = F.focusRing [List, Board, BoardStyle]
   sl = L.list BoardStyle (Vec.fromList styles) 1
+
+pathTree :: Tree a -> Tree (NonEmpty a)
+pathTree = foldTree $ \a -> Node (pure a) . (fmap . fmap) (cons a)
 
 main :: IO ()
 main = do
