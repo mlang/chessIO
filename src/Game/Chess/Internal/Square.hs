@@ -1,5 +1,6 @@
 module Game.Chess.Internal.Square where
 
+import Control.Lens.Iso
 import Data.Bits (Bits(testBit))
 import Data.Char (chr, ord)
 import Data.Coerce (coerce)
@@ -213,11 +214,10 @@ rank = Rank . (`div` 8) . coerce
 file :: Square -> File
 file = File . (`mod` 8) . coerce
 
-rankFile :: Square -> (Rank, File)
-rankFile sq = case unSq sq `divMod` 8 of (r, f) -> (Rank r, File f)
-
-mkSqRF :: (Rank, File) -> Square
-mkSqRF (Rank r, File f) = Sq $ r*8 + f
+rankFile :: Iso' Square (Rank, File)
+rankFile = iso f g where
+  f (Sq i) = case i `divMod` 8 of (r, f) -> (Rank r, File f)
+  g (Rank r, File f) = Sq $ r*8 + f
 
 fileChar, rankChar :: Square -> Char
 fileChar = chr . (ord 'a' +) . unFile . file

@@ -25,6 +25,7 @@ dependencies:
 - extra
 - file-embed
 - hashable
+- lens
 - megaparsec >= 9.0
 - mono-traversable
 - MonadRandom

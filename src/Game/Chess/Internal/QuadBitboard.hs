@@ -31,6 +31,8 @@ module Game.Chess.Internal.QuadBitboard (
 ) where
 
 import Control.Applicative (liftA2)
+import Control.Lens (view)
+import Control.Lens.Iso (from)
 import Data.Bifunctor (first)
 import Data.Binary ( Binary(put, get) )
 import Data.Bits
@@ -280,12 +282,12 @@ instance Binary QuadBitboard where
   put QBB{..} = put black *> put pbq *> put nbk *> put rqk
 
 instance IsString QuadBitboard where
-  fromString = go (rankFile A8) mempty where
+  fromString = go (view rankFile A8) mempty where
     go _ !qbb "" = qbb
-    go (r, _) qbb ('/':xs) = go (mkRank $ unRank r - 1, FileA) qbb xs
+    go (r, _) qbb ('/':xs) = go (pred r, FileA) qbb xs
     go rf@(r, f) !qbb (x:xs)
       | inRange ('1','8') x = go (r, mkFile $ unFile f + ord x - ord '0') qbb xs
-      | otherwise = go (r, mkFile $ unFile f + 1) (qbb <> singleton (unSq . mkSqRF $ rf) nb) xs where
+      | otherwise = go (r, succ f) (qbb <> singleton (unSq . view (from rankFile) $ rf) nb) xs where
         nb = case x of
           'P' -> WhitePawn
           'N' -> WhiteKnight
@@ -321,7 +323,7 @@ toString qbb = intercalate "/" $ rank <$> [7, 6..0] where
   charAt :: Int -> Int -> Char
   charAt r f = maybe spc (if odd nb then toLower else id) $
     lookup (nb `div` 2) $ zip [1..] "PNBRQK"
-   where nb = qbb ! unSq (mkSqRF (mkRank r, mkFile f))
+   where nb = qbb ! unSq (view (from rankFile) (mkRank r, mkFile f))
   spc = ' '
 
 -- | Move a nibble.  Note that this function, while convenient, isn't very

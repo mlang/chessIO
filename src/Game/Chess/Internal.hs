@@ -16,6 +16,8 @@ package name chessIO.
 -}
 module Game.Chess.Internal where
 
+import Control.Lens (view)
+import Control.Lens.Iso (from)
 import Data.Bits
   ( Bits((.&.), testBit, unsafeShiftR, unsafeShiftL, xor, (.|.), bit, complement),
     FiniteBits(countLeadingZeros, countTrailingZeros) )
@@ -310,18 +312,18 @@ toPolyglot pos pl@(unpack -> (from, to, _)) = case color pos of
 
 -- | Parse a move in the format used by the Universal Chess Interface protocol.
 fromUCI :: Position -> String -> Maybe Ply
-fromUCI pos (fmap (splitAt 2) . splitAt 2 -> (from, (to, promo)))
+fromUCI pos (fmap (splitAt 2) . splitAt 2 -> (src, (dst, promo)))
   | null promo
-  = move <$> readCoord from <*> readCoord to >>= relativeTo pos
+  = move <$> readCoord src <*> readCoord dst >>= relativeTo pos
   | otherwise
-  = (\f t p -> move f t `promoteTo` p) <$> readCoord from
-                                       <*> readCoord to
+  = (\f t p -> move f t `promoteTo` p) <$> readCoord src
+                                       <*> readCoord dst
                                        <*> readPromo promo
       >>= relativeTo pos
  where
   readCoord [f,r]
     | inRange ('a','h') f && inRange ('1','8') r
-    = Just . mkSqRF $ (mkRank $ ord r - ord '1',  mkFile $ ord f - ord 'a')
+    = Just . view (from rankFile) $ (mkRank $ ord r - ord '1',  mkFile $ ord f - ord 'a')
   readCoord _ = Nothing
   readPromo "q" = Just Queen
   readPromo "r" = Just Rook
@@ -332,7 +334,7 @@ fromUCI pos (fmap (splitAt 2) . splitAt 2 -> (from, (to, promo)))
 -- | Convert a move to the format used by the Universal Chess Interface protocol.
 toUCI :: Ply -> String
 toUCI (unpack -> (from, to, promo)) = coord from <> coord to <> p where
-  coord x = let (r,f) = rankFile x in
+  coord x = let (r,f) = view rankFile x in
             chr (unFile f + ord 'a') : [chr (unRank r + ord '1')]
   p = case promo of
     Just Queen -> "q"

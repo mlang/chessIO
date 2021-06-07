@@ -20,6 +20,8 @@ module Game.Chess.SAN (
 
 import           Control.Applicative (Applicative(liftA2))
 import           Control.Arrow ((&&&))
+import           Control.Lens (view)
+import           Control.Lens.Iso (from)
 import           Data.Bifunctor (first)
 import qualified Data.ByteString as Strict (ByteString)
 import qualified Data.ByteString.Lazy as Lazy (ByteString)
@@ -92,7 +94,7 @@ fileP = mkFile <$> token fileToken mempty <?> "file"
 rankP :: (Stream s, SANToken (Token s)) => Parser s Rank
 rankP = mkRank <$> token rankToken mempty <?> "rank"
 squareP :: (Stream s, SANToken (Token s)) => Parser s Square
-squareP = liftA2 (flip $ curry mkSqRF) fileP rankP <?> "square"
+squareP = liftA2 (flip . curry $ view (from rankFile)) fileP rankP <?> "square"
 
 promotionPiece :: (Stream s, SANToken (Token s)) => Parser s PieceType
 promotionPiece = token promotionPieceToken mempty <?> "Q, R, B, N"
@@ -190,7 +192,7 @@ relaxedSAN pos = (castling pos <|> normal) <* optional sanStatus where
   conv (Nothing, Nothing, cap, to) = (Nothing, cap, to)
   conv (Just f, Nothing, cap, to) = (Just (F f), cap, to)
   conv (Nothing, Just r, cap, to) = (Just (R r), cap, to)
-  conv (Just f, Just r, cap, to) = (Just (RF (mkSqRF (r, f))), cap, to)
+  conv (Just f, Just r, cap, to) = (Just (RF (view (from rankFile) (r, f))), cap, to)
   location = try ((,Nothing,,) <$> (Just <$> fileP) <*> capture <*> squareP)
          <|> try ((Nothing,,,) <$> (Just <$> rankP) <*> capture <*> squareP)
          <|> try ((,,,) <$> (Just <$> fileP) <*> (Just <$> rankP)
@@ -253,7 +255,7 @@ sanCoords pos (pc,lms) m@(unpack -> (from, to, _)) =
   ms = filter ((to ==) . plyTarget) lms
   fEq (file . plySource -> file) = file == fromFile
   rEq (rank . plySource -> rank) = rank == fromRank
-  (fromRank, fromFile) = rankFile from
+  (fromRank, fromFile) = view rankFile from
 
 unsafeToSAN :: Position -> Ply -> String
 unsafeToSAN pos m@(unpack -> (from, to, promo)) =
@@ -296,7 +298,7 @@ unsafeToSAN pos m@(unpack -> (from, to, promo)) =
     fmap snd (pieceAt pos from') == Just piece && to' == to
   fEq (file . plySource -> file) = file == fromFile
   rEq (rank . plySource -> rank) = rank == fromRank
-  (fromRank, fromFile) = rankFile from
+  (fromRank, fromFile) = view rankFile from
 
 {-# SPECIALISE relaxedSAN :: Position -> Parser Strict.ByteString Ply #-}
 {-# SPECIALISE relaxedSAN :: Position -> Parser Lazy.ByteString Ply #-}

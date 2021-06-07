@@ -37,7 +37,7 @@ module Game.Chess (
          H1, H2, H3, H4, H5, H6, H7, H8)
 , rank, Rank(Rank1, Rank2, Rank3, Rank4, Rank5, Rank6, Rank7, Rank8)
 , file, File(FileA, FileB, FileC, FileD, FileE, FileF, FileG, FileH)
-, rankFile, mkSqRF, isLight, isDark
+, rankFile, isLight, isDark
 , rankChar, fileChar, toCoord
 , PieceType(..), Castle(..)
 , Position, startpos, color, moveNumber, halfMoveClock, pieceAt, inCheck
