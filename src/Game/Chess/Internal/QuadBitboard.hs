@@ -31,7 +31,7 @@ module Game.Chess.Internal.QuadBitboard (
 ) where
 
 import Control.Applicative (liftA2)
-import Control.Lens (view)
+import Control.Lens (view, (^.))
 import Control.Lens.Iso (from)
 import Data.Bifunctor (first)
 import Data.Binary ( Binary(put, get) )
@@ -287,7 +287,8 @@ instance IsString QuadBitboard where
     go (r, _) qbb ('/':xs) = go (pred r, FileA) qbb xs
     go rf@(r, f) !qbb (x:xs)
       | inRange ('1','8') x = go (r, mkFile $ unFile f + ord x - ord '0') qbb xs
-      | otherwise = go (r, succ f) (qbb <> singleton (unSq . view (from rankFile) $ rf) nb) xs where
+      | otherwise = go (r, succ f) (qbb <> singleton (unSq sq) nb) xs where
+        sq = view (from rankFile) $ rf
         nb = case x of
           'P' -> WhitePawn
           'N' -> WhiteKnight
@@ -315,15 +316,14 @@ instance Show QuadBitboard where
     (", rqk = 0x" <> showHex rqk "}")))
 
 toString :: QuadBitboard -> String
-toString qbb = intercalate "/" $ rank <$> [7, 6..0] where
-  rank r = concatMap countEmpty . groupBy spaces $ charAt r <$> [0..7]
+toString qbb = intercalate "/" $ rank <$> [Rank8, Rank7 .. Rank1] where
+  rank r = concatMap countEmpty . groupBy spaces $ charAt r <$> [FileA .. FileH]
   countEmpty xs | head xs == spc = show $ length xs
                 | otherwise      = xs
   spaces x y = x == spc && x == y
-  charAt :: Int -> Int -> Char
   charAt r f = maybe spc (if odd nb then toLower else id) $
     lookup (nb `div` 2) $ zip [1..] "PNBRQK"
-   where nb = qbb ! unSq (view (from rankFile) (mkRank r, mkFile f))
+   where nb = qbb ! unSq ((r, f) ^. from rankFile)
   spc = ' '
 
 -- | Move a nibble.  Note that this function, while convenient, isn't very
