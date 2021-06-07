@@ -19,7 +19,7 @@ hashPosition pos = piece `xor` castling `xor` ep `xor` turn where
     White -> turnKey
     Black -> 0
 
-pieceKey :: (PieceType, Color, Sq) -> Word64
+pieceKey :: (PieceType, Color, Square) -> Word64
 pieceKey = Unboxed.unsafeIndex pieceKeys . index ((Pawn,Black,A1),(King,White,H8))
 
 castleKey :: (Color, Castle) -> Word64

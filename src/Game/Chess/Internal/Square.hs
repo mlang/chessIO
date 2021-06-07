@@ -1,18 +1,4 @@
-module Game.Chess.Internal.Square (
-  IsSquare(fromSq, toSq, rank, file),
-  Rank(Rank1, Rank2, Rank3, Rank4, Rank5, Rank6, Rank7, Rank8), unRank, mkRank,
-  File(FileA, FileB, FileC, FileD, FileE, FileF, FileG, FileH), unFile, mkFile,
-  Sq(A1, A2, A3, A4, A5, A6, A7, A8,
-     B1, B2, B3, B4, B5, B6, B7, B8,
-     C1, C2, C3, C4, C5, C6, C7, C8,
-     D1, D2, D3, D4, D5, D6, D7, D8,
-     E1, E2, E3, E4, E5, E6, E7, E8,
-     F1, F2, F3, F4, F5, F6, F7, F8,
-     G1, G2, G3, G4, G5, G6, G7, G8,
-     H1, H2, H3, H4, H5, H6, H7, H8),
-  unSq, mkSq,
-  toIndex, toRF, isDark, isLight, fileChar, rankChar, toCoord
-) where
+module Game.Chess.Internal.Square where
 
 import Data.Bits (Bits(testBit))
 import Data.Char (chr, ord)
@@ -106,23 +92,23 @@ pattern FileH = File 7
 
 {-# COMPLETE FileA, FileB, FileC, FileD, FileE, FileF, FileG, FileH :: File #-}
 
-newtype Sq = Sq Int deriving (Eq, Ord)
+newtype Square = Sq Int deriving (Eq, Ord)
 
-instance Ix Sq where
+instance Ix Square where
   range (Sq i, Sq j) = [Sq k | k <- [i..j]]
   index (Sq i, Sq j) (Sq k) = index (i, j) k
   inRange (Sq i, Sq j) (Sq k) = inRange (i, j) k
   rangeSize (Sq i, Sq j) = j - i
 
-unSq :: Sq -> Int
+unSq :: Square -> Int
 unSq = coerce
 
 -- TODO: this check is expensive, maybe only worth in "debug" builds.
-mkSq :: HasCallStack => Int -> Sq
+mkSq :: HasCallStack => Int -> Square
 mkSq n | n >= 0 && n <= 63 = Sq n
        | otherwise         = error $ "mkSq " ++ show n
 
-instance Show Sq where
+instance Show Square where
   showsPrec d (Sq i) | i >= 0 && i <= 63 = showString [f', r']
                      | otherwise         = showParen (d > 10) $
                                            showString "Sq " . showsPrec 11 i
@@ -131,23 +117,23 @@ instance Show Sq where
         r' = chr (r + ord '1')
         f' = chr (f + ord 'A')
 
-instance Enum Sq where
+instance Enum Square where
   toEnum n | n >= 0 && n <= 63 = Sq n
            | otherwise         = error $ "Sq out-of-bound " ++ show n
   fromEnum = coerce
 
-instance Bounded Sq where
+instance Bounded Square where
   minBound = A1
   maxBound = H8
 
-pattern A1, A2, A3, A4, A5, A6, A7, A8 :: Sq
-pattern B1, B2, B3, B4, B5, B6, B7, B8 :: Sq
-pattern C1, C2, C3, C4, C5, C6, C7, C8 :: Sq
-pattern D1, D2, D3, D4, D5, D6, D7, D8 :: Sq
-pattern E1, E2, E3, E4, E5, E6, E7, E8 :: Sq
-pattern F1, F2, F3, F4, F5, F6, F7, F8 :: Sq
-pattern G1, G2, G3, G4, G5, G6, G7, G8 :: Sq
-pattern H1, H2, H3, H4, H5, H6, H7, H8 :: Sq
+pattern A1, A2, A3, A4, A5, A6, A7, A8 :: Square
+pattern B1, B2, B3, B4, B5, B6, B7, B8 :: Square
+pattern C1, C2, C3, C4, C5, C6, C7, C8 :: Square
+pattern D1, D2, D3, D4, D5, D6, D7, D8 :: Square
+pattern E1, E2, E3, E4, E5, E6, E7, E8 :: Square
+pattern F1, F2, F3, F4, F5, F6, F7, F8 :: Square
+pattern G1, G2, G3, G4, G5, G6, G7, G8 :: Square
+pattern H1, H2, H3, H4, H5, H6, H7, H8 :: Square
 
 pattern A1 = Sq 0
 pattern B1 = Sq 1
@@ -221,41 +207,27 @@ pattern F8 = Sq 61
 pattern G8 = Sq 62
 pattern H8 = Sq 63
 
-class IsSquare sq where
-  toSq   :: sq -> Sq
-  fromSq :: Sq -> sq
+rank :: Square -> Rank
+rank = Rank . (`div` 8) . coerce
 
-  file :: sq -> File
-  file = snd . fromSq . toSq
+file :: Square -> File
+file = File . (`mod` 8) . coerce
 
-  rank :: sq -> Rank
-  rank = fst . fromSq . toSq
+rankFile :: Square -> (Rank, File)
+rankFile sq = case unSq sq `divMod` 8 of (r, f) -> (Rank r, File f)
 
-instance IsSquare Sq where
-  toSq   = id
-  fromSq = id
+mkSqRF :: (Rank, File) -> Square
+mkSqRF (Rank r, File f) = Sq $ r*8 + f
 
-instance (rank ~ Rank, file ~ File) => IsSquare (rank, file) where
-  toSq (Rank r, File f) = Sq $ r*8 + f
-  fromSq (Sq i) = case i `divMod` 8 of (r, f) -> (Rank r, File f)
-  rank = fst
-  file = snd
-
-toIndex :: IsSquare sq => sq -> Int
-toIndex = unSq . toSq
-
-toRF :: IsSquare sq => sq -> (Int, Int)
-toRF (fromSq . toSq -> (Rank r, File f)) = (r, f)
-
-fileChar, rankChar :: IsSquare sq => sq -> Char
+fileChar, rankChar :: Square -> Char
 fileChar = chr . (ord 'a' +) . unFile . file
 rankChar = chr . (ord '1' +) . unRank . rank
 
-toCoord :: (IsSquare sq, IsString s) => sq -> s
+toCoord :: IsString s => Square -> s
 toCoord sq = fromString $ ($ sq) <$> [fileChar, rankChar]
 
-isDark :: IsSquare sq => sq -> Bool
-isDark sq = (0xaa55aa55aa55aa55 :: Word64) `testBit` toIndex sq
+isDark :: Square -> Bool
+isDark sq = (0xaa55aa55aa55aa55 :: Word64) `testBit` unSq sq
 
-isLight :: IsSquare sq => sq -> Bool
+isLight :: Square -> Bool
 isLight = not . isDark

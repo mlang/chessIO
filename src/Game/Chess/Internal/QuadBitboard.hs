@@ -47,7 +47,7 @@ import qualified Data.Vector.Generic.Mutable as M
 import Data.Vector.Unboxed (Vector, MVector, Unbox)
 import Data.Word (Word8, Word64)
 import Foreign.Storable
-import Game.Chess.Internal.Square (toIndex, toRF, Sq(A8), Rank, unRank, mkRank, File(FileA), unFile, mkFile, IsSquare(..))
+import Game.Chess.Internal.Square
 import GHC.Enum
     ( boundedEnumFrom,
       boundedEnumFromThen,
@@ -132,13 +132,13 @@ pattern BlackQueen  = 11
 pattern BlackKing   = 13
 
 instance IsList QuadBitboard where
-  type Item QuadBitboard = (Sq, Word4)
-  fromList = mconcat . map (uncurry singleton . first toIndex)
+  type Item QuadBitboard = (Square, Word4)
+  fromList = mconcat . map (uncurry singleton . first unSq)
   toList qbb = go maxBound [] where
     go sq xs
       | sq /= minBound = go (pred sq) xs'
       | otherwise      = xs'
-     where nb = qbb ! toIndex sq
+     where nb = qbb ! unSq sq
            xs' | nb /= NoPiece = (sq, nb) : xs
                | otherwise     = xs
 
@@ -280,12 +280,12 @@ instance Binary QuadBitboard where
   put QBB{..} = put black *> put pbq *> put nbk *> put rqk
 
 instance IsString QuadBitboard where
-  fromString = go (fromSq A8) mempty where
+  fromString = go (rankFile A8) mempty where
     go _ !qbb "" = qbb
     go (r, _) qbb ('/':xs) = go (mkRank $ unRank r - 1, FileA) qbb xs
     go rf@(r, f) !qbb (x:xs)
       | inRange ('1','8') x = go (r, mkFile $ unFile f + ord x - ord '0') qbb xs
-      | otherwise = go (r, mkFile $ unFile f + 1) (qbb <> singleton (toIndex rf) nb) xs where
+      | otherwise = go (r, mkFile $ unFile f + 1) (qbb <> singleton (unSq . mkSqRF $ rf) nb) xs where
         nb = case x of
           'P' -> WhitePawn
           'N' -> WhiteKnight
@@ -321,7 +321,7 @@ toString qbb = intercalate "/" $ rank <$> [7, 6..0] where
   charAt :: Int -> Int -> Char
   charAt r f = maybe spc (if odd nb then toLower else id) $
     lookup (nb `div` 2) $ zip [1..] "PNBRQK"
-   where nb = qbb ! toIndex (mkRank r, mkFile f)
+   where nb = qbb ! unSq (mkSqRF (mkRank r, mkFile f))
   spc = ' '
 
 -- | Move a nibble.  Note that this function, while convenient, isn't very

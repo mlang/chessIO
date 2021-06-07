@@ -14,8 +14,7 @@ import Data.Tree.Zipper ( TreePos, Full
                         )
 import qualified Data.Tree.Zipper as TreePos
 import qualified Data.Vector as Vec
-import Game.Chess ( Color(..), PieceType(..), Sq(..), IsSquare(toSq), toIndex, isDark
-                  , Position, color, startpos, pieceAt, toFEN
+import Game.Chess ( Color(..), PieceType(..), Square(A1, H8), isDark, Position, color, startpos, pieceAt, toFEN
                   , Ply, plyTarget, doPly
                   )
 import Game.Chess.ECO (Opening(..), defaultECO)
@@ -44,7 +43,7 @@ import System.Environment ( getArgs )
 
 data Name = List | Board | BoardStyle deriving (Show, Ord, Eq)
 
-type Style a = Position -> Sq -> Widget a
+type Style a = Position -> Square -> Widget a
 
 data St = St { _initialPosition :: Position
              , _treePos :: TreePos Full (NonEmpty Ply)
@@ -58,7 +57,7 @@ position, previousPosition :: St -> Position
 position st = foldl' doPly (st^.initialPosition) (st^.treePos & label)
 previousPosition st = foldl' doPly (st^.initialPosition) (st^.treePos & label & NonEmpty.init)
 
-targetSquare :: St -> Sq
+targetSquare :: St -> Square
 targetSquare = plyTarget . NonEmpty.last . label . (^. treePos)
 
 elemList :: Eq a => n -> a -> [a] -> L.List n a
@@ -73,7 +72,7 @@ plyList (_treePos -> tp) = elemList List ply plies where
 selectedAttr :: AttrName
 selectedAttr = "selected"
 
-renderPosition :: Position -> Color -> Maybe Sq -> Style Name -> Widget Name
+renderPosition :: Position -> Color -> Maybe Square -> Style Name -> Widget Name
 renderPosition pos persp tgt sty = ranks <+> border board <=> files where
   rev :: [a] -> [a]
   rev = if persp == Black then reverse else id
