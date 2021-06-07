@@ -14,7 +14,7 @@ import Data.Tree.Zipper ( TreePos, Full
                         )
 import qualified Data.Tree.Zipper as TreePos
 import qualified Data.Vector as Vec
-import Game.Chess ( Color(..), PieceType(..), Sq(..), toIndex, isDark
+import Game.Chess ( Color(..), PieceType(..), Sq(..), IsSquare(toSq), toIndex, isDark
                   , Position, color, startpos, pieceAt, toFEN
                   , Ply, plyTarget, doPly
                   )
@@ -58,7 +58,7 @@ position, previousPosition :: St -> Position
 position st = foldl' doPly (st^.initialPosition) (st^.treePos & label)
 previousPosition st = foldl' doPly (st^.initialPosition) (st^.treePos & label & NonEmpty.init)
 
-targetSquare :: St -> Int
+targetSquare :: St -> Sq
 targetSquare = plyTarget . NonEmpty.last . label . (^. treePos)
 
 elemList :: Eq a => n -> a -> [a] -> L.List n a
@@ -73,7 +73,7 @@ plyList (_treePos -> tp) = elemList List ply plies where
 selectedAttr :: AttrName
 selectedAttr = "selected"
 
-renderPosition :: Position -> Color -> Maybe Int -> Style Name -> Widget Name
+renderPosition :: Position -> Color -> Maybe Sq -> Style Name -> Widget Name
 renderPosition pos persp tgt sty = ranks <+> border board <=> files where
   rev :: [a] -> [a]
   rev = if persp == Black then reverse else id
@@ -81,8 +81,8 @@ renderPosition pos persp tgt sty = ranks <+> border board <=> files where
   files = str $ rev "   a b c d e f g h   "
   board = hLimit 17 . vLimit 8 . vBox $ map (hBox . spacer . map pc) squares
   squares = reverse $ chunksOf 8 $ rev [A1 .. H8]
-  c sq | Just t <- tgt, t == toIndex sq = showCursor Board $ Location (0,0)
-       | otherwise                      = id
+  c sq | Just t <- tgt, t == sq = showCursor Board $ Location (0,0)
+       | otherwise              = id
   pc sq = c sq $ sty pos sq
   spacer = (str " " :) . (<> [str " "]) . intersperse (str " ")
 

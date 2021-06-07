@@ -27,7 +27,7 @@ The following modules implement more specific functionality:
 module Game.Chess (
   -- * Chess positions
   Color(..), opponent
-, IsSquare(toIndex, toRF, rankOf, fileOf), Sq(..), isLight, isDark
+, IsSquare(fromSq, toSq, file, rank), Sq(..), Rank(..), File(..), toIndex, toRF, isLight, isDark
 , rankChar, fileChar, toCoord
 , PieceType(..), Castle(..)
 , Position, startpos, color, moveNumber, halfMoveClock, pieceAt, inCheck

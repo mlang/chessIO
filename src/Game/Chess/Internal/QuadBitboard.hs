@@ -47,7 +47,7 @@ import qualified Data.Vector.Generic.Mutable as M
 import Data.Vector.Unboxed (Vector, MVector, Unbox)
 import Data.Word (Word8, Word64)
 import Foreign.Storable
-import Game.Chess.Internal.Square (toIndex, toRF, Sq(A8))
+import Game.Chess.Internal.Square (toIndex, toRF, Sq(A8), Rank, unRank, mkRank, File(FileA), unFile, mkFile, IsSquare(..))
 import GHC.Enum
     ( boundedEnumFrom,
       boundedEnumFromThen,
@@ -280,12 +280,12 @@ instance Binary QuadBitboard where
   put QBB{..} = put black *> put pbq *> put nbk *> put rqk
 
 instance IsString QuadBitboard where
-  fromString = go (toRF A8) mempty where
+  fromString = go (fromSq A8) mempty where
     go _ !qbb "" = qbb
-    go (!r,_) qbb ('/':xs) = go (r - 1, 0) qbb xs
-    go rf@(!r,!f) !qbb (x:xs)
-      | inRange ('1','8') x = go (r, f + ord x - ord '0') qbb xs
-      | otherwise = go (r, f + 1) (qbb <> singleton (toIndex rf) nb) xs where
+    go (r, _) qbb ('/':xs) = go (mkRank $ unRank r - 1, FileA) qbb xs
+    go rf@(r, f) !qbb (x:xs)
+      | inRange ('1','8') x = go (r, mkFile $ unFile f + ord x - ord '0') qbb xs
+      | otherwise = go (r, mkFile $ unFile f + 1) (qbb <> singleton (toIndex rf) nb) xs where
         nb = case x of
           'P' -> WhitePawn
           'N' -> WhiteKnight
@@ -321,7 +321,7 @@ toString qbb = intercalate "/" $ rank <$> [7, 6..0] where
   charAt :: Int -> Int -> Char
   charAt r f = maybe spc (if odd nb then toLower else id) $
     lookup (nb `div` 2) $ zip [1..] "PNBRQK"
-   where nb = qbb ! toIndex (r, f)
+   where nb = qbb ! toIndex (mkRank r, mkFile f)
   spc = ' '
 
 -- | Move a nibble.  Note that this function, while convenient, isn't very

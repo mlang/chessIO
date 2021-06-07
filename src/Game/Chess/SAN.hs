@@ -43,7 +43,7 @@ import Game.Chess.Internal ( Castle(Queenside, Kingside),
                              promoteTo, plySource, plyTarget, unpack, doPly, unsafeDoPly, legalPlies,
                              inCheck, canCastleKingside, canCastleQueenside,
                              wKscm, wQscm, bKscm, bQscm )
-import Game.Chess.Internal.Square (IsSquare(..), fileChar, rankChar, toCoord)
+import Game.Chess.Internal.Square (IsSquare(..), File, mkFile, unFile, Rank(Rank1, Rank8), mkRank, unRank, Sq, toSq, toIndex, toRF, fileChar, rankChar, toCoord)
 import Text.Megaparsec ( optional, (<|>), empty, (<?>), chunk, parse,
                          errorBundlePretty, choice, option, Parsec,
                          MonadParsec(try, token),
@@ -70,9 +70,9 @@ castling pos
   castleMove Queenside | color pos == White = wQscm
                        | otherwise          = bQscm
 
-data From = File Int
-          | Rank Int
-          | Square Int
+data From = File File
+          | Rank Rank
+          | Square Sq
           deriving (Eq, Show)
 
 data SANStatus = Check | Checkmate deriving (Eq, Read, Show)
@@ -87,10 +87,12 @@ class SANToken a where
 sanPiece :: (Stream s, SANToken (Token s)) => Parser s PieceType
 sanPiece = token sanPieceToken mempty <?> "piece"
 
-fileP, rankP, squareP :: (Stream s, SANToken (Token s)) => Parser s Int
-fileP = token fileToken mempty <?> "file"
-rankP = token rankToken mempty <?> "rank"
-squareP = liftA2 (flip $ curry toIndex) fileP rankP <?> "square"
+fileP :: (Stream s, SANToken (Token s)) => Parser s File
+fileP = mkFile <$> token fileToken mempty <?> "file"
+rankP :: (Stream s, SANToken (Token s)) => Parser s Rank
+rankP = mkRank <$> token rankToken mempty <?> "rank"
+squareP :: (Stream s, SANToken (Token s)) => Parser s Sq
+squareP = liftA2 (flip $ curry toSq) fileP rankP <?> "square"
 
 promotionPiece :: (Stream s, SANToken (Token s)) => Parser s PieceType
 promotionPiece = token promotionPieceToken mempty <?> "Q, R, B, N"
@@ -163,7 +165,7 @@ strictSAN pos = case legalPlies pos of
     sortOn (Down . chunkLength (Proxy :: Proxy s) . snd) $
     (\m -> (m, sanCoords pos (p,ms) m)) <$> ms
   promotion = chunk "=" *> promotionPiece
-  lastRank i = i >= 56 || i <= 7
+  lastRank (rank -> r) = r == Rank1 || r == Rank8
   checkStatus m
     | inCheck (color nextPos) nextPos && null (legalPlies nextPos)
     = chunk "#" $> m
@@ -188,7 +190,7 @@ relaxedSAN pos = (castling pos <|> normal) <* optional sanStatus where
   conv (Nothing, Nothing, cap, to) = (Nothing, cap, to)
   conv (Just f, Nothing, cap, to) = (Just (File f), cap, to)
   conv (Nothing, Just r, cap, to) = (Just (Rank r), cap, to)
-  conv (Just f, Just r, cap, to) = (Just (Square (r*8+f)), cap, to)
+  conv (Just f, Just r, cap, to) = (Just (Square (toSq (r, f))), cap, to)
   location = try ((,Nothing,,) <$> (Just <$> fileP) <*> capture <*> squareP)
          <|> try ((Nothing,,,) <$> (Just <$> rankP) <*> capture <*> squareP)
          <|> try ((,,,) <$> (Just <$> fileP) <*> (Just <$> rankP)
@@ -200,9 +202,9 @@ relaxedSAN pos = (castling pos <|> normal) <* optional sanStatus where
     f (Just (Square sq)) (unpack -> (from', to', prm')) =
       pAt from' == pc && from' == sq && to' == to && prm' == prm
     f (Just (File ff)) (unpack -> (from', to', prm')) =
-      pAt from' == pc && fileOf from' == ff && to == to' && prm == prm'
+      pAt from' == pc && file from' == ff && to == to' && prm == prm'
     f (Just (Rank fr)) (unpack -> (from', to', prm')) =
-      pAt from' == pc && rankOf from' == fr && to == to' && prm == prm'
+      pAt from' == pc && rank from' == fr && to == to' && prm == prm'
     f Nothing (unpack -> (from', to', prm')) =
       pAt from' == pc && to == to' && prm == prm'
   pAt = snd . fromJust . pieceAt pos
@@ -249,8 +251,8 @@ sanCoords pos (pc,lms) m@(unpack -> (from, to, _)) =
     | capture   = "x" <> toCoord to
     | otherwise = toCoord to
   ms = filter ((to ==) . plyTarget) lms
-  fEq (fileOf . plySource -> file) = file == fromFile
-  rEq (rankOf . plySource -> rank) = rank == fromRank
+  fEq (file . plySource -> file) = unFile file == fromFile
+  rEq (rank . plySource -> rank) = unRank rank == fromRank
   (fromRank, fromFile) = toRF from
 
 unsafeToSAN :: Position -> Ply -> String
@@ -292,8 +294,8 @@ unsafeToSAN pos m@(unpack -> (from, to, promo)) =
   ms = filter movesTo $ legalPlies pos
   movesTo (unpack -> (from', to', _)) =
     fmap snd (pieceAt pos from') == Just piece && to' == to
-  fEq (fileOf . plySource -> file) = file == fromFile
-  rEq (rankOf . plySource -> rank) = rank == fromRank
+  fEq (file . plySource -> file) = unFile file == fromFile
+  rEq (rank . plySource -> rank) = unRank rank == fromRank
   (fromRank, fromFile) = toRF from
 
 {-# SPECIALISE relaxedSAN :: Position -> Parser Strict.ByteString Ply #-}

@@ -11,7 +11,7 @@ import Game.Chess
 
 hashPosition :: Position -> Word64
 hashPosition pos = piece `xor` castling `xor` ep `xor` turn where
-  piece = foldr xor 0 $ mapMaybe f [A1 .. ] where
+  piece = foldr xor 0 $ mapMaybe f [A1 .. H8] where
     f sq = (\(c, p) -> pieceKey (p, c, sq)) <$> pieceAt pos sq
   castling = foldr (xor . castleKey) 0 $ castlingRights pos
   ep = 0 -- TODO

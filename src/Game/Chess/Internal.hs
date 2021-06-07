@@ -32,7 +32,7 @@ import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Generic.Mutable as M
 import Data.Word ( Word16, Word64 )
 import Foreign.Storable
-import Game.Chess.Internal.Square (IsSquare(toIndex, toRF), Sq(..), toCoord)
+import Game.Chess.Internal.Square (IsSquare(..), Sq(..), unSq, mkSq, Rank(..), unRank, mkRank, File(..), unFile, mkFile, toIndex, toRF, toCoord)
 import Game.Chess.Internal.QuadBitboard (QuadBitboard)
 import qualified Game.Chess.Internal.QuadBitboard as QBB
 import Text.Read (readMaybe)
@@ -40,12 +40,12 @@ import GHC.Stack (HasCallStack)
 
 capturing :: Position -> Ply -> Maybe PieceType
 capturing pos@Position{flags} (plyTarget -> to)
-  | (flags .&. epMask) `testBit` to = Just Pawn
+  | (flags .&. epMask) `testBit` unSq to = Just Pawn
   | otherwise = snd <$> pieceAt pos to
 
 isCapture :: Position -> Ply -> Bool
 isCapture Position{qbb, flags} =
-  testBit (QBB.occupied qbb .|. (flags .&. epMask)) . plyTarget
+  testBit (QBB.occupied qbb .|. (flags .&. epMask)) . unSq . plyTarget
 
 -- | The starting position as given by the FEN string
 --   "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1".
@@ -176,7 +176,7 @@ toFEN Position{qbb, color, flags, halfMoveClock, moveNumber} = unwords
     bqs (v, xs) | v `testMask` crbQs = (v, 'q':xs)
                 | otherwise          = (v, xs)
   showEP 0 = "-"
-  showEP x = toCoord (bitScanForward x)
+  showEP x = toCoord . mkSq . bitScanForward $ x
 
 occupiedBy :: Color -> QuadBitboard -> Word64
 occupiedBy White = QBB.white
@@ -197,9 +197,7 @@ bitScanReverse = (63 -) . countLeadingZeros
 newtype Ply = Ply Word16 deriving (Eq, Storable)
 
 instance Show Ply where
-  show (unpack -> (from, to, promo)) = "move " <> show f <> " " <> show t <> p where
-    f = toEnum from :: Sq
-    t = toEnum to :: Sq
+  show (unpack -> (from, to, promo)) = "move " <> show from <> " " <> show to <> p where
     p = case promo of
       Just piece -> " `promoteTo` " <> show piece
       Nothing -> ""
@@ -246,9 +244,9 @@ promoteTo (Ply x) = Ply . set where
   set Queen  = x .&. 0xfff .|. 0x4000
   set _      = x
 
-plySource, plyTarget :: Ply -> Int
-plySource (Ply x) = fromIntegral ((x `unsafeShiftR` 6) .&. 0b111111)
-plyTarget (Ply x) = fromIntegral (x .&. 0b111111)
+plySource, plyTarget :: Ply -> Sq
+plySource (Ply x) = mkSq $ fromIntegral ((x `unsafeShiftR` 6) .&. 0b111111)
+plyTarget (Ply x) = mkSq $ fromIntegral (x .&. 0b111111)
 
 plyPromotion :: Ply -> Maybe PieceType
 plyPromotion (Ply x) = case x `unsafeShiftR` 12 of
@@ -258,9 +256,9 @@ plyPromotion (Ply x) = case x `unsafeShiftR` 12 of
   4 -> Just Queen
   _ -> Nothing
 
-unpack :: Ply -> (Int, Int, Maybe PieceType)
-unpack (Ply x) = ( fromIntegral ((x `unsafeShiftR` 6) .&. 0b111111)
-                 , fromIntegral (x .&. 0b111111)
+unpack :: Ply -> (Sq, Sq, Maybe PieceType)
+unpack (Ply x) = ( mkSq $ fromIntegral ((x `unsafeShiftR` 6) .&. 0b111111)
+                 , mkSq $ fromIntegral (x .&. 0b111111)
                  , piece)
  where
   !piece = case x `unsafeShiftR` 12 of
@@ -272,41 +270,41 @@ unpack (Ply x) = ( fromIntegral ((x `unsafeShiftR` 6) .&. 0b111111)
 
 fromPolyglot :: Position -> Ply -> Ply
 fromPolyglot pos pl@(unpack -> (from, to, _)) = case color pos of
-  White | from == toIndex E1
+  White | from == fromSq E1
         , canCastleKingside pos
-        , to == toIndex H1
+        , to == fromSq H1
         -> wKscm
-        | from == toIndex E1
+        | from == fromSq E1
         , canCastleQueenside pos
-        , to == toIndex A1
+        , to == fromSq A1
         -> wQscm
-  Black | from == toIndex E8
+  Black | from == fromSq E8
         , canCastleKingside pos
-        , to == toIndex H8
+        , to == fromSq H8
         -> bKscm
-        | from == toIndex E8
+        | from == fromSq E8
         , canCastleQueenside pos
-        , to == toIndex A8
+        , to == fromSq A8
         -> bQscm
   _ -> pl
 
 toPolyglot :: Position -> Ply -> Ply
 toPolyglot pos pl@(unpack -> (from, to, _)) = case color pos of
-  White | from == toIndex E1
+  White | from == fromSq E1
         , canCastleKingside pos
-        , to == toIndex G1
+        , to == fromSq G1
         -> from `move` H1
-        | from == toIndex E1
+        | from == fromSq E1
         , canCastleQueenside pos
-        , to == toIndex C1
+        , to == fromSq C1
         -> from `move` A1
-  Black | from == toIndex E8
+  Black | from == fromSq E8
         , canCastleKingside pos
-        , to == toIndex G8
+        , to == fromSq G8
         -> from `move` H8
-        | from == toIndex E8
+        | from == fromSq E8
         , canCastleQueenside pos
-        , to == toIndex C8
+        , to == fromSq C8
         -> from `move` A8
   _ -> pl
 
@@ -323,7 +321,7 @@ fromUCI pos (fmap (splitAt 2) . splitAt 2 -> (from, (to, promo)))
  where
   readCoord [f,r]
     | inRange ('a','h') f && inRange ('1','8') r
-    = Just $ (ord r - ord '1') * 8 + (ord f - ord 'a')
+    = Just . toSq $ (mkRank $ ord r - ord '1',  mkFile $ ord f - ord 'a')
   readCoord _ = Nothing
   readPromo "q" = Just Queen
   readPromo "r" = Just Rook
@@ -415,49 +413,49 @@ unsafeDoPly' pos@Position{qbb, flags} m@(unpack -> (from, to, promo))
   | Just piece <- promo
   = case color pos of
       White -> case piece of
-        Queen -> pos { qbb = QBB.whitePromotion qbb from to QBB.WhiteQueen
-                     , flags = flags `clearMask` (epMask .|. bit to)
+        Queen -> pos { qbb = QBB.whitePromotion qbb (unSq from) (unSq to) QBB.WhiteQueen
+                     , flags = flags `clearMask` (epMask .|. bit (unSq to))
                      }
-        Rook  -> pos { qbb = QBB.whitePromotion qbb from to QBB.WhiteRook
-                     , flags = flags `clearMask` (epMask .|. bit to)
+        Rook  -> pos { qbb = QBB.whitePromotion qbb (unSq from) (unSq to) QBB.WhiteRook
+                     , flags = flags `clearMask` (epMask .|. bit (unSq to))
                      }
-        Bishop -> pos { qbb = QBB.whitePromotion qbb from to QBB.WhiteBishop
-                      , flags = flags `clearMask` (epMask .|. bit to)
+        Bishop -> pos { qbb = QBB.whitePromotion qbb (unSq from) (unSq to) QBB.WhiteBishop
+                      , flags = flags `clearMask` (epMask .|. bit (unSq to))
                       }
-        Knight -> pos { qbb = QBB.whitePromotion qbb from to QBB.WhiteKnight
-                      , flags = flags `clearMask` (epMask .|. bit to)
+        Knight -> pos { qbb = QBB.whitePromotion qbb (unSq from) (unSq to) QBB.WhiteKnight
+                      , flags = flags `clearMask` (epMask .|. bit (unSq to))
                       }
         _ -> error "Impossible: White tried to promote to Pawn"
       Black -> case piece of
-        Queen -> pos { qbb = QBB.blackPromotion qbb from to QBB.BlackQueen
-                     , flags = flags `clearMask` (epMask .|. bit to)
+        Queen -> pos { qbb = QBB.blackPromotion qbb (unSq from) (unSq to) QBB.BlackQueen
+                     , flags = flags `clearMask` (epMask .|. bit (unSq to))
                      }  
-        Rook   -> pos { qbb = QBB.blackPromotion qbb from to QBB.BlackRook
-                      , flags = flags `clearMask` (epMask .|. bit to)
+        Rook   -> pos { qbb = QBB.blackPromotion qbb (unSq from) (unSq to) QBB.BlackRook
+                      , flags = flags `clearMask` (epMask .|. bit (unSq to))
                       }
-        Bishop -> pos { qbb = QBB.blackPromotion qbb from to QBB.BlackBishop
-                      , flags = flags `clearMask` (epMask .|. bit to)
+        Bishop -> pos { qbb = QBB.blackPromotion qbb (unSq from) (unSq to) QBB.BlackBishop
+                      , flags = flags `clearMask` (epMask .|. bit (unSq to))
                       }
-        Knight -> pos { qbb = QBB.blackPromotion qbb from to QBB.BlackKnight
-                      , flags = flags `clearMask` (epMask .|. bit to)
+        Knight -> pos { qbb = QBB.blackPromotion qbb (unSq from) (unSq to) QBB.BlackKnight
+                      , flags = flags `clearMask` (epMask .|. bit (unSq to))
                       }
         _ -> error "Impossible: Black tried to promote to Pawn"
   | QBB.pawns qbb `testMask` fromMask &&
     toMask .&. (rank3 .|. rank6) .&. flags /= 0
-  = pos { qbb = qbb <> QBB.enPassant from to
+  = pos { qbb = qbb <> QBB.enPassant (unSq from) (unSq to)
         , flags = flags `clearMask` toMask
         }
   | otherwise
-  = pos { qbb = QBB.move qbb from to
+  = pos { qbb = QBB.move qbb (unSq from) (unSq to)
         , flags = (flags `clearMask` (epMask .|. mask)) .|. dpp
         }
  where
-  !fromMask = 1 `unsafeShiftL` from
-  !toMask = 1 `unsafeShiftL` to
+  !fromMask = 1 `unsafeShiftL` (unSq from)
+  !toMask = 1 `unsafeShiftL` (unSq to)
   !mask = fromMask .|. toMask
   dpp = case color pos of
-    White | fromMask .&. rank2 .&. QBB.wPawns qbb /= 0 && from + 16 == to -> shiftN fromMask
-    Black | fromMask .&. rank7 .&. QBB.bPawns qbb /= 0 && from - 16 == to -> shiftS fromMask
+    White | fromMask .&. rank2 .&. QBB.wPawns qbb /= 0 && unSq from + 16 == unSq to -> shiftN fromMask
+    Black | fromMask .&. rank7 .&. QBB.bPawns qbb /= 0 && unSq from - 16 == unSq to -> shiftS fromMask
     _                                                            -> 0
 
 -- | Generate a list of possible moves for the given position.
@@ -495,14 +493,14 @@ legalPlies pos@Position{color, qbb, flags} = filter legalPly $
             | otherwise                  = ml
   bLong ml  | canCastleQueenside' pos occ = bQscm : ml
             | otherwise              = ml
-  mkM !from ms !to = move from to : ms
+  mkM !from ms !to = move (mkSq from) (mkSq to) : ms
 
 -- | Returns 'True' if 'Color' is in check in the given position.
 inCheck :: Color -> Position -> Bool
 inCheck White Position{qbb} =
-  attackedBy Black qbb (occupied qbb) (bitScanForward (QBB.wKings qbb))
+  attackedBy Black qbb (occupied qbb) (mkSq (bitScanForward (QBB.wKings qbb)))
 inCheck Black Position{qbb} =
-  attackedBy White qbb (occupied qbb) (bitScanForward (QBB.bKings qbb))
+  attackedBy White qbb (occupied qbb) (mkSq (bitScanForward (QBB.bKings qbb)))
 
 wPawnMoves :: Word64 -> Word64 -> Word64 -> [Ply] -> [Ply]
 wPawnMoves !pawns !emptySquares !opponentPieces =
@@ -518,7 +516,7 @@ wPawnMoves !pawns !emptySquares !opponentPieces =
   mkPly diff ms tsq
     | tsq >= 56 = (promoteTo m <$> [Queen, Rook, Bishop, Knight]) <> ms
     | otherwise = m : ms
-   where m = move (tsq - diff) tsq
+   where m = move (mkSq (tsq - diff)) (mkSq tsq)
 
 bPawnMoves :: Word64 -> Word64 -> Word64 -> [Ply] -> [Ply]
 bPawnMoves !pawns !emptySquares !opponentPieces =
@@ -534,14 +532,14 @@ bPawnMoves !pawns !emptySquares !opponentPieces =
   mkPly diff ms tsq
     | tsq <= 7  = (promoteTo m <$> [Queen, Rook, Bishop, Knight]) <> ms
     | otherwise = m : ms
-   where m = move (tsq + diff) tsq
+   where m = move (mkSq (tsq + diff)) (mkSq  tsq)
 
 slideMoves :: PieceType -> Position -> Word64 -> Word64 -> [Ply] -> [Ply]
 slideMoves piece (Position bb c _ _ _) !notOurs !occ =
   flip (foldBits gen) pieces
  where
   gen ms from = foldBits (mkPly from) ms (targets from)
-  mkPly from ms to = move from to : ms
+  mkPly from ms to = move (mkSq from) (mkSq to) : ms
   targets sq = case piece of
     Rook -> rookTargets sq occ .&. notOurs
     Bishop -> bishopTargets sq occ .&. notOurs
@@ -572,7 +570,7 @@ castlingRights Position{flags} = wks . wqs . bks . bqs $ [] where
 enPassantSquare :: Position -> Maybe Sq
 enPassantSquare Position{flags} = case flags .&. epMask of
   0 -> Nothing
-  x -> Just $ toEnum $ bitScanForward x
+  x -> Just . mkSq . bitScanForward $ x
 
 canCastleKingside, canCastleQueenside :: Position -> Bool
 canCastleKingside pos@Position{qbb} = canCastleKingside' pos (occupied qbb)
