@@ -3,6 +3,7 @@
 module Game.Chess.ECO (Opening(..), ECO, defaultECO, readSCIDECOFile, lookup) where
 
 import Prelude hiding (lookup)
+import qualified Prelude as Prelude
 import Control.Monad
 import Data.Bifunctor
 import Data.ByteString.Char8 (ByteString)
@@ -19,9 +20,11 @@ import Data.Ord
 import Data.Ratio
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.Tree (foldTree)
 import Data.Word (Word8)
 import Data.Void
 import Game.Chess
+import Game.Chess.PGN
 import Game.Chess.SAN
 import System.IO
 import Text.Megaparsec
@@ -32,16 +35,27 @@ defaultECO :: ECO
 defaultECO = case parse scid "book/scid.eco" $(embedFile "book/scid.eco") of
   Right x -> x
 
+fromPGN :: PGN -> ECO
+fromPGN (PGN games) = mkECO $ map f games where
+  f (tags, (_, forest)) = CO { .. } where
+    coCode = maybe "" id $ Prelude.lookup "ECO" tags
+    coName = maybe "" id $ Prelude.lookup "Opening" tags
+    coVariation = Prelude.lookup "Variation" tags
+    coPlies = head $ concatMap (foldTree g) forest where
+      g a [] = [[pgnPly a]]
+      g a xs = (pgnPly a :) <$> fold xs
+
 data Opening = CO {
   coCode :: Text
-, coVariation :: Text
+, coName :: Text
+, coVariation :: Maybe Text
 , coPlies :: [Ply]
 } deriving (Show)
 
 type ECO = HashMap Position Opening
 
 opening :: Parser Opening
-opening = CO <$> lexeme code <*> lexeme var <*> lexeme (plies startpos)
+opening = CO <$> lexeme code <*> lexeme var <*> pure Nothing <*> lexeme (plies startpos)
 
 code :: Parser Text
 code = p <?> "code" where
