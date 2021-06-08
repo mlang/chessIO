@@ -101,8 +101,9 @@ instance Ix Square where
   inRange (Sq i, Sq j) (Sq k) = inRange (i, j) k
   rangeSize (Sq i, Sq j) = j - i
 
-unSq :: Square -> Int
-unSq = coerce
+unSquare :: Square -> Int
+unSquare = coerce
+{-# INLINE unSquare #-}
 
 -- TODO: this check is expensive, maybe only worth in "debug" builds.
 mkSq :: HasCallStack => Int -> Square
@@ -227,7 +228,7 @@ toCoord :: IsString s => Square -> s
 toCoord sq = fromString $ ($ sq) <$> [fileChar, rankChar]
 
 isDark :: Square -> Bool
-isDark sq = (0xaa55aa55aa55aa55 :: Word64) `testBit` unSq sq
+isDark (Sq i) = (0xaa55aa55aa55aa55 :: Word64) `testBit` i
 
 isLight :: Square -> Bool
 isLight = not . isDark

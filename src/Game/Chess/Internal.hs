@@ -42,12 +42,12 @@ import GHC.Stack (HasCallStack)
 
 capturing :: Position -> Ply -> Maybe PieceType
 capturing pos@Position{flags} (plyTarget -> to)
-  | (flags .&. epMask) `testBit` unSq to = Just Pawn
+  | (flags .&. epMask) `testBit` unSquare to = Just Pawn
   | otherwise = snd <$> pieceAt pos to
 
 isCapture :: Position -> Ply -> Bool
 isCapture Position{qbb, flags} =
-  testBit (QBB.occupied qbb .|. (flags .&. epMask)) . unSq . plyTarget
+  testBit (QBB.occupied qbb .|. (flags .&. epMask)) . unSquare . plyTarget
 
 -- | The starting position as given by the FEN string
 --   "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1".
@@ -65,7 +65,7 @@ instance Hashable Color where
   hashWithSalt s White = s `hashWithSalt` (1 :: Int)
 
 pieceAt :: Position -> Square -> Maybe (Color, PieceType)
-pieceAt Position{qbb} (unSq -> sq) = case qbb QBB.! sq of
+pieceAt Position{qbb} sq = case qbb QBB.! sq of
   QBB.WhitePawn -> Just (White, Pawn)
   QBB.WhiteKnight -> Just (White, Knight)
   QBB.WhiteBishop -> Just (White, Bishop)
@@ -235,7 +235,7 @@ instance G.Vector Vector Ply where
 instance Unbox Ply
 
 move :: Square -> Square -> Ply
-move (unSq -> from) (unSq -> to) =
+move (Sq from) (Sq to) =
   Ply $ fromIntegral to .|. fromIntegral from `unsafeShiftL` 6
 
 promoteTo :: Ply -> PieceType -> Ply
@@ -415,49 +415,51 @@ unsafeDoPly' pos@Position{qbb, flags} m@(unpack -> (from, to, promo))
   | Just piece <- promo
   = case color pos of
       White -> case piece of
-        Queen -> pos { qbb = QBB.whitePromotion qbb (unSq from) (unSq to) QBB.WhiteQueen
-                     , flags = flags `clearMask` (epMask .|. bit (unSq to))
+        Queen -> pos { qbb = QBB.whitePromotion qbb from to QBB.WhiteQueen
+                     , flags = flags `clearMask` (epMask .|. bit (unSquare to))
                      }
-        Rook  -> pos { qbb = QBB.whitePromotion qbb (unSq from) (unSq to) QBB.WhiteRook
-                     , flags = flags `clearMask` (epMask .|. bit (unSq to))
+        Rook  -> pos { qbb = QBB.whitePromotion qbb from to QBB.WhiteRook
+                     , flags = flags `clearMask` (epMask .|. bit (unSquare to))
                      }
-        Bishop -> pos { qbb = QBB.whitePromotion qbb (unSq from) (unSq to) QBB.WhiteBishop
-                      , flags = flags `clearMask` (epMask .|. bit (unSq to))
+        Bishop -> pos { qbb = QBB.whitePromotion qbb from to QBB.WhiteBishop
+                      , flags = flags `clearMask` (epMask .|. bit (unSquare to))
                       }
-        Knight -> pos { qbb = QBB.whitePromotion qbb (unSq from) (unSq to) QBB.WhiteKnight
-                      , flags = flags `clearMask` (epMask .|. bit (unSq to))
+        Knight -> pos { qbb = QBB.whitePromotion qbb from to QBB.WhiteKnight
+                      , flags = flags `clearMask` (epMask .|. bit (unSquare to))
                       }
         _ -> error "Impossible: White tried to promote to Pawn"
       Black -> case piece of
-        Queen -> pos { qbb = QBB.blackPromotion qbb (unSq from) (unSq to) QBB.BlackQueen
-                     , flags = flags `clearMask` (epMask .|. bit (unSq to))
+        Queen -> pos { qbb = QBB.blackPromotion qbb from to QBB.BlackQueen
+                     , flags = flags `clearMask` (epMask .|. bit (unSquare to))
                      }  
-        Rook   -> pos { qbb = QBB.blackPromotion qbb (unSq from) (unSq to) QBB.BlackRook
-                      , flags = flags `clearMask` (epMask .|. bit (unSq to))
+        Rook   -> pos { qbb = QBB.blackPromotion qbb from to QBB.BlackRook
+                      , flags = flags `clearMask` (epMask .|. bit (unSquare to))
                       }
-        Bishop -> pos { qbb = QBB.blackPromotion qbb (unSq from) (unSq to) QBB.BlackBishop
-                      , flags = flags `clearMask` (epMask .|. bit (unSq to))
+        Bishop -> pos { qbb = QBB.blackPromotion qbb from to QBB.BlackBishop
+                      , flags = flags `clearMask` (epMask .|. bit (unSquare to))
                       }
-        Knight -> pos { qbb = QBB.blackPromotion qbb (unSq from) (unSq to) QBB.BlackKnight
-                      , flags = flags `clearMask` (epMask .|. bit (unSq to))
+        Knight -> pos { qbb = QBB.blackPromotion qbb from to QBB.BlackKnight
+                      , flags = flags `clearMask` (epMask .|. bit (unSquare to))
                       }
         _ -> error "Impossible: Black tried to promote to Pawn"
-  | QBB.pawns qbb `testMask` fromMask &&
-    toMask .&. (rank3 .|. rank6) .&. flags /= 0
-  = pos { qbb = qbb <> QBB.enPassant (unSq from) (unSq to)
+  | QBB.pawns qbb `testMask` fromMask
+  , toMask .&. (rank3 .|. rank6) .&. flags /= 0
+  = pos { qbb = qbb <> QBB.enPassant from to
         , flags = flags `clearMask` toMask
         }
   | otherwise
-  = pos { qbb = QBB.move qbb (unSq from) (unSq to)
+  = pos { qbb = QBB.move qbb from to
         , flags = (flags `clearMask` (epMask .|. mask)) .|. dpp
         }
  where
-  !fromMask = 1 `unsafeShiftL` (unSq from)
-  !toMask = 1 `unsafeShiftL` (unSq to)
+  !fromMask = 1 `unsafeShiftL` (unSquare from)
+  !toMask = 1 `unsafeShiftL` (unSquare to)
   !mask = fromMask .|. toMask
   dpp = case color pos of
-    White | fromMask .&. rank2 .&. QBB.wPawns qbb /= 0 && unSq from + 16 == unSq to -> shiftN fromMask
-    Black | fromMask .&. rank7 .&. QBB.bPawns qbb /= 0 && unSq from - 16 == unSq to -> shiftS fromMask
+    White | fromMask .&. rank2 .&. QBB.wPawns qbb /= 0
+          , unSquare from + 16 == unSquare to -> shiftN fromMask
+    Black | fromMask .&. rank7 .&. QBB.bPawns qbb /= 0
+          , unSquare from - 16 == unSquare to -> shiftS fromMask
     _                                                            -> 0
 
 -- | Generate a list of possible moves for the given position.
@@ -599,7 +601,7 @@ bKscm = move E8 G8
 bQscm = move E8 C8
 
 attackedBy :: Color -> QuadBitboard -> Word64 -> Square -> Bool
-attackedBy White qbb !occ (unSq -> sq)
+attackedBy White qbb !occ (unSquare -> sq)
   | (wPawnAttacks ! sq) .&. QBB.wPawns qbb /= 0 = True
   | (knightAttacks ! sq) .&. QBB.wKnights qbb /= 0 = True
   | bishopTargets sq occ .&. QBB.wBishops qbb /= 0 = True
@@ -607,7 +609,7 @@ attackedBy White qbb !occ (unSq -> sq)
   | queenTargets sq occ .&. QBB.wQueens qbb /= 0 = True
   | (kingAttacks ! sq) .&. QBB.wKings qbb /= 0   = True
   | otherwise                        = False
-attackedBy Black qbb !occ (unSq -> sq)
+attackedBy Black qbb !occ (unSquare -> sq)
   | (bPawnAttacks ! sq) .&. QBB.bPawns qbb /= 0 = True
   | (knightAttacks ! sq) .&. QBB.bKnights qbb /= 0 = True
   | bishopTargets sq occ .&. QBB.bBishops qbb /= 0 = True

@@ -135,12 +135,12 @@ pattern BlackKing   = 13
 
 instance IsList QuadBitboard where
   type Item QuadBitboard = (Square, Word4)
-  fromList = mconcat . map (uncurry singleton . first unSq)
+  fromList = mconcat . map (uncurry singleton)
   toList qbb = go maxBound [] where
     go sq xs
       | sq /= minBound = go (pred sq) xs'
       | otherwise      = xs'
-     where nb = qbb ! unSq sq
+     where nb = qbb ! sq
            xs' | nb /= NoPiece = (sq, nb) : xs
                | otherwise     = xs
 
@@ -263,13 +263,13 @@ instance FiniteBits Word4 where
 
 -- | law: singleton i x ! i = x where inRange (0,63) i && inRange (0,15) x
 {-# INLINE singleton #-}
-singleton :: Int -> Word4 -> QuadBitboard
-singleton !sq !nb = QBB (f 0) (f 1) (f 2) (f 3) where
+singleton :: Square -> Word4 -> QuadBitboard
+singleton (Sq sq) !nb = QBB (f 0) (f 1) (f 2) (f 3) where
   !b = 1 `unsafeShiftL` sq
   f !n = fromIntegral ((nb `unsafeShiftR` n) .&. 1) * b
 
-(!) :: QuadBitboard -> Int -> Word4
-(!) QBB{..} sq = fromIntegral $ f black 0 .|. f pbq 1 .|. f nbk 2 .|. f rqk 3 where
+(!) :: QuadBitboard -> Square -> Word4
+(!) QBB{..} (Sq sq) = fromIntegral $ f black 0 .|. f pbq 1 .|. f nbk 2 .|. f rqk 3 where
   f !bb !n = ((bb `unsafeShiftR` sq) .&. 1) `unsafeShiftL` n
 
 setNibble :: Bits nibble => QuadBitboard -> Int -> nibble -> QuadBitboard
@@ -287,7 +287,7 @@ instance IsString QuadBitboard where
     go (r, _) qbb ('/':xs) = go (pred r, FileA) qbb xs
     go rf@(r, f) !qbb (x:xs)
       | inRange ('1','8') x = go (r, mkFile $ unFile f + ord x - ord '0') qbb xs
-      | otherwise = go (r, succ f) (qbb <> singleton (unSq sq) nb) xs where
+      | otherwise = go (r, succ f) (qbb <> singleton sq nb) xs where
         sq = view (from rankFile) $ rf
         nb = case x of
           'P' -> WhitePawn
@@ -323,39 +323,39 @@ toString qbb = intercalate "/" $ rank <$> [Rank8, Rank7 .. Rank1] where
   spaces x y = x == spc && x == y
   charAt r f = maybe spc (if odd nb then toLower else id) $
     lookup (nb `div` 2) $ zip [1..] "PNBRQK"
-   where nb = qbb ! unSq ((r, f) ^. from rankFile)
+   where nb = qbb ! ((r, f) ^. from rankFile)
   spc = ' '
 
 -- | Move a nibble.  Note that this function, while convenient, isn't very
 -- fast as it needs to lookup the source nibble value.
-move :: QuadBitboard -> Int -> Int -> QuadBitboard
+move :: QuadBitboard -> Square -> Square -> QuadBitboard
 move qbb fromSq toSq = qbb <> move' fromSq (qbb ! fromSq) toSq (qbb ! toSq)
 
-move' :: Int -> Word4 -> Int -> Word4 -> QuadBitboard
+move' :: Square -> Word4 -> Square -> Word4 -> QuadBitboard
 move' fromSq fromCode toSq toCode =
   singleton fromSq fromCode <> singleton toSq (fromCode `xor` toCode)
 
 whiteKingsideCastle, whiteQueensideCastle, blackKingsideCastle, blackQueensideCastle
   :: QuadBitboard
-whiteKingsideCastle  = move' 4 WhiteKing 6 NoPiece <> move' 7 WhiteRook 5 NoPiece
-whiteQueensideCastle = move' 4 WhiteKing 2 NoPiece <> move' 0 WhiteRook 3 NoPiece
-blackKingsideCastle  = move' 60 BlackKing 62 NoPiece <> move' 63 BlackRook 61 NoPiece
-blackQueensideCastle = move' 60 BlackKing 58 NoPiece <> move' 56 BlackRook 59 NoPiece
+whiteKingsideCastle  = move' E1 WhiteKing G1 NoPiece <> move' H1 WhiteRook F1 NoPiece
+whiteQueensideCastle = move' E1 WhiteKing C1 NoPiece <> move' A1 WhiteRook D1 NoPiece
+blackKingsideCastle  = move' E8 BlackKing G8 NoPiece <> move' H8 BlackRook F8 NoPiece
+blackQueensideCastle = move' E8 BlackKing C8 NoPiece <> move' A8 BlackRook D8 NoPiece
 
-enPassant :: Int -> Int -> QuadBitboard
+enPassant :: Square -> Square -> QuadBitboard
 enPassant fromSq toSq
-  | fromSq < toSq
-  = move' fromSq WhitePawn toSq NoPiece <> singleton (toSq-8) BlackPawn
+  | unSquare fromSq < unSquare toSq
+  = move' fromSq WhitePawn toSq NoPiece <> singleton (mkSq $ unSquare toSq - 8) BlackPawn
   | otherwise
-  = move' fromSq BlackPawn toSq NoPiece <> singleton (toSq+8) WhitePawn
+  = move' fromSq BlackPawn toSq NoPiece <> singleton (mkSq $ unSquare toSq + 8) WhitePawn
 
-whitePromotion, blackPromotion :: QuadBitboard -> Int -> Int -> Word4 -> QuadBitboard
+whitePromotion, blackPromotion :: QuadBitboard -> Square -> Square -> Word4 -> QuadBitboard
 whitePromotion qbb fromSq toSq promoCode =
   qbb <> whitePromotion' fromSq toSq (qbb ! toSq) promoCode
 blackPromotion qbb fromSq toSq promoCode =
   qbb <> blackPromotion' fromSq toSq (qbb ! toSq) promoCode
 
-whitePromotion', blackPromotion' :: Int -> Int -> Word4 -> Word4 -> QuadBitboard
+whitePromotion', blackPromotion' :: Square -> Square -> Word4 -> Word4 -> QuadBitboard
 whitePromotion' fromSq toSq toCode promoCode =
   singleton fromSq WhitePawn <> singleton toSq (toCode `xor` promoCode)
 blackPromotion' fromSq toSq toCode promoCode =
