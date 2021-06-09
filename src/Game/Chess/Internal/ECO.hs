@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Game.Chess.Internal.ECO where
 
@@ -48,15 +49,14 @@ import Control.Monad.IO.Class
 import Data.Typeable (Typeable)
 import Language.Haskell.TH.Syntax
 
-type FileType = FilePath -> Q (Either String (Q (TExp [Opening])))
+type FileReader = forall m. MonadIO m => FilePath -> m (Either String [Opening])
 
-eco_pgn, scid_eco :: FileType
-eco_pgn fp = fmap (liftTyped.fromPGN') <$> readPGNFile fp
-scid_eco fp = bimap errorBundlePretty liftTyped . parse scid' fp <$>
-              (liftIO $ BS.readFile fp)
+eco_pgn, scid_eco :: FileReader
+eco_pgn fp = fmap fromPGN' <$> readPGNFile fp
+scid_eco fp = first errorBundlePretty . parse scid' fp <$> liftIO (BS.readFile fp)
 
-embedECO :: FileType -> FilePath -> Q (TExp ECO)
-embedECO load fp = load fp >>= \case
+embedECO :: FileReader -> FilePath -> Q (TExp ECO)
+embedECO load fp = (fmap.fmap) liftTyped (load fp) >>= \case
   Right xs -> [|| fromList $$(xs) ||]
   Left err -> fail err
 
@@ -84,13 +84,6 @@ fromList = ECO . HashMap.fromList . fmap (\co -> (pos co, co)) where
 instance Binary ECO where
   put = put . toList
   get = fromList <$> get
-
---defaultECO :: ECO
---defaultECO = fromRight mempty $
---  fromPGN <$> parse pgn "book/eco.pgn" $(embedFile "book/eco.pgn")
-
-scidECO :: ECO
-scidECO = fromRight mempty $ parse scid "book/scid.eco" $(embedFile "book/scid.eco")
 
 fromPGN :: PGN -> ECO
 fromPGN = fromList . fromPGN'
@@ -142,7 +135,7 @@ scid' :: Parser [Opening]
 scid' = spaceConsumer *> many opening <* eof
 
 readSCIDECOFile :: FilePath -> IO (Either String ECO)
-readSCIDECOFile fp = first errorBundlePretty . parse scid fp <$> BS.readFile fp
+readSCIDECOFile fp = fmap fromList <$> scid_eco fp
 
 lookup :: Position -> ECO -> Maybe Opening
 lookup pos = HashMap.lookup pos . toHashMap

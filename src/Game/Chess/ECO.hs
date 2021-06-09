@@ -2,7 +2,7 @@
 module Game.Chess.ECO (
   -- * Data types
   ECO, Opening(..)
-, defaultECO, scidECO
+, defaultECO
   -- * Query
 , lookup
   -- * Conversion
