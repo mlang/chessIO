@@ -42,6 +42,7 @@ import qualified Game.Chess.Internal.QuadBitboard as QBB
 import Text.Read (readMaybe)
 import GHC.Generics (Generic)
 import GHC.Stack (HasCallStack)
+import Language.Haskell.TH.Syntax (Lift)
 
 capturing :: Position -> Ply -> Maybe PieceType
 capturing pos@Position{flags} (plyTarget -> to)
@@ -61,7 +62,7 @@ instance IsString Position where fromString = fromJust . fromFEN
 
 data PieceType = Pawn | Knight | Bishop | Rook | Queen | King deriving (Eq, Ix, Ord, Show)
 
-data Color = Black | White deriving (Eq, Generic, Ix, Ord, Show)
+data Color = Black | White deriving (Eq, Generic, Ix, Ord, Lift, Show)
 
 instance Binary Color
 instance NFData Color
@@ -100,7 +101,7 @@ data Position = Position {
 , halfMoveClock :: {-# UNPACK #-} !Int
 , moveNumber :: {-# UNPACK #-} !Int
   -- ^ number of the full move
-} deriving (Generic)
+} deriving (Generic, Lift)
 
 instance Binary Position
 instance NFData Position
@@ -205,7 +206,7 @@ bitScanForward, bitScanReverse :: Word64 -> Int
 bitScanForward = countTrailingZeros
 bitScanReverse = (63 -) . countLeadingZeros
 
-newtype Ply = Ply Word16 deriving (Binary, Eq, Hashable, Storable)
+newtype Ply = Ply Word16 deriving (Binary, Eq, Hashable, Lift, Storable)
 
 instance Show Ply where
   show (unpack -> (from, to, promo)) = "move " <> show from <> " " <> show to <> p where

@@ -36,6 +36,8 @@ dependencies:
 - random
 - stm
 - text
+- template-haskell
+- th-lift-instances
 - unordered-containers
 - vector
 - vector-instances
@@ -46,6 +48,7 @@ default-extensions:
 - BinaryLiterals
 - BlockArguments
 - DeriveGeneric
+- DeriveLift
 - FlexibleContexts
 - FlexibleInstances
 - GeneralizedNewtypeDeriving

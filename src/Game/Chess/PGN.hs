@@ -1,4 +1,15 @@
 {-# LANGUAGE GADTs #-}
+{-|
+Module      : Game.Chess.PGN
+Description : Portable Game Notation
+Copyright   : (c) Mario Lang, 2021
+License     : BSD3
+Maintainer  : mlang@blind.guru
+Stability   : experimental
+
+A PGN file consists of a list of games.
+Each game consists of a tag list, the outcome, and a forest of rosetrees.
+-}
 module Game.Chess.PGN (
   readPGNFile, gameFromForest, pgnForest, PGN(..), Game(..), Outcome(..), PlyData(..)
 , pgn
@@ -7,6 +18,7 @@ module Game.Chess.PGN (
 ) where
 
 import Control.Monad
+import Control.Monad.IO.Class
 import Data.Bifunctor
 import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as BS
@@ -80,8 +92,8 @@ data PlyData = PlyData {
 , suffixNAG :: ![Int]
 } deriving (Eq, Show)
 
-readPGNFile :: FilePath -> IO (Either String PGN)
-readPGNFile fp = first errorBundlePretty . parse pgn fp <$> BS.readFile fp
+readPGNFile :: MonadIO m => FilePath -> m (Either String PGN)
+readPGNFile fp = liftIO $ first errorBundlePretty . parse pgn fp <$> BS.readFile fp
 
 hPutPGN :: Handle -> RAVOrder (Doc ann) -> PGN -> IO ()
 hPutPGN h ro (PGN games) = for_ games $ \g -> do

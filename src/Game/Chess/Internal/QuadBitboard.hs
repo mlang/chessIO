@@ -61,9 +61,10 @@ import GHC.Exts (IsList(Item, fromList, toList))
 import GHC.Generics (Generic)
 import GHC.Ptr ( castPtr, plusPtr )
 import Numeric (showHex)
+import Language.Haskell.TH.Syntax (Lift)
 
 data QuadBitboard = QBB { black, pbq, nbk, rqk :: {-# UNPACK #-} !Word64 }
-                    deriving (Eq, Generic)
+                    deriving (Eq, Generic, Lift)
 
 instance NFData QuadBitboard
 
