@@ -18,6 +18,7 @@ package name chessIO.
 
 The following modules implement more specific functionality:
 
+- "Game.Chess.ECO": Parse the Encyclopedia of Chess Openings and lookup positions
 - "Game.Chess.Polyglot": Polyglot opening book format
 - "Game.Chess.SAN": Parse and print Standard Algebraic Notation.
 - "Game.Chess.PGN": Parse and format Portable Game Notation files.

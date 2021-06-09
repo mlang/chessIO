@@ -22,6 +22,7 @@ dependencies:
 - binary
 - bytestring
 - containers
+- deepseq
 - extra
 - file-embed
 - hashable
@@ -37,6 +38,8 @@ dependencies:
 - text
 - unordered-containers
 - vector
+- vector-instances
+- vector-binary-instances
 
 default-extensions:
 - BangPatterns

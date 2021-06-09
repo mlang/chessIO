@@ -31,6 +31,7 @@ module Game.Chess.Internal.QuadBitboard (
 ) where
 
 import Control.Applicative (liftA2)
+import Control.DeepSeq
 import Control.Lens (view, (^.))
 import Control.Lens.Iso (from)
 import Data.Bifunctor (first)
@@ -57,11 +58,14 @@ import GHC.Enum
       succError,
       toEnumError )
 import GHC.Exts (IsList(Item, fromList, toList))
+import GHC.Generics (Generic)
 import GHC.Ptr ( castPtr, plusPtr )
 import Numeric (showHex)
 
 data QuadBitboard = QBB { black, pbq, nbk, rqk :: {-# UNPACK #-} !Word64 }
-                    deriving Eq
+                    deriving (Eq, Generic)
+
+instance NFData QuadBitboard
 
 occupied, pnr, white, pawns, knights, bishops, rooks, queens, kings :: QuadBitboard -> Word64
 occupied = liftA2 (.|.) pbq $ liftA2 (.|.) nbk rqk
@@ -277,9 +281,7 @@ setNibble QBB{..} sq nb = QBB (f 0 black) (f 1 pbq) (f 2 nbk) (f 3 rqk) where
   f n | nb `testBit` n = (`setBit` sq)
       | otherwise      = (`clearBit` sq)
 
-instance Binary QuadBitboard where
-  get = QBB <$> get <*> get <*> get <*> get
-  put QBB{..} = put black *> put pbq *> put nbk *> put rqk
+instance Binary QuadBitboard
 
 instance IsString QuadBitboard where
   fromString = go (view rankFile A8) mempty where

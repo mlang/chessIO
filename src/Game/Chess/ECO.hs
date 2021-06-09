@@ -1,18 +1,34 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Game.Chess.ECO (Opening(..), ECO, defaultECO, readSCIDECOFile, lookup) where
+module Game.Chess.ECO (
+  -- * Data types
+  ECO, Opening(..)
+, defaultECO, scidECO
+  -- * Query
+, lookup
+  -- * Conversion
+, fromList, fromPGN, toList
+  -- * Parsing scid .eco files
+, readSCIDECOFile, scid
+) where
 
 import Prelude hiding (lookup)
 import qualified Prelude as Prelude
+import Control.DeepSeq
 import Control.Monad
 import Data.Bifunctor
 import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy.Char8 as Lazy
+import Data.Binary
 import Data.Char
+import Data.Data
 import Data.Either (fromRight)
 import Data.FileEmbed (embedFile)
-import Data.Foldable
+import Data.Foldable (fold)
 import Data.Functor
+import Data.Hashable (Hashable)
+import GHC.Generics (Generic)
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Maybe
@@ -23,6 +39,8 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Tree (foldTree)
 import qualified Data.Vector.Unboxed as Unboxed
+import Data.Vector.Binary
+import Data.Vector.Instances
 import Data.Void
 import Data.Word (Word8)
 import Game.Chess
@@ -38,22 +56,36 @@ data Opening = CO {
 , coName :: !Text
 , coVariation :: !(Maybe Text)
 , coPlies :: !(Unboxed.Vector Ply)
-} deriving (Show)
+} deriving (Eq, Generic, Show)
 
-type ECO = HashMap Position Opening
+instance Binary Opening
+instance Hashable Opening
+instance NFData Opening
+
+newtype ECO = ECO { toHashMap :: HashMap Position Opening }
+              deriving (Eq, NFData, Hashable, Semigroup, Monoid)
+
+toList :: ECO -> [Opening]
+toList = map snd . HashMap.toList . toHashMap
+
+fromList :: [Opening] -> ECO
+fromList = ECO . HashMap.fromList . fmap (\co -> (pos co, co)) where
+  pos = ofoldl' unsafeDoPly startpos . coPlies
+
+instance Binary ECO where
+  put = put . toList
+  get = fromList <$> get
 
 defaultECO :: ECO
-defaultECO = case parse pgn "book/eco.pgn" $(embedFile "book/eco.pgn") of
-  Right db -> fromPGN db
+defaultECO = fromRight mempty $
+  fromPGN <$> parse pgn "book/eco.pgn" $(embedFile "book/eco.pgn")
 
 scidECO :: ECO
-scidECO = case parse scid "book/scid.eco" $(embedFile "book/scid.eco") of
-  Right x -> x
-
+scidECO = fromRight mempty $ parse scid "book/scid.eco" $(embedFile "book/scid.eco")
 
 fromPGN :: PGN -> ECO
-fromPGN (PGN games) = mkECO $ map f games where
-  f (tags, (_, forest)) = CO { .. } where
+fromPGN (PGN games) = fromList $ map mkCO games where
+  mkCO (tags, (_, forest)) = CO { .. } where
     coCode = maybe "" id $ Prelude.lookup "ECO" tags
     coName = maybe "" id $ Prelude.lookup "Opening" tags
     coVariation = Prelude.lookup "Variation" tags
@@ -92,17 +124,13 @@ plies = fmap Unboxed.fromList . go where
       _ -> pure ()
 
 scid :: Parser ECO
-scid = mkECO <$> p where p = spaceConsumer *> many opening <* eof
+scid = fromList <$> p where p = spaceConsumer *> many opening <* eof
 
 readSCIDECOFile :: FilePath -> IO (Either String ECO)
 readSCIDECOFile fp = first errorBundlePretty . parse scid fp <$> BS.readFile fp
 
 lookup :: Position -> ECO -> Maybe Opening
-lookup = HashMap.lookup
-
-mkECO :: [Opening] -> ECO
-mkECO = HashMap.fromList . fmap (\co -> (pos co, co)) where
-  pos = ofoldl' doPly startpos . coPlies
+lookup pos = HashMap.lookup pos . toHashMap
 
 type Parser = Parsec Void ByteString
 

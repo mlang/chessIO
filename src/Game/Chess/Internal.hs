@@ -16,11 +16,13 @@ package name chessIO.
 -}
 module Game.Chess.Internal where
 
+import Control.DeepSeq
 import Control.Lens (view)
 import Control.Lens.Iso (from)
 import Data.Bits
   ( Bits((.&.), testBit, unsafeShiftR, unsafeShiftL, xor, (.|.), bit, complement),
     FiniteBits(countLeadingZeros, countTrailingZeros) )
+import Data.Binary
 import Data.Char ( ord, chr )
 import Data.Hashable
 import Data.Ix ( Ix(inRange) )
@@ -38,6 +40,7 @@ import Game.Chess.Internal.Square
 import Game.Chess.Internal.QuadBitboard (QuadBitboard)
 import qualified Game.Chess.Internal.QuadBitboard as QBB
 import Text.Read (readMaybe)
+import GHC.Generics (Generic)
 import GHC.Stack (HasCallStack)
 
 capturing :: Position -> Ply -> Maybe PieceType
@@ -58,7 +61,10 @@ instance IsString Position where fromString = fromJust . fromFEN
 
 data PieceType = Pawn | Knight | Bishop | Rook | Queen | King deriving (Eq, Ix, Ord, Show)
 
-data Color = Black | White deriving (Eq, Ix, Ord, Show)
+data Color = Black | White deriving (Eq, Generic, Ix, Ord, Show)
+
+instance Binary Color
+instance NFData Color
 
 instance Hashable Color where
   hashWithSalt s Black = s `hashWithSalt` (0 :: Int)
@@ -94,7 +100,10 @@ data Position = Position {
 , halfMoveClock :: {-# UNPACK #-} !Int
 , moveNumber :: {-# UNPACK #-} !Int
   -- ^ number of the full move
-}
+} deriving (Generic)
+
+instance Binary Position
+instance NFData Position
 
 -- Article 9.2 states that a position is considered
 -- identical to another if the same player is on move, the same types of
@@ -196,7 +205,7 @@ bitScanForward, bitScanReverse :: Word64 -> Int
 bitScanForward = countTrailingZeros
 bitScanReverse = (63 -) . countLeadingZeros
 
-newtype Ply = Ply Word16 deriving (Eq, Storable)
+newtype Ply = Ply Word16 deriving (Binary, Eq, Hashable, Storable)
 
 instance Show Ply where
   show (unpack -> (from, to, promo)) = "move " <> show from <> " " <> show to <> p where
