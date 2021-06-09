@@ -185,7 +185,9 @@ app = App { .. } where
                ]
     eco = maybe (str " ") drawECO (ECO.lookup (position st) defaultECO)
     drawECO co = borderWithLabel (str "ECO " <+> txt (coCode co)) $
-      txtWrap (coName co)
+      case coVariation co of
+        Nothing -> txtWrap (coName co)
+        Just variation -> txtWrap (coName co) <=> txtWrap variation
     style = vLimit 1 $ L.renderList drawStyle True (st^.boardStyle)
     drawStyle foc (n, _) = putCursorIf foc BoardStyle (0,0) $ str n
     selectedStyle = maybe english (snd . snd) $

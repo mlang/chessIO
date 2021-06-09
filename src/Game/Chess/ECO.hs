@@ -16,13 +16,15 @@ import Data.Functor
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Maybe
+import Data.MonoTraversable (MonoFoldable(ofoldl'))
 import Data.Ord
 import Data.Ratio
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Tree (foldTree)
-import Data.Word (Word8)
+import qualified Data.Vector.Unboxed as Unboxed
 import Data.Void
+import Data.Word (Word8)
 import Game.Chess
 import Game.Chess.PGN
 import Game.Chess.SAN
@@ -31,9 +33,23 @@ import Text.Megaparsec
 import Text.Megaparsec.Byte
 import qualified Text.Megaparsec.Byte.Lexer as L
 
+data Opening = CO {
+  coCode :: !Text
+, coName :: !Text
+, coVariation :: !(Maybe Text)
+, coPlies :: !(Unboxed.Vector Ply)
+} deriving (Show)
+
+type ECO = HashMap Position Opening
+
 defaultECO :: ECO
-defaultECO = case parse scid "book/scid.eco" $(embedFile "book/scid.eco") of
+defaultECO = case parse pgn "book/eco.pgn" $(embedFile "book/eco.pgn") of
+  Right db -> fromPGN db
+
+scidECO :: ECO
+scidECO = case parse scid "book/scid.eco" $(embedFile "book/scid.eco") of
   Right x -> x
+
 
 fromPGN :: PGN -> ECO
 fromPGN (PGN games) = mkECO $ map f games where
@@ -41,18 +57,9 @@ fromPGN (PGN games) = mkECO $ map f games where
     coCode = maybe "" id $ Prelude.lookup "ECO" tags
     coName = maybe "" id $ Prelude.lookup "Opening" tags
     coVariation = Prelude.lookup "Variation" tags
-    coPlies = head $ concatMap (foldTree g) forest where
+    coPlies = Unboxed.fromList . head . concatMap (foldTree g) $ forest where
       g a [] = [[pgnPly a]]
       g a xs = (pgnPly a :) <$> fold xs
-
-data Opening = CO {
-  coCode :: Text
-, coName :: Text
-, coVariation :: Maybe Text
-, coPlies :: [Ply]
-} deriving (Show)
-
-type ECO = HashMap Position Opening
 
 opening :: Parser Opening
 opening = CO <$> lexeme code <*> lexeme var <*> pure Nothing <*> lexeme (plies startpos)
@@ -72,11 +79,12 @@ var = p <?> "string" where
                                )
     <|> anySingleBut quoteChar
 
-plies :: Position -> Parser [Ply]
-plies p = eol <|> line where
-  eol = lexeme (string "*") $> []
-  line = ply >>= \pl -> (pl :) <$> plies (unsafeDoPly p pl)
-  ply = validateMoveNumber p *> lexeme (relaxedSAN p)
+plies :: Position -> Parser (Unboxed.Vector Ply)
+plies = fmap Unboxed.fromList . go where
+  go p = eol <|> line where
+    eol = lexeme (string "*") $> []
+    line = ply >>= \pl -> (pl :) <$> go (unsafeDoPly p pl)
+    ply = validateMoveNumber p *> lexeme (relaxedSAN p)
   validateMoveNumber p =
     optional (lexeme $ L.decimal <* space <* many (single periodChar)) >>= \case
       Just n | moveNumber p /= n ->
@@ -94,7 +102,7 @@ lookup = HashMap.lookup
 
 mkECO :: [Opening] -> ECO
 mkECO = HashMap.fromList . fmap (\co -> (pos co, co)) where
-  pos = foldl' doPly startpos . coPlies
+  pos = ofoldl' doPly startpos . coPlies
 
 type Parser = Parsec Void ByteString
 

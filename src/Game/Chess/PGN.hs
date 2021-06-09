@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs #-}
 module Game.Chess.PGN (
   readPGNFile, gameFromForest, pgnForest, PGN(..), Game(..), Outcome(..), PlyData(..)
+, pgn
 , hPutPGN, pgnDoc, RAVOrder, breadthFirst, depthFirst, gameDoc
 , weightedForest
 ) where
