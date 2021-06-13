@@ -1,5 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell     #-}
 module Game.Chess.Polyglot (
   -- * Data type
   PolyglotBook
@@ -17,34 +17,34 @@ module Game.Chess.Polyglot (
 , findPosition
 ) where
 
-import Control.Arrow
-import Control.Monad.Random (Rand)
-import qualified Control.Monad.Random as Rand
-import Data.Bits
-import Data.ByteString (ByteString)
+import           Control.Arrow
+import           Control.Monad.Random     (Rand)
+import qualified Control.Monad.Random     as Rand
+import           Data.Bits
+import           Data.ByteString          (ByteString)
+import qualified Data.ByteString          as BS
 import qualified Data.ByteString.Internal as BS
-import qualified Data.ByteString as BS
-import Data.FileEmbed
-import Data.Foldable (fold)
-import Data.List
-import Data.Ord
-import Data.String (IsString(fromString))
-import qualified Data.Vector.Storable as VS
-import Data.Tree
-import Data.Word
-import Foreign.ForeignPtr (castForeignPtr, plusForeignPtr)
-import Foreign.Storable
-import Game.Chess.Internal
-import Game.Chess.PGN
-import Game.Chess.Polyglot.Hash
-import GHC.Ptr (Ptr, castPtr, plusPtr)
-import System.Random (RandomGen)
+import           Data.FileEmbed
+import           Data.Foldable            (fold)
+import           Data.List
+import           Data.Ord
+import           Data.String              (IsString (fromString))
+import           Data.Tree
+import qualified Data.Vector.Storable     as VS
+import           Data.Word
+import           Foreign.ForeignPtr       (castForeignPtr, plusForeignPtr)
+import           Foreign.Storable
+import           GHC.Ptr                  (Ptr, castPtr, plusPtr)
+import           Game.Chess.Internal
+import           Game.Chess.PGN
+import           Game.Chess.Polyglot.Hash
+import           System.Random            (RandomGen)
 
 data BookEntry = BookEntry {
-  key :: {-# UNPACK #-} !Word64
-, ply :: {-# UNPACK #-} !Ply
+  key    :: {-# UNPACK #-} !Word64
+, ply    :: {-# UNPACK #-} !Ply
 , weight :: {-# UNPACK #-} !Word16
-, learn :: {-# UNPACK #-} !Word32
+, learn  :: {-# UNPACK #-} !Word32
 } deriving (Eq, Show)
 
 instance Ord BookEntry where
@@ -67,12 +67,12 @@ instance Storable BookEntry where
 peekBE :: forall a. (Bits a, Num a, Storable a) => Ptr Word8 -> IO a
 peekBE ptr = go ptr 0 (sizeOf (undefined :: a)) where
   go _ !x 0 = pure x
-  go !p !x !n = peek p >>= \w8 -> 
+  go !p !x !n = peek p >>= \w8 ->
     go (p `plusPtr` 1) (x `shiftL` 8 .|. fromIntegral w8) (n - 1)
 
 pokeBE :: forall a. (Bits a, Integral a, Num a, Storable a) => Ptr Word8 -> a -> IO ()
 pokeBE p x = go x (sizeOf x) where
-  go _ 0 = pure ()
+  go _ 0   = pure ()
   go !v !n = pokeElemOff p (n-1) (fromIntegral v) *> go (v `shiftR` 8) (n-1)
 
 defaultBook, twic :: PolyglotBook
@@ -134,7 +134,7 @@ bookForest b = (fmap . fmap) (snd . head) . forest [] where
 bookPly :: RandomGen g => PolyglotBook -> Position -> Maybe (Rand g Ply)
 bookPly b pos = case findPosition b pos of
   [] -> Nothing
-  l -> Just . Rand.fromList $ map (ply &&& fromIntegral . weight) l
+  l  -> Just . Rand.fromList $ map (ply &&& fromIntegral . weight) l
 
 -- | Probe the book for all plies known for the given position.
 bookPlies :: PolyglotBook -> Position -> [Ply]

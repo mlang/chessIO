@@ -1,78 +1,87 @@
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE GADTs           #-}
+{-# LANGUAGE RankNTypes      #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Game.Chess.Internal.ECO where
 
-import Prelude hiding (lookup)
-import qualified Prelude as Prelude
-import Control.DeepSeq
-import Control.Monad
-import Data.Bifunctor
-import Data.ByteString.Char8 (ByteString)
-import qualified Data.ByteString.Char8 as BS
+import           Control.DeepSeq
+import           Control.Exception          (Exception (displayException),
+                                             throwIO)
+import           Control.Monad
+import           Control.Monad.IO.Class
+import           Data.Bifunctor
+import           Data.Binary
+import           Data.ByteString.Char8      (ByteString)
+import qualified Data.ByteString.Char8      as BS
 import qualified Data.ByteString.Lazy.Char8 as Lazy
-import Data.Binary
-import Data.Char
-import Data.Data
-import Data.Either (fromRight)
-import Data.FileEmbed (embedFile)
-import Data.Foldable (fold)
-import Data.Functor
-import Data.Hashable (Hashable)
-import GHC.Generics (Generic)
-import Data.HashMap.Strict (HashMap)
-import qualified Data.HashMap.Strict as HashMap
-import Data.Maybe
-import Data.MonoTraversable (MonoFoldable(ofoldl'))
-import Data.Ord
-import Data.Ratio
-import Data.Text (Text)
-import qualified Data.Text as T
-import Data.Tree (foldTree)
-import qualified Data.Vector.Unboxed as Unboxed
-import Data.Vector.Binary
-import Data.Vector.Instances
-import Data.Void
-import Data.Word (Word8)
-import Game.Chess
-import Game.Chess.PGN
-import Game.Chess.SAN
-import Instances.TH.Lift
-import System.IO
-import Text.Megaparsec
-import Text.Megaparsec.Byte
+import           Data.Char
+import           Data.Data
+import           Data.Either                (fromRight)
+import           Data.FileEmbed             (embedFile)
+import           Data.Foldable              (fold)
+import           Data.Functor
+import           Data.HashMap.Strict        (HashMap)
+import qualified Data.HashMap.Strict        as HashMap
+import           Data.Hashable              (Hashable)
+import           Data.Maybe
+import           Data.MonoTraversable       (MonoFoldable (ofoldl'))
+import           Data.Ord
+import           Data.Ratio
+import           Data.Text                  (Text)
+import qualified Data.Text                  as T
+import           Data.Tree                  (foldTree)
+import           Data.Typeable              (Typeable)
+import           Data.Vector.Binary
+import           Data.Vector.Instances
+import qualified Data.Vector.Unboxed        as Unboxed
+import           Data.Void
+import           Data.Word                  (Word8)
+import           GHC.Generics               (Generic)
+import           Game.Chess
+import           Game.Chess.PGN
+import           Game.Chess.SAN
+import           Instances.TH.Lift
+import           Language.Haskell.TH.Syntax (Lift, Q, TExp, liftTyped)
+import           Prelude                    hiding (lookup)
+import qualified Prelude                    as Prelude
+import           System.IO
+import           Text.Megaparsec
+import           Text.Megaparsec.Byte
 import qualified Text.Megaparsec.Byte.Lexer as L
-import Language.Haskell.TH.Syntax (Lift)
 
-import Control.Exception (Exception(displayException), throwIO)
-import Control.Monad.IO.Class
-import Data.Typeable (Typeable)
-import Language.Haskell.TH.Syntax
-
-type FileReader = forall m. MonadIO m => FilePath -> m (Either String [Opening])
-
-eco_pgn, scid_eco :: FileReader
-eco_pgn fp = fmap fromPGN' <$> readPGNFile fp
-scid_eco fp = first errorBundlePretty . parse scid' fp <$> liftIO (BS.readFile fp)
-
-embedECO :: FileReader -> FilePath -> Q (TExp ECO)
-embedECO load fp = (fmap.fmap) liftTyped (load fp) >>= \case
-  Right xs -> [|| fromList $$(xs) ||]
-  Left err -> fail err
-
+-- | A Chess Opening
 data Opening = CO {
-  coCode :: !Text
-, coName :: !Text
+  coCode      :: !Text
+, coName      :: !Text
 , coVariation :: !(Maybe Text)
-, coPlies :: !(Unboxed.Vector Ply)
+, coPlies     :: !(Unboxed.Vector Ply)
 } deriving (Eq, Generic, Lift, Show)
 
 instance Binary Opening
 instance Hashable Opening
 instance NFData Opening
 
+type FileReader = forall m. MonadIO m => FilePath -> m (Either String [Opening])
+
+-- | Parse an ECO database in .pgn format
+eco_pgn :: FileReader
+eco_pgn fp = fmap fromPGN' <$> readPGNFile fp
+
+-- | Parse an ECO database in .eco format
+scid_eco :: FileReader
+scid_eco fp = first errorBundlePretty . parse scid' fp <$> liftIO (BS.readFile fp)
+
+-- | Encyclopedia of Chess Openings
 newtype ECO = ECO { toHashMap :: HashMap Position Opening }
               deriving (Eq, NFData, Hashable, Semigroup, Monoid)
+
+instance Binary ECO where
+  put = put . toList
+  get = fromList <$> get
+
+embedECO :: FileReader -> FilePath -> Q (TExp ECO)
+embedECO load fp = (fmap.fmap) liftTyped (load fp) >>= \case
+  Right xs -> [|| fromList $$(xs) ||]
+  Left err -> fail err
 
 toList :: ECO -> [Opening]
 toList = map snd . HashMap.toList . toHashMap
@@ -81,18 +90,16 @@ fromList :: [Opening] -> ECO
 fromList = ECO . HashMap.fromList . fmap (\co -> (pos co, co)) where
   pos = ofoldl' unsafeDoPly startpos . coPlies
 
-instance Binary ECO where
-  put = put . toList
-  get = fromList <$> get
-
+-- | Convert a PGN database to ECO assuming the ECO, Opening and Variation tags are
+-- being used to identify chess openings.
 fromPGN :: PGN -> ECO
 fromPGN = fromList . fromPGN'
 
 fromPGN' :: PGN -> [Opening]
 fromPGN' (PGN games) = map mkCO games where
   mkCO (tags, (_, forest)) = CO { .. } where
-    coCode = maybe "" id $ Prelude.lookup "ECO" tags
-    coName = maybe "" id $ Prelude.lookup "Opening" tags
+    coCode = fromMaybe "" $ Prelude.lookup "ECO" tags
+    coName = fromMaybe "" $ Prelude.lookup "Opening" tags
     coVariation = Prelude.lookup "Variation" tags
     coPlies = Unboxed.fromList . head . concatMap (foldTree g) $ forest where
       g a [] = [[pgnPly a]]
@@ -128,15 +135,17 @@ plies = fmap Unboxed.fromList . go where
         fail $ "Invalid move number: " <> show n <> " /= " <> show (moveNumber p)
       _ -> pure ()
 
+-- | A parser for opening databases in SCID .eco format
 scid :: Parser ECO
 scid = fromList <$> scid'
 
 scid' :: Parser [Opening]
 scid' = spaceConsumer *> many opening <* eof
 
-readSCIDECOFile :: FilePath -> IO (Either String ECO)
+readSCIDECOFile :: MonadIO m => FilePath -> m (Either String ECO)
 readSCIDECOFile fp = fmap fromList <$> scid_eco fp
 
+-- | Retrieve the opening for a particular position
 lookup :: Position -> ECO -> Maybe Opening
 lookup pos = HashMap.lookup pos . toHashMap
 

@@ -2,12 +2,12 @@ module Game.Chess.Polyglot.Hash (
   hashPosition, pieceKey, castleKey, epKeys, turnKey
 ) where
 
-import Data.Bits
-import Data.Maybe
+import           Data.Bits
+import           Data.Ix
+import           Data.Maybe
 import qualified Data.Vector.Unboxed as Unboxed
-import Data.Ix
-import Data.Word
-import Game.Chess
+import           Data.Word
+import           Game.Chess
 
 hashPosition :: Position -> Word64
 hashPosition pos = piece `xor` castling `xor` ep `xor` turn where

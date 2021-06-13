@@ -17,31 +17,31 @@ module Game.Chess.PGN (
 , weightedForest
 ) where
 
-import Control.Monad
-import Control.Monad.IO.Class
-import Data.Bifunctor
-import Data.ByteString.Char8 (ByteString)
-import qualified Data.ByteString.Char8 as BS
-import Data.Char
-import Data.Foldable
-import Data.Functor
-import Data.List
-import Data.Maybe
-import Data.Ord
-import Data.Ratio
-import Data.Text (Text)
-import qualified Data.Text as T
-import Data.Text.Prettyprint.Doc hiding (space)
-import Data.Text.Prettyprint.Doc.Render.Text
-import Data.Tree
-import Data.Word
-import Data.Void
-import Game.Chess
-import Game.Chess.SAN
-import System.IO
-import Text.Megaparsec
-import Text.Megaparsec.Byte
-import qualified Text.Megaparsec.Byte.Lexer as L
+import           Control.Monad
+import           Control.Monad.IO.Class
+import           Data.Bifunctor
+import           Data.ByteString.Char8                 (ByteString)
+import qualified Data.ByteString.Char8                 as BS
+import           Data.Char
+import           Data.Foldable
+import           Data.Functor
+import           Data.List
+import           Data.Maybe
+import           Data.Ord
+import           Data.Ratio
+import           Data.Text                             (Text)
+import qualified Data.Text                             as T
+import           Data.Text.Prettyprint.Doc             hiding (space)
+import           Data.Text.Prettyprint.Doc.Render.Text
+import           Data.Tree
+import           Data.Void
+import           Data.Word
+import           Game.Chess
+import           Game.Chess.SAN
+import           System.IO
+import           Text.Megaparsec
+import           Text.Megaparsec.Byte
+import qualified Text.Megaparsec.Byte.Lexer            as L
 
 gameFromForest :: [(ByteString, Text)] -> Forest Ply -> Outcome -> Game
 gameFromForest tags forest o = (("Result", r):tags, (o, (fmap . fmap) f forest)) where
@@ -72,12 +72,12 @@ merge = foldl mergeTree [] where
 
 
 instance Ord Outcome where
-  Win _ `compare` Win _ = EQ
-  Win _ `compare` _ = GT
-  _ `compare` Win _ = LT
-  Draw `compare` Draw = EQ
-  Draw `compare` _ = GT
-  _ `compare` Draw = LT
+  Win _ `compare` Win _         = EQ
+  Win _ `compare` _             = GT
+  _ `compare` Win _             = LT
+  Draw `compare` Draw           = EQ
+  Draw `compare` _              = GT
+  _ `compare` Draw              = LT
   Undecided `compare` Undecided = EQ
 
 instance Pretty Outcome where
@@ -88,7 +88,7 @@ instance Pretty Outcome where
 
 data PlyData = PlyData {
   prefixNAG :: ![Int]
-, pgnPly :: !Ply
+, pgnPly    :: !Ply
 , suffixNAG :: ![Int]
 } deriving (Eq, Show)
 
@@ -178,10 +178,10 @@ game = do
   pos <- case lookup "FEN" tl of
     Nothing -> pure startpos
     Just fen -> case fromFEN (T.unpack fen) of
-      Just p -> pure p
+      Just p  -> pure p
       Nothing -> fail "Invalid FEN"
   (tl,) <$> movetext pos
-  
+
 str :: Parser Text
 str = p <?> "string" where
   p = fmap (T.pack . fmap (chr . fromEnum)) $ single quoteChar *> many ch <* single quoteChar
@@ -213,8 +213,8 @@ tagsDoc = fuse Shallow . vsep . fmap tagpair where
   tagpair (k, esc -> v) = brackets $ pretty (BS.unpack k) <+> dquotes (pretty v)
   esc = T.concatMap e where
     e '\\' = T.pack "\\\\"
-    e '"' = T.pack "\\\""
-    e c = T.singleton c
+    e '"'  = T.pack "\\\""
+    e c    = T.singleton c
 
 moveDoc :: RAVOrder (Doc ann) -> Position -> (Outcome, Forest PlyData) -> Doc ann
 moveDoc ro p (o,f) = fillSep (go p True f <> [pretty o]) <> line where
@@ -244,7 +244,7 @@ weightedForest (PGN games) = merge . concatMap rate $ snd <$> filter ok games wh
         | otherwise = 0
     f pos (Node a ts') = Node (w (color pos), pgnPly a) $
       f (unsafeDoPly pos (pgnPly a)) <$> ts'
-  trunk [] = []
+  trunk []    = []
   trunk (x:_) = [x { subForest = trunk (subForest x)}]
   merge [] = []
   merge ((Node a ts) : xs) =

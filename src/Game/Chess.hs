@@ -56,5 +56,5 @@ module Game.Chess (
 , doPly, unsafeDoPly
 ) where
 
-import Game.Chess.Internal.Square
-import Game.Chess.Internal
+import           Game.Chess.Internal
+import           Game.Chess.Internal.Square

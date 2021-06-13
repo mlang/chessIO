@@ -1,4 +1,7 @@
-{-# LANGUAGE PolyKinds, FlexibleInstances, GADTs, ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE PolyKinds           #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-|
 Module      : Game.Chess.SAN
 Description : Standard Algebraic Notation
@@ -18,40 +21,44 @@ module Game.Chess.SAN (
 , varToSAN
 ) where
 
-import           Control.Applicative (Applicative(liftA2))
-import           Control.Arrow ((&&&))
-import           Control.Lens (view)
-import           Control.Lens.Iso (from)
-import           Data.Bifunctor (first)
-import qualified Data.ByteString as Strict (ByteString)
-import qualified Data.ByteString.Lazy as Lazy (ByteString)
-import           Data.Char (chr, ord)
-import           Data.Functor (($>))
-import           Data.List (sortOn)
-import           Data.List.Extra (chunksOf)
-import           Data.Maybe (fromJust)
-import           Data.MonoTraversable (MonoFoldable(otoList), Element)
-import           Data.Ord (Down(..))
-import           Data.Proxy ( Proxy(..) )
-import           Data.String (IsString(fromString))
-import qualified Data.Text as Strict (Text)
-import qualified Data.Text.Lazy as Lazy (Text)
-import           Data.Traversable (mapAccumL)
-import           Data.Void (Void)
-import           Data.Word ( Word8 )
-import Game.Chess.Internal ( Castle(Queenside, Kingside),
-                             Ply, Position(color, moveNumber), Color(Black, White),
-                             PieceType(..), isCapture, pieceAt,
-                             promoteTo, plySource, plyTarget, unpack, doPly, unsafeDoPly, legalPlies,
-                             inCheck, canCastleKingside, canCastleQueenside,
-                             wKscm, wQscm, bKscm, bQscm )
-import Game.Chess.Internal.Square
-import Text.Megaparsec ( optional, (<|>), empty, (<?>), chunk, parse,
-                         errorBundlePretty, choice, option, Parsec,
-                         MonadParsec(try, token),
-                         Stream, TraversableStream, VisualStream,
-                         Token, Tokens, chunkLength )
-import GHC.Stack (HasCallStack)
+import           Control.Applicative        (Applicative (liftA2))
+import           Control.Arrow              ((&&&))
+import           Control.Lens               (view)
+import           Control.Lens.Iso           (from)
+import           Data.Bifunctor             (first)
+import qualified Data.ByteString            as Strict (ByteString)
+import qualified Data.ByteString.Lazy       as Lazy (ByteString)
+import           Data.Char                  (chr, ord)
+import           Data.Functor               (($>))
+import           Data.List                  (sortOn)
+import           Data.List.Extra            (chunksOf)
+import           Data.Maybe                 (fromJust)
+import           Data.MonoTraversable       (Element, MonoFoldable (otoList))
+import           Data.Ord                   (Down (..))
+import           Data.Proxy                 (Proxy (..))
+import           Data.String                (IsString (fromString))
+import qualified Data.Text                  as Strict (Text)
+import qualified Data.Text.Lazy             as Lazy (Text)
+import           Data.Traversable           (mapAccumL)
+import           Data.Void                  (Void)
+import           Data.Word                  (Word8)
+import           GHC.Stack                  (HasCallStack)
+import           Game.Chess.Internal        (Castle (Kingside, Queenside),
+                                             Color (Black, White),
+                                             PieceType (..), Ply,
+                                             Position (color, moveNumber),
+                                             bKscm, bQscm, canCastleKingside,
+                                             canCastleQueenside, doPly, inCheck,
+                                             isCapture, legalPlies, pieceAt,
+                                             plySource, plyTarget, promoteTo,
+                                             unpack, unsafeDoPly, wKscm, wQscm)
+import           Game.Chess.Internal.Square
+import           Text.Megaparsec            (MonadParsec (token, try), Parsec,
+                                             Stream, Token, Tokens,
+                                             TraversableStream, VisualStream,
+                                             choice, chunk, chunkLength, empty,
+                                             errorBundlePretty, option,
+                                             optional, parse, (<?>), (<|>))
 
 type Parser s = Parsec Void s
 
@@ -109,7 +116,7 @@ instance SANToken Char where
     'R' -> Just Rook
     'Q' -> Just Queen
     'K' -> Just King
-    _ -> Nothing
+    _   -> Nothing
   fileToken c | c >= 'a' && c <= 'h' = Just $ ord c - ord 'a'
               | otherwise  = Nothing
   rankToken c | c >= '1' && c <= '8' = Just $ ord c - ord '1'
@@ -119,11 +126,11 @@ instance SANToken Char where
     'B' -> Just Bishop
     'R' -> Just Rook
     'Q' -> Just Queen
-    _ -> Nothing
+    _   -> Nothing
   statusToken = \case
     '+' -> Just Check
     '#' -> Just Checkmate
-    _ -> Nothing
+    _   -> Nothing
 
 instance SANToken Word8 where
   sanPieceToken = \case
@@ -132,7 +139,7 @@ instance SANToken Word8 where
     82 -> Just Rook
     81 -> Just Queen
     75 -> Just King
-    _ -> Nothing
+    _  -> Nothing
   rankToken c | c >= 49 && c <= 56 = Just . fromIntegral $ c - 49
               | otherwise  = Nothing
   fileToken c | c >= 97 && c <= 104 = Just . fromIntegral $ c - 97
@@ -142,11 +149,11 @@ instance SANToken Word8 where
     66 -> Just Bishop
     82 -> Just Rook
     81 -> Just Queen
-    _ -> Nothing
+    _  -> Nothing
   statusToken = \case
     43 -> Just Check
     35 -> Just Checkmate
-    _ -> Nothing
+    _  -> Nothing
 
 strictSAN :: forall s. (Stream s, SANToken (Token s), IsString (Tokens s))
           => Position -> Parser s Ply
@@ -162,7 +169,7 @@ strictSAN pos = case legalPlies pos of
   pieceFrom p (plySource -> from) = p == snd (fromJust (pieceAt pos from))
   target p ms = coords p ms >>= \m@(plyTarget -> to) -> case p of
     Pawn | lastRank to -> promoteTo m <$> promotion
-    _ -> pure m
+    _                  -> pure m
   coords p ms = choice $ fmap (uncurry (<$) . fmap chunk) $
     sortOn (Down . chunkLength (Proxy :: Proxy s) . snd) $
     (\m -> (m, sanCoords pos (p,ms) m)) <$> ms
@@ -187,8 +194,8 @@ relaxedSAN pos = (castling pos <|> normal) <* optional sanStatus where
     prm <- optional $ optional (chunk "=") *> promotionPiece
     case possible pc from to prm of
       [m] -> pure m
-      [] -> fail "Illegal move"
-      _ -> fail "Ambiguous move"
+      []  -> fail "Illegal move"
+      _   -> fail "Ambiguous move"
   conv (Nothing, Nothing, cap, to) = (Nothing, cap, to)
   conv (Just f, Nothing, cap, to) = (Just (F f), cap, to)
   conv (Nothing, Just r, cap, to) = (Just (R r), cap, to)
@@ -235,7 +242,7 @@ varToSAN p = fromString . go p . otoList where
                 . zipWith f [moveNumber pos ..] . chunksOf 2 . snd
                 . mapAccumL (curry (uncurry doPly &&& uncurry toSAN)) pos
   f n (x:xs) = (show n <> "." <> x):xs
-  f _ [] = []
+  f _ []     = []
 
 sanCoords :: IsString s => Position -> (PieceType, [Ply]) -> Ply -> s
 sanCoords pos (pc,lms) m@(unpack -> (from, to, _)) =
@@ -288,7 +295,7 @@ unsafeToSAN pos m@(unpack -> (from, to, promo)) =
     Just Bishop -> "B"
     Just Rook   -> "R"
     Just Queen  -> "Q"
-    _      -> ""
+    _           -> ""
   status | inCheck (color nextPos) nextPos && null (legalPlies nextPos) = "#"
          | inCheck (color nextPos) nextPos                              = "+"
          | otherwise                                                    = ""

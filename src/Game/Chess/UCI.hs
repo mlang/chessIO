@@ -33,52 +33,53 @@ module Game.Chess.UCI (
 , quit, quit'
 ) where
 
-import Control.Applicative
-import Control.Concurrent
-import Control.Concurrent.STM hiding (check)
-import Control.Exception
-import Control.Monad
-import Control.Monad.IO.Class
-import Data.Attoparsec.Combinator
-import Data.Attoparsec.ByteString.Char8
-import Data.ByteString.Builder
-import Data.ByteString.Char8 (ByteString)
-import qualified Data.ByteString.Char8 as BS
-import Data.Foldable
-import Data.Functor
-import Data.HashMap.Strict (HashMap)
-import qualified Data.HashMap.Strict as HashMap
-import Data.IORef
-import Data.Ix
-import Data.List
-import Data.String (IsString(..))
-import Data.STRef (newSTRef, readSTRef, modifySTRef, writeSTRef)
-import qualified Data.Vector.Unboxed as Unboxed
-import qualified Data.Vector.Unboxed.Mutable as Unboxed
-import Game.Chess
-import Numeric.Natural
-import System.Exit (ExitCode)
-import System.IO
-import System.Process
-import Time.Rational
-import Time.Units
+import           Control.Applicative
+import           Control.Concurrent
+import           Control.Concurrent.STM           hiding (check)
+import           Control.Exception
+import           Control.Monad
+import           Control.Monad.IO.Class
+import           Data.Attoparsec.ByteString.Char8
+import           Data.Attoparsec.Combinator
+import           Data.ByteString.Builder
+import           Data.ByteString.Char8            (ByteString)
+import qualified Data.ByteString.Char8            as BS
+import           Data.Foldable
+import           Data.Functor
+import           Data.HashMap.Strict              (HashMap)
+import qualified Data.HashMap.Strict              as HashMap
+import           Data.IORef
+import           Data.Ix
+import           Data.List
+import           Data.STRef                       (modifySTRef, newSTRef,
+                                                   readSTRef, writeSTRef)
+import           Data.String                      (IsString (..))
+import qualified Data.Vector.Unboxed              as Unboxed
+import qualified Data.Vector.Unboxed.Mutable      as Unboxed
+import           Game.Chess
+import           Numeric.Natural
+import           System.Exit                      (ExitCode)
+import           System.IO
+import           System.Process
+import           Time.Rational
+import           Time.Units
 
 type BestMove = Maybe (Ply, Maybe Ply)
 
 data Engine = Engine {
-  inH :: Handle
-, outH :: Handle
-, procH :: ProcessHandle
-, outputStrLn :: String -> IO ()
-, infoThread :: Maybe ThreadId
-, name :: Maybe ByteString
-, author :: Maybe ByteString
-, options :: HashMap ByteString Option
-, isReady :: MVar ()
-, isSearching :: IORef Bool
-, infoChan :: TChan [Info]
+  inH          :: Handle
+, outH         :: Handle
+, procH        :: ProcessHandle
+, outputStrLn  :: String -> IO ()
+, infoThread   :: Maybe ThreadId
+, name         :: Maybe ByteString
+, author       :: Maybe ByteString
+, options      :: HashMap ByteString Option
+, isReady      :: MVar ()
+, isSearching  :: IORef Bool
+, infoChan     :: TChan [Info]
 , bestMoveChan :: TChan BestMove
-, game :: IORef (Position, [Ply])
+, game         :: IORef (Position, [Ply])
 }
 
 -- | Set the starting position of the current game, also clearing any
@@ -123,7 +124,7 @@ data Info = PV !(Unboxed.Vector Ply)
 data Score = CentiPawns Int
            | MateIn Int
            deriving (Eq, Ord, Show)
-           
+
 data Bounds = UpperBound | LowerBound deriving (Eq, Show)
 
 
@@ -200,9 +201,9 @@ command pos = skipSpace *> choice
     pure $ Score s b
   pv = varToVec pos <$> sepBy mv skipSpace >>= \case
     Right v -> pure . PV $ v
-    Left s -> fail $ "Failed to parse move " <> s
+    Left s  -> fail $ "Failed to parse move " <> s
   currmove = fmap (fromUCI pos) mv >>= \case
-    Just m -> pure $ CurrMove m
+    Just m  -> pure $ CurrMove m
     Nothing -> fail "Failed to parse move"
 
   mv = BS.unpack . fst <$> match (sq *> sq *> optional (satisfy p)) where
@@ -211,7 +212,7 @@ command pos = skipSpace *> choice
     p 'r' = True
     p 'b' = True
     p 'n' = True
-    p _ = False 
+    p _   = False
   bestmove = do
     m <- mv
     ponder <- optional (skipSpace *> kv "ponder" mv)
@@ -297,7 +298,7 @@ isready :: Engine -> IO ()
 isready e@Engine{isReady} = do
   send e "isready"
   takeMVar isReady
-  
+
 send :: Engine -> Builder -> IO ()
 send Engine{inH, procH} b = do
   hPutBuilder inH (b <> "\n")
@@ -321,7 +322,7 @@ data SearchParam = SearchMoves [Ply]
                  | Infinite
                 -- ^ search until 'stop' gets called
                  deriving (Eq, Show)
- 
+
 searchmoves :: [Ply] -> SearchParam
 searchmoves = SearchMoves
 
@@ -419,19 +420,19 @@ addPly e@Engine{game} m = liftIO $ do
   if m `notElem` legalPlies pos then throwIO $ IllegalMove m else do
     atomicModifyIORef' game $ \g -> (fmap (<> [m]) g, ())
     sendPosition e
- 
+
 replacePly :: MonadIO m => Engine -> Ply -> m ()
 replacePly e@Engine{game} pl = liftIO $ do
   atomicModifyIORef' game $ \g ->
     (fmap init g, ())
   addPly e pl
-  
+
 sendPosition :: Engine -> IO ()
 sendPosition e@Engine{game} = readIORef game >>= send e . cmd where
   cmd (p, h) = fold . intersperse " " $
     "position" : "fen" : fromString (toFEN p) : line h
   line [] = []
-  line h = "moves" : (fromString . toUCI <$> h)
+  line h  = "moves" : (fromString . toUCI <$> h)
 
 -- | Quit the engine.
 quit :: MonadIO m => Engine -> m (Maybe ExitCode)

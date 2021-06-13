@@ -1,13 +1,13 @@
 module Game.Chess.Internal.Square where
 
-import Control.Lens.Iso
-import Data.Bits (Bits(testBit))
-import Data.Char (chr, ord)
-import Data.Coerce (coerce)
-import Data.Ix (Ix(..))
-import Data.String (IsString(fromString))
-import Data.Word
-import GHC.Stack (HasCallStack)
+import           Control.Lens.Iso
+import           Data.Bits        (Bits (testBit))
+import           Data.Char        (chr, ord)
+import           Data.Coerce      (coerce)
+import           Data.Ix          (Ix (..))
+import           Data.String      (IsString (fromString))
+import           Data.Word
+import           GHC.Stack        (HasCallStack)
 
 newtype Rank = Rank Int deriving (Eq, Ord)
 

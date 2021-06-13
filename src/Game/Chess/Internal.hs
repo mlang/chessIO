@@ -16,33 +16,33 @@ package name chessIO.
 -}
 module Game.Chess.Internal where
 
-import Control.DeepSeq
-import Control.Lens (view)
-import Control.Lens.Iso (from)
-import Data.Bits
-  ( Bits((.&.), testBit, unsafeShiftR, unsafeShiftL, xor, (.|.), bit, complement),
-    FiniteBits(countLeadingZeros, countTrailingZeros) )
-import Data.Binary
-import Data.Char ( ord, chr )
-import Data.Hashable
-import Data.Ix ( Ix(inRange) )
-import Data.List (nub, sortOn)
-import Data.Maybe ( fromJust, isJust, listToMaybe )
-import Data.Ord (Down(..))
-import Data.String ( IsString(..) )
-import Data.Vector.Unboxed (Vector, MVector, (!), Unbox)
-import qualified Data.Vector.Unboxed as Vector
-import qualified Data.Vector.Generic as G
-import qualified Data.Vector.Generic.Mutable as M
-import Data.Word ( Word16, Word64 )
-import Foreign.Storable
-import Game.Chess.Internal.Square
-import Game.Chess.Internal.QuadBitboard (QuadBitboard)
+import           Control.DeepSeq
+import           Control.Lens                     (view)
+import           Control.Lens.Iso                 (from)
+import           Data.Binary
+import           Data.Bits                        (Bits (bit, complement, testBit, unsafeShiftL, unsafeShiftR, xor, (.&.), (.|.)),
+                                                   FiniteBits (countLeadingZeros, countTrailingZeros))
+import           Data.Char                        (chr, ord)
+import           Data.Hashable
+import           Data.Ix                          (Ix (inRange))
+import           Data.List                        (nub, sortOn)
+import           Data.Maybe                       (fromJust, isJust,
+                                                   listToMaybe)
+import           Data.Ord                         (Down (..))
+import           Data.String                      (IsString (..))
+import qualified Data.Vector.Generic              as G
+import qualified Data.Vector.Generic.Mutable      as M
+import           Data.Vector.Unboxed              (MVector, Unbox, Vector, (!))
+import qualified Data.Vector.Unboxed              as Vector
+import           Data.Word                        (Word16, Word64)
+import           Foreign.Storable
+import           GHC.Generics                     (Generic)
+import           GHC.Stack                        (HasCallStack)
+import           Game.Chess.Internal.QuadBitboard (QuadBitboard)
 import qualified Game.Chess.Internal.QuadBitboard as QBB
-import Text.Read (readMaybe)
-import GHC.Generics (Generic)
-import GHC.Stack (HasCallStack)
-import Language.Haskell.TH.Syntax (Lift)
+import           Game.Chess.Internal.Square
+import           Language.Haskell.TH.Syntax       (Lift)
+import           Text.Read                        (readMaybe)
 
 capturing :: Position -> Ply -> Maybe PieceType
 capturing pos@Position{flags} (plyTarget -> to)
@@ -73,19 +73,19 @@ instance Hashable Color where
 
 pieceAt :: Position -> Square -> Maybe (Color, PieceType)
 pieceAt Position{qbb} sq = case qbb QBB.! sq of
-  QBB.WhitePawn -> Just (White, Pawn)
+  QBB.WhitePawn   -> Just (White, Pawn)
   QBB.WhiteKnight -> Just (White, Knight)
   QBB.WhiteBishop -> Just (White, Bishop)
-  QBB.WhiteRook -> Just (White, Rook)
-  QBB.WhiteQueen -> Just (White, Queen)
-  QBB.WhiteKing -> Just (White, King)
-  QBB.BlackPawn -> Just (Black, Pawn)
+  QBB.WhiteRook   -> Just (White, Rook)
+  QBB.WhiteQueen  -> Just (White, Queen)
+  QBB.WhiteKing   -> Just (White, King)
+  QBB.BlackPawn   -> Just (Black, Pawn)
   QBB.BlackKnight -> Just (Black, Knight)
   QBB.BlackBishop -> Just (Black, Bishop)
-  QBB.BlackRook -> Just (Black, Rook)
-  QBB.BlackQueen -> Just (Black, Queen)
-  QBB.BlackKing -> Just (Black, King)
-  _             -> Nothing
+  QBB.BlackRook   -> Just (Black, Rook)
+  QBB.BlackQueen  -> Just (Black, Queen)
+  QBB.BlackKing   -> Just (Black, King)
+  _               -> Nothing
 
 opponent :: Color -> Color
 opponent White = Black
@@ -94,12 +94,12 @@ opponent Black = White
 data Piece = Piece !Color !PieceType deriving (Eq, Show)
 
 data Position = Position {
-  qbb :: {-# UNPACK #-} !QuadBitboard
-, color :: !Color
+  qbb           :: {-# UNPACK #-} !QuadBitboard
+, color         :: !Color
   -- ^ active color
-, flags :: {-# UNPACK #-} !Word64
+, flags         :: {-# UNPACK #-} !Word64
 , halfMoveClock :: {-# UNPACK #-} !Int
-, moveNumber :: {-# UNPACK #-} !Int
+, moveNumber    :: {-# UNPACK #-} !Int
   -- ^ number of the full move
 } deriving (Generic, Lift)
 
@@ -144,7 +144,7 @@ fromFEN fen
   parts = words fen
   readColor "w" = Just White
   readColor "b" = Just Black
-  readColor _ = Nothing
+  readColor _   = Nothing
 
   readFlags cst ep = (.|.) <$> readCst cst <*> readEP ep where
     readCst "-" = Just 0
@@ -153,8 +153,8 @@ fromFEN fen
       go ('Q':xs) = (crwQs .|.) <$> go xs
       go ('k':xs) = (crbKs .|.) <$> go xs
       go ('q':xs) = (crbQs .|.) <$> go xs
-      go [] = Just 0
-      go _ = Nothing
+      go []       = Just 0
+      go _        = Nothing
     readEP "-" = Just 0
     readEP [f,r]
       | inRange ('a','h') f && (r == '3' || r == '6')
@@ -177,7 +177,7 @@ toFEN Position{qbb, color, flags, halfMoveClock, moveNumber} = unwords
   showCst x
     | str == "" = "-"
     | otherwise = str
-   where 
+   where
     str = snd . wks . wqs . bks . bqs $ (x, "")
     wks (v, xs) | v `testMask` crwKs = (v, 'K':xs)
                 | otherwise          = (v, xs)
@@ -212,7 +212,7 @@ instance Show Ply where
   show (unpack -> (from, to, promo)) = "move " <> show from <> " " <> show to <> p where
     p = case promo of
       Just piece -> " `promoteTo` " <> show piece
-      Nothing -> ""
+      Nothing    -> ""
 
 newtype instance MVector s Ply = MV_Ply (MVector s Word16)
 newtype instance Vector    Ply = V_Ply (Vector Word16)
@@ -339,7 +339,7 @@ fromUCI pos (fmap (splitAt 2) . splitAt 2 -> (src, (dst, promo)))
   readPromo "r" = Just Rook
   readPromo "b" = Just Bishop
   readPromo "n" = Just Knight
-  readPromo _ = Nothing
+  readPromo _   = Nothing
 
 -- | Convert a move to the format used by the Universal Chess Interface protocol.
 toUCI :: Ply -> String
@@ -347,11 +347,11 @@ toUCI (unpack -> (from, to, promo)) = coord from <> coord to <> p where
   coord x = let (r,f) = view rankFile x in
             chr (unFile f + ord 'a') : [chr (unRank r + ord '1')]
   p = case promo of
-    Just Queen -> "q"
-    Just Rook -> "r"
+    Just Queen  -> "q"
+    Just Rook   -> "r"
     Just Bishop -> "b"
     Just Knight -> "n"
-    _ -> ""
+    _           -> ""
 
 -- | Validate that a certain move is legal in the given position.
 relativeTo :: Position -> Ply -> Maybe Ply
@@ -402,7 +402,7 @@ unsafeDoPly pos@Position{color, halfMoveClock, moveNumber} m =
   pos' = unsafeDoPly' pos m
   isPawnPush p m = case pieceAt p (plySource m) of
     Just (_, Pawn) -> True
-    _         -> False
+    _              -> False
 
 unsafeDoPly' :: Position -> Ply -> Position
 unsafeDoPly' pos@Position{qbb, flags} m@(unpack -> (from, to, promo))
@@ -441,7 +441,7 @@ unsafeDoPly' pos@Position{qbb, flags} m@(unpack -> (from, to, promo))
       Black -> case piece of
         Queen -> pos { qbb = QBB.blackPromotion qbb from to QBB.BlackQueen
                      , flags = flags `clearMask` (epMask .|. bit (unSquare to))
-                     }  
+                     }
         Rook   -> pos { qbb = QBB.blackPromotion qbb from to QBB.BlackRook
                       , flags = flags `clearMask` (epMask .|. bit (unSquare to))
                       }
@@ -462,7 +462,7 @@ unsafeDoPly' pos@Position{qbb, flags} m@(unpack -> (from, to, promo))
         , flags = (flags `clearMask` (epMask .|. mask)) .|. dpp
         }
  where
-  !fromMask = 1 `unsafeShiftL` (unSquare from)
+  !fromMask = 1 `unsafeShiftL` unSquare from
   !toMask = 1 `unsafeShiftL` (unSquare to)
   !mask = fromMask .|. toMask
   dpp = case color pos of
@@ -555,10 +555,10 @@ slideMoves piece (Position bb c _ _ _) !notOurs !occ =
   gen ms from = foldBits (mkPly from) ms (targets from)
   mkPly from ms to = move (Sq from) (Sq to) : ms
   targets sq = case piece of
-    Rook -> rookTargets sq occ .&. notOurs
+    Rook   -> rookTargets sq occ .&. notOurs
     Bishop -> bishopTargets sq occ .&. notOurs
-    Queen -> queenTargets sq occ .&. notOurs
-    _ -> error "Not a sliding piece"
+    Queen  -> queenTargets sq occ .&. notOurs
+    _      -> error "Not a sliding piece"
   pieces = case (c, piece) of
     (White, Bishop) -> QBB.wBishops bb
     (Black, Bishop) -> QBB.bBishops bb
@@ -566,7 +566,7 @@ slideMoves piece (Position bb c _ _ _) !notOurs !occ =
     (Black, Rook)   -> QBB.bRooks bb
     (White, Queen)  -> QBB.wQueens bb
     (Black, Queen)  -> QBB.bQueens bb
-    _ -> 0
+    _               -> 0
 
 data Castle = Kingside | Queenside deriving (Eq, Ix, Ord, Show)
 
@@ -594,7 +594,7 @@ canCastleKingside', canCastleQueenside' :: Position -> Word64 -> Bool
 canCastleKingside' Position{qbb, color = White, flags} !occ =
   flags `testMask` crwKs && occ .&. crwKe == 0 &&
   not (any (attackedBy Black qbb occ) [E1, F1, G1])
-canCastleKingside' Position{qbb, color = Black, flags} !occ = 
+canCastleKingside' Position{qbb, color = Black, flags} !occ =
   flags `testMask` crbKs && occ .&. crbKe == 0 &&
   not (any (attackedBy White qbb occ) [E8, F8, G8])
 canCastleQueenside' Position{qbb, color = White, flags} !occ =
@@ -678,7 +678,7 @@ queenTargets sq occ = rookTargets sq occ .|. bishopTargets sq occ
 
 getRayTargets :: Int -> Direction -> Word64 -> Word64
 getRayTargets sq dir occ = blocked $ attacks .&. occ where
-  blocked 0 = attacks
+  blocked 0  = attacks
   blocked bb = attacks `xor` (ray ! bitScan bb)
   attacks = ray ! sq
   (bitScan, ray) = case dir of

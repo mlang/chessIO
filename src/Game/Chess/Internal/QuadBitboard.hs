@@ -30,38 +30,33 @@ module Game.Chess.Internal.QuadBitboard (
 , whitePromotion, blackPromotion, whitePromotion', blackPromotion'
 ) where
 
-import Control.Applicative (liftA2)
-import Control.DeepSeq
-import Control.Lens (view, (^.))
-import Control.Lens.Iso (from)
-import Data.Bifunctor (first)
-import Data.Binary ( Binary(put, get) )
-import Data.Bits
-    ( Bits((.|.), (.&.), xor, complement
-          , unsafeShiftR, unsafeShiftL, testBit, setBit, clearBit, popCount)
-    , FiniteBits(..) )
-import Data.Char (ord, toLower)
-import Data.Hashable
-import Data.Ix ( Ix(inRange) )
-import Data.List ( groupBy, intercalate )
-import Data.String ( IsString(..) )
-import qualified Data.Vector.Generic as G
+import           Control.Applicative         (liftA2)
+import           Control.DeepSeq
+import           Control.Lens                (view, (^.))
+import           Control.Lens.Iso            (from)
+import           Data.Bifunctor              (first)
+import           Data.Binary                 (Binary (get, put))
+import           Data.Bits                   (Bits (clearBit, complement, popCount, setBit, testBit, unsafeShiftL, unsafeShiftR, xor, (.&.), (.|.)),
+                                              FiniteBits (..))
+import           Data.Char                   (ord, toLower)
+import           Data.Hashable
+import           Data.Ix                     (Ix (inRange))
+import           Data.List                   (groupBy, intercalate)
+import           Data.String                 (IsString (..))
+import qualified Data.Vector.Generic         as G
 import qualified Data.Vector.Generic.Mutable as M
-import Data.Vector.Unboxed (Vector, MVector, Unbox)
-import Data.Word (Word8, Word64)
-import Foreign.Storable
-import Game.Chess.Internal.Square
-import GHC.Enum
-    ( boundedEnumFrom,
-      boundedEnumFromThen,
-      predError,
-      succError,
-      toEnumError )
-import GHC.Exts (IsList(Item, fromList, toList))
-import GHC.Generics (Generic)
-import GHC.Ptr ( castPtr, plusPtr )
-import Numeric (showHex)
-import Language.Haskell.TH.Syntax (Lift)
+import           Data.Vector.Unboxed         (MVector, Unbox, Vector)
+import           Data.Word                   (Word64, Word8)
+import           Foreign.Storable
+import           GHC.Enum                    (boundedEnumFrom,
+                                              boundedEnumFromThen, predError,
+                                              succError, toEnumError)
+import           GHC.Exts                    (IsList (Item, fromList, toList))
+import           GHC.Generics                (Generic)
+import           GHC.Ptr                     (castPtr, plusPtr)
+import           Game.Chess.Internal.Square
+import           Language.Haskell.TH.Syntax  (Lift)
+import           Numeric                     (showHex)
 
 data QuadBitboard = QBB { black, pbq, nbk, rqk :: {-# UNPACK #-} !Word64 }
                     deriving (Eq, Generic, Lift)

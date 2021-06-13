@@ -1,8 +1,8 @@
 module Game.Chess.Tree (positionTree, positionForest, plyTree, plyForest) where
 
-import Data.List.NonEmpty (NonEmpty, cons)
-import Data.Tree ( Tree(Node), Forest, foldTree )
-import Game.Chess.Internal
+import           Data.List.NonEmpty  (NonEmpty, cons)
+import           Data.Tree           (Forest, Tree (Node), foldTree)
+import           Game.Chess.Internal
 
 positionTree :: Position -> Tree Position
 positionTree pos = Node pos $ positionForest pos
