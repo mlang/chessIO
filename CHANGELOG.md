@@ -6,9 +6,10 @@
 - instance IsString Position based on fromFEN
 - instance Hashable Position
 - instance Unbox Ply
-- New functions: rankOf, fileOf, rankChar, fileChar, toCoord
+- New functions: rank, file, rankChar, fileChar, toCoord
 - New module: Game.Chess.ECO
 - Chess.Game.UCI: PV is now an unboxed vector
+- Remove IsSquare class add three newtye'd Ints: Square, Rank, File
 
 ## chessIO 0.6.1.1
 
