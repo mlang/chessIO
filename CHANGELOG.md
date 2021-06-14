@@ -2,14 +2,16 @@
 
 ## chessIO 0.7.0.0
 
+- Remove IsSquare class and add three newtye'd Ints: Square, Rank, File
 - Add HasCallStack to partial doPly and toSAN (thanks Oleg Grenrus)
 - instance IsString Position based on fromFEN
+- instance Binary Position
 - instance Hashable Position
+- instance Binary Ply
 - instance Unbox Ply
 - New functions: rank, file, rankChar, fileChar, toCoord
 - New module: Game.Chess.ECO
 - Chess.Game.UCI: PV is now an unboxed vector
-- Remove IsSquare class add three newtye'd Ints: Square, Rank, File
 
 ## chessIO 0.6.1.1
 
