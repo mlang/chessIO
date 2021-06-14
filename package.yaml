@@ -111,9 +111,8 @@ executables:
     - rosezipper
     - filepath
     - brick
+    - lens
     - vty
-    - microlens
-    - microlens-th
 
 tests:
   perft:

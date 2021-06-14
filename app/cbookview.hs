@@ -1,54 +1,55 @@
 {-# LANGUAGE TemplateHaskell #-}
-import Prelude hiding (last)
-import Control.Monad ( void )
-import Data.Foldable ( foldl', toList )
-import Data.Ix
-import Data.List ( elemIndex, intersperse )
-import Data.List.Extra ( chunksOf )
-import Data.List.NonEmpty ( NonEmpty, cons )
-import qualified Data.List.NonEmpty as NonEmpty
-import Data.Maybe ( fromJust, fromMaybe )
-import Data.Tree ( Tree(..), Forest, foldTree )
-import Data.Tree.Zipper ( TreePos, Full
-                        , label, forest, fromForest, nextTree, prevTree
-                        )
-import qualified Data.Tree.Zipper as TreePos
-import qualified Data.Vector as Vec
-import Game.Chess ( Color(..), PieceType(..), Square(A1, H8), isDark, Position, color, startpos, pieceAt, toFEN
-                  , Ply, plyTarget, doPly
-                  )
-import Game.Chess.ECO (Opening(..), defaultECO)
-import qualified Game.Chess.ECO as ECO
-import Game.Chess.Polyglot ( defaultBook, bookForest, readPolyglotFile )
-import Game.Chess.PGN ( readPGNFile, pgnForest )
-import Game.Chess.SAN ( toSAN, varToSAN )
-import Game.Chess.Tree ( plyForest )
-import Lens.Micro ( over, (&), (^.), (.~) )
-import Lens.Micro.TH ( makeLenses )
-import qualified Graphics.Vty as V
+import           Control.Lens         (makeLenses, over, (&), (.~), (^.))
+import           Control.Monad        (void)
+import           Data.Foldable        (foldl', toList)
+import           Data.Ix
+import           Data.List            (elemIndex, intersperse)
+import           Data.List.Extra      (chunksOf)
+import           Data.List.NonEmpty   (NonEmpty, cons)
+import qualified Data.List.NonEmpty   as NonEmpty
+import           Data.Maybe           (fromJust, fromMaybe)
+import           Data.Tree            (Forest, Tree (..), foldTree)
+import           Data.Tree.Zipper     (Full, TreePos, forest, fromForest, label,
+                                       nextTree, prevTree)
+import qualified Data.Tree.Zipper     as TreePos
+import qualified Data.Vector          as Vec
+import           Game.Chess           (Color (..), PieceType (..), Ply,
+                                       Position, Square (A1, H8), color, doPly,
+                                       isDark, pieceAt, plyTarget, startpos,
+                                       toFEN)
+import           Game.Chess.ECO       (Opening (..), defaultECO)
+import qualified Game.Chess.ECO       as ECO
+import           Game.Chess.PGN       (pgnForest, readPGNFile)
+import           Game.Chess.Polyglot  (bookForest, defaultBook,
+                                       readPolyglotFile)
+import           Game.Chess.SAN       (toSAN, varToSAN)
+import           Game.Chess.Tree      (plyForest)
+import qualified Graphics.Vty         as V
+import           Prelude              hiding (last)
 
-import Brick.Main ( App(..), defaultMain, continue, halt )
-import qualified Brick.Focus as F
-import qualified Brick.Widgets.List as L
-import Brick.AttrMap (AttrName, attrMap)
-import Brick.Util (on)
-import Brick.Types ( EventM, Next, Widget, Location(Location), BrickEvent( VtyEvent ) )
-import Brick.Widgets.Core ( showCursor, withAttr, hLimit, vLimit, hBox, vBox, str, txt, strWrap, txtWrap
-                          , (<+>), (<=>)
-                          )
-import Brick.Widgets.Center ( hCenter )
-import Brick.Widgets.Border ( border, borderWithLabel )
-import System.FilePath
-import System.Environment ( getArgs )
+import           Brick.AttrMap        (AttrName, attrMap)
+import qualified Brick.Focus          as F
+import           Brick.Main           (App (..), continue, defaultMain, halt)
+import           Brick.Types          (BrickEvent (VtyEvent), EventM,
+                                       Location (Location), Next, Widget)
+import           Brick.Util           (on)
+import           Brick.Widgets.Border (border, borderWithLabel)
+import           Brick.Widgets.Center (hCenter)
+import           Brick.Widgets.Core   (hBox, hLimit, showCursor, str, strWrap,
+                                       txt, txtWrap, vBox, vLimit, withAttr,
+                                       (<+>), (<=>))
+import qualified Brick.Widgets.List   as L
+import           System.Environment   (getArgs)
+import           System.FilePath
 
 data Name = List | Board | BoardStyle deriving (Show, Ord, Eq)
 
 type Style a = Position -> Square -> Widget a
 
 data St = St { _initialPosition :: Position
-             , _treePos :: TreePos Full (NonEmpty Ply)
-             , _boardStyle :: L.List Name (String, Style Name)
-             , _focusRing :: F.FocusRing Name
+             , _treePos         :: TreePos Full (NonEmpty Ply)
+             , _boardStyle      :: L.List Name (String, Style Name)
+             , _focusRing       :: F.FocusRing Name
              }
 
 makeLenses ''St
@@ -114,8 +115,8 @@ putCursorIf True n loc = showCursor n $ Location loc
 putCursorIf False _ _  = id
 
 withAttrIf :: Bool -> AttrName -> Widget n -> Widget n
-withAttrIf True attr   = withAttr attr
-withAttrIf False _     = id
+withAttrIf True attr = withAttr attr
+withAttrIf False _   = id
 
 type Command = St -> EventM Name (Next St)
 
@@ -186,7 +187,7 @@ app = App { .. } where
     eco = maybe (str " ") drawECO (ECO.lookup (position st) defaultECO)
     drawECO co = borderWithLabel (str "ECO " <+> txt (coCode co)) $
       case coVariation co of
-        Nothing -> txtWrap (coName co)
+        Nothing        -> txtWrap (coName co)
         Just variation -> txtWrap (coName co) <=> txtWrap variation
     style = vLimit 1 $ L.renderList drawStyle True (st^.boardStyle)
     drawStyle foc (n, _) = putCursorIf foc BoardStyle (0,0) $ str n
@@ -195,7 +196,7 @@ app = App { .. } where
     list = L.renderList (drawPly (previousPosition st)) True (plyList st)
     drawPly p foc = putCursorIf foc List (0,0)
                   . withAttrIf foc selectedAttr
-                  . str . toSAN p 
+                  . str . toSAN p
     board = renderPosition (position st) (color (previousPosition st)) (Just . targetSquare $ st) selectedStyle
     var = strWrap . varToSAN (st^.initialPosition) $ st^.treePos & label & toList
     fen = str . toFEN $ position st
