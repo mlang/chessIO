@@ -42,7 +42,7 @@ import           Game.Chess.SAN
 import           Instances.TH.Lift
 import           Language.Haskell.TH.Syntax (Lift, Q, TExp, liftTyped)
 import           Prelude                    hiding (lookup)
-import qualified Prelude                    as Prelude
+import qualified Prelude
 import           System.IO
 import           Text.Megaparsec
 import           Text.Megaparsec.Byte
@@ -63,12 +63,12 @@ instance NFData Opening
 type FileReader = forall m. MonadIO m => FilePath -> m (Either String [Opening])
 
 -- | Parse an ECO database in .pgn format
-eco_pgn :: FileReader
-eco_pgn fp = fmap fromPGN' <$> readPGNFile fp
+ecoPgn :: FileReader
+ecoPgn fp = fmap fromPGN' <$> readPGNFile fp
 
 -- | Parse an ECO database in .eco format
-scid_eco :: FileReader
-scid_eco fp = first errorBundlePretty . parse scid' fp <$> liftIO (BS.readFile fp)
+scidEco :: FileReader
+scidEco fp = first errorBundlePretty . parse scid' fp <$> liftIO (BS.readFile fp)
 
 -- | Encyclopedia of Chess Openings
 newtype ECO = ECO { toHashMap :: HashMap Position Opening }
@@ -142,8 +142,11 @@ scid = fromList <$> scid'
 scid' :: Parser [Opening]
 scid' = spaceConsumer *> many opening <* eof
 
+readECOPGNFile :: MonadIO m => FilePath -> m (Either String ECO)
+readECOPGNFile = (fmap . fmap) fromList . ecoPgn
+
 readSCIDECOFile :: MonadIO m => FilePath -> m (Either String ECO)
-readSCIDECOFile fp = fmap fromList <$> scid_eco fp
+readSCIDECOFile = (fmap . fmap) fromList . scidEco
 
 -- | Retrieve the opening for a particular position
 lookup :: Position -> ECO -> Maybe Opening

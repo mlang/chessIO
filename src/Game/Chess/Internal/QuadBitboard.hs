@@ -286,7 +286,7 @@ instance IsString QuadBitboard where
     go rf@(r, f) !qbb (x:xs)
       | inRange ('1','8') x = go (r, mkFile $ unFile f + ord x - ord '0') qbb xs
       | otherwise = go (r, succ f) (qbb <> singleton sq nb) xs where
-        sq = view (from rankFile) $ rf
+        sq = view (from rankFile) rf
         nb = case x of
           'P' -> WhitePawn
           'N' -> WhiteKnight

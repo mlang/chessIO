@@ -18,15 +18,17 @@ module Game.Chess.ECO (
   -- * Query
 , lookup
   -- * Conversion
-, fromList, fromPGN, toList
+, fromList, toList
+  -- * Parsing eco.pgn files
+, fromPGN, readECOPGNFile
   -- * Parsing scid .eco files
 , readSCIDECOFile, scid
   -- * Template Haskell
-, embedECO, eco_pgn, scid_eco
+, embedECO, ecoPgn, scidEco
 ) where
 
 import           Game.Chess.Internal.ECO
 import           Prelude                 hiding (lookup)
 
 defaultECO :: ECO
-defaultECO = $$(embedECO eco_pgn "book/eco.pgn")
+defaultECO = $$(embedECO ecoPgn "book/eco.pgn")

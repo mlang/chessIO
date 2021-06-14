@@ -240,7 +240,7 @@ instance G.Vector Vector Ply where
   basicUnsafeSlice i n (V_Ply v) = V_Ply $ G.basicUnsafeSlice  i n v
   basicUnsafeIndexM (V_Ply v) i = Ply <$> G.basicUnsafeIndexM v i
   basicUnsafeCopy (MV_Ply mv) (V_Ply v) = G.basicUnsafeCopy mv v
-  elemseq _ pl z = G.elemseq (undefined :: Vector a) pl $ z
+  elemseq _ pl z = G.elemseq (undefined :: Vector a) pl z
 
 instance Unbox Ply
 
@@ -463,7 +463,7 @@ unsafeDoPly' pos@Position{qbb, flags} m@(unpack -> (from, to, promo))
         }
  where
   !fromMask = 1 `unsafeShiftL` unSquare from
-  !toMask = 1 `unsafeShiftL` (unSquare to)
+  !toMask = 1 `unsafeShiftL` unSquare to
   !mask = fromMask .|. toMask
   dpp = case color pos of
     White | fromMask .&. rank2 .&. QBB.wPawns qbb /= 0
