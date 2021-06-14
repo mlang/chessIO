@@ -2,7 +2,7 @@
 
 ## chessIO 0.7.0.0
 
-- Remove IsSquare class and add three newtye'd Ints: Square, Rank, File
+- Remove IsSquare class and add three newtye'd Ints: Square, Rank, File (inspired by [issue 5](https://github.com/mlang/chessIO/issues/5))
 - Add HasCallStack to partial doPly and toSAN (thanks Oleg Grenrus)
 - instance IsString Position based on fromFEN
 - instance Binary Position
