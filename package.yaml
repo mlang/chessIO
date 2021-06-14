@@ -68,7 +68,7 @@ default-extensions:
 extra-source-files:
 - README.md
 - CHANGELOG.md
-- book/scid.eco
+- book/eco.pgn
 - book/twic-9g.bin
 
 ghc-options:
