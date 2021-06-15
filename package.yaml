@@ -36,7 +36,7 @@ dependencies:
 - random
 - stm
 - text
-- template-haskell
+- template-haskell >= 2.16.0.0
 - th-lift-instances
 - unordered-containers
 - vector

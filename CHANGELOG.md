@@ -1,5 +1,9 @@
 # Releases
 
+## chessIO 0.7.0.1
+
+- Declare 2.16.0.0 as minimal template-haskell version
+
 ## chessIO 0.7.0.0
 
 - Remove IsSquare class and add three newtye'd Ints: Square, Rank, File (inspired by [issue 5](https://github.com/mlang/chessIO/issues/5))
