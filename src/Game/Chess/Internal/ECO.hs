@@ -40,7 +40,8 @@ import           Game.Chess
 import           Game.Chess.PGN
 import           Game.Chess.SAN
 import           Instances.TH.Lift
-import           Language.Haskell.TH.Syntax (Lift, Q, TExp, liftTyped)
+import           Language.Haskell.TH.Syntax (Lift)
+import           Language.Haskell.TH.Syntax.Compat (liftTypedQuote, IsCode(fromCode), SpliceQ)
 import           Prelude                    hiding (lookup)
 import qualified Prelude
 import           System.IO
@@ -78,9 +79,9 @@ instance Binary ECO where
   put = put . toList
   get = fromList <$> get
 
-embedECO :: FileReader -> FilePath -> Q (TExp ECO)
-embedECO load fp = (fmap.fmap) liftTyped (load fp) >>= \case
-  Right xs -> [|| fromList $$(xs) ||]
+embedECO :: FileReader -> FilePath -> SpliceQ ECO
+embedECO load fp = (fmap.fmap) liftTypedQuote (load fp) >>= \case
+  Right xs -> [|| fromList $$(fromCode xs) ||]
   Left err -> fail err
 
 toList :: ECO -> [Opening]

@@ -2,7 +2,7 @@
 
 ## chessIO 0.7.0.1
 
-- Declare 2.16.0.0 as minimal template-haskell version
+- Use th-compat to work around compatibility issues
 - Export mkFile, unFile, mkRank, unRank
 
 ## chessIO 0.7.0.0
