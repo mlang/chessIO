@@ -93,7 +93,16 @@ data PlyData = PlyData {
 } deriving (Eq, Show)
 
 readPGNFile :: MonadIO m => FilePath -> m (Either String PGN)
-readPGNFile fp = liftIO $ first errorBundlePretty . parse pgn fp <$> BS.readFile fp
+readPGNFile fp = liftIO $
+  first errorBundlePretty . parse pgn fp . stripBOM <$> BS.readFile fp
+
+bom :: ByteString
+bom = "\xEF\xBB\xBF"
+
+stripBOM :: ByteString -> ByteString
+stripBOM bs
+  | bom `BS.isPrefixOf` bs = BS.drop (BS.length bom) bs
+  | otherwise              = bs
 
 hPutPGN :: Handle -> RAVOrder (Doc ann) -> PGN -> IO ()
 hPutPGN h ro (PGN games) = for_ games $ \g -> do
