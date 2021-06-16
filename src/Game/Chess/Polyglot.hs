@@ -2,7 +2,7 @@
 {-# LANGUAGE TemplateHaskell     #-}
 module Game.Chess.Polyglot (
   -- * Data type
-  PolyglotBook
+  PolyglotBook, BookEntry(..), beKey, bePly, beWeight, beLearn
   -- * Built-in books
 , defaultBook, twic
   -- * Load and save
@@ -18,6 +18,7 @@ module Game.Chess.Polyglot (
 ) where
 
 import           Control.Arrow
+import           Control.Lens (makeLenses, (%~))
 import           Control.Monad.Random     (Rand)
 import qualified Control.Monad.Random     as Rand
 import           Data.Bits
@@ -41,11 +42,13 @@ import           Game.Chess.Polyglot.Hash
 import           System.Random            (RandomGen)
 
 data BookEntry = BookEntry {
-  key    :: {-# UNPACK #-} !Word64
-, ply    :: {-# UNPACK #-} !Ply
-, weight :: {-# UNPACK #-} !Word16
-, learn  :: {-# UNPACK #-} !Word32
+  _beKey    :: {-# UNPACK #-} !Word64
+, _bePly    :: {-# UNPACK #-} !Ply
+, _beWeight :: {-# UNPACK #-} !Word16
+, _beLearn  :: {-# UNPACK #-} !Word32
 } deriving (Eq, Show)
+
+makeLenses ''BookEntry
 
 instance Ord BookEntry where
   compare (BookEntry k1 _ w1 _) (BookEntry k2 _ w2 _) =
@@ -134,13 +137,13 @@ bookForest b = (fmap . fmap) (snd . head) . forest [] where
 bookPly :: RandomGen g => PolyglotBook -> Position -> Maybe (Rand g Ply)
 bookPly b pos = case findPosition b pos of
   [] -> Nothing
-  l  -> Just . Rand.fromList $ map (ply &&& fromIntegral . weight) l
+  l  -> Just . Rand.fromList $ map (_bePly &&& fromIntegral . _beWeight) l
 
 -- | Probe the book for all plies known for the given position.
 bookPlies :: PolyglotBook -> Position -> [Ply]
 bookPlies b pos
   | halfMoveClock pos > 150 = []
-  | otherwise = ply <$> findPosition b pos
+  | otherwise = _bePly <$> findPosition b pos
 
 -- | Predicted Variations.  Return the most popular game.
 variations :: PolyglotBook -> Position -> [[Ply]]
@@ -149,15 +152,18 @@ variations b = concatMap (foldTree f) . bookForest b where
   f a xs = (a :) <$> fold xs
 
 findPosition :: PolyglotBook -> Position -> [BookEntry]
-findPosition (Book v) pos = fmap conv . VS.toList .
-  VS.takeWhile ((hash ==) . key) . VS.unsafeDrop (lowerBound hash) $ v
+findPosition (Book v) pos =
+  fmap (bePly %~ fromPolyglot pos) .
+  VS.toList .
+  VS.takeWhile ((hash ==) . _beKey) .
+  VS.unsafeDrop (lowerBound hash) $ v
  where
-  conv be@BookEntry{ply} = be { ply = fromPolyglot pos ply }
   hash = hashPosition pos
-  lowerBound = bsearch (key . VS.unsafeIndex v) (0, VS.length v - 1)
-  bsearch :: (Integral a, Ord b) => (a -> b) -> (a, a) -> b -> a
-  bsearch f (lo, hi) x
-    | lo >= hi   = lo
-    | x <= f mid = bsearch f (lo, mid) x
-    | otherwise  = bsearch f (mid + 1, hi) x
-   where mid = lo + ((hi - lo) `div` 2)
+  lowerBound = bsearch (_beKey . VS.unsafeIndex v) (0, VS.length v - 1)
+
+bsearch :: (Integral a, Ord b) => (a -> b) -> (a, a) -> b -> a
+bsearch f (lo, hi) x
+  | lo >= hi   = lo
+  | x <= f mid = bsearch f (lo, mid) x
+  | otherwise  = bsearch f (mid + 1, hi) x
+ where mid = lo + ((hi - lo) `div` 2)
