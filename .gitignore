@@ -1,5 +1,4 @@
 .stack-work/
-chessIO.cabal
 perftsuite.epd
 dist-newstyle/
 *~
