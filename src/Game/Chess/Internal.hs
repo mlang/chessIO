@@ -269,16 +269,7 @@ plyPromotion (Ply x) = case x `unsafeShiftR` 12 of
   _ -> Nothing
 
 unpack :: Ply -> (Square, Square, Maybe PieceType)
-unpack (Ply x) = ( Sq $ fromIntegral ((x `unsafeShiftR` 6) .&. 0b111111)
-                 , Sq $ fromIntegral (x .&. 0b111111)
-                 , piece)
- where
-  !piece = case x `unsafeShiftR` 12 of
-    1 -> Just Knight
-    2 -> Just Bishop
-    3 -> Just Rook
-    4 -> Just Queen
-    _ -> Nothing
+unpack pl = ( plySource pl, plyTarget pl, plyPromotion pl)
 
 fromPolyglot :: Position -> Ply -> Ply
 fromPolyglot pos pl@(unpack -> (from, to, _)) = case color pos of
@@ -717,6 +708,9 @@ testMask a b = a .&. b == b
 {-# INLINE slideMoves #-}
 {-# INLINE wPawnMoves #-}
 {-# INLINE bPawnMoves #-}
+{-# INLINE plySource #-}
+{-# INLINE plyTarget #-}
+{-# INLINE plyPromotion #-}
 {-# INLINE unpack #-}
 {-# INLINE foldBits #-}
 {-# INLINE bitScanForward #-}
