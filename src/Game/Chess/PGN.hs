@@ -1,4 +1,5 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GADTs           #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-|
 Module      : Game.Chess.PGN
 Description : Portable Game Notation
@@ -11,56 +12,115 @@ A PGN file consists of a list of games.
 Each game consists of a tag list, the outcome, and a forest of rosetrees.
 -}
 module Game.Chess.PGN (
-  readPGNFile, gameFromForest, pgnForest, PGN(..), Game(..), Outcome(..), PlyData(..)
+  PGN(..), Game(..), Outcome(..), Annotated(..)
+, readPGNFile, gameFromForest, pgnForest
+  -- * A PGN parser
 , pgn
+  -- * Prettyprinting
 , hPutPGN, pgnDoc, RAVOrder, breadthFirst, depthFirst, gameDoc
 , weightedForest
 ) where
 
-import           Control.Monad
-import           Control.Monad.IO.Class
-import           Data.Bifunctor
+import           Control.Lens                          (at, makeLenses,
+                                                        makePrisms, makeWrapped,
+                                                        (^.))
+import           Control.Monad                         (void)
+import           Control.Monad.IO.Class                (MonadIO (..))
+import           Data.Bifunctor                        (Bifunctor (first))
 import           Data.ByteString.Char8                 (ByteString)
 import qualified Data.ByteString.Char8                 as BS
-import           Data.Char
-import           Data.Foldable
-import           Data.Functor
-import           Data.List
-import           Data.Maybe
-import           Data.Ord
-import           Data.Ratio
+import           Data.Char                             (chr, ord)
+import           Data.Foldable                         (for_)
+import           Data.Functor                          (($>))
+import           Data.Hashable                         (Hashable)
+import           Data.List                             (partition, sortOn)
+import           Data.Maybe                            (fromJust, isNothing)
+import           Data.Ord                              (Down (Down))
+import           Data.Ratio                            ((%))
 import           Data.Text                             (Text)
 import qualified Data.Text                             as T
-import           Data.Text.Prettyprint.Doc             hiding (space)
-import           Data.Text.Prettyprint.Doc.Render.Text
-import           Data.Tree
-import           Data.Void
-import           Data.Word
-import           Game.Chess
-import           Game.Chess.SAN
-import           System.IO
-import           Text.Megaparsec
-import           Text.Megaparsec.Byte
+import           Data.Text.Encoding                    as T (decodeUtf8)
+import           Data.Text.Prettyprint.Doc             (Doc,
+                                                        FusionDepth (Shallow),
+                                                        Pretty (pretty),
+                                                        brackets, dquotes,
+                                                        fillSep, fuse, line,
+                                                        parens, vsep, (<+>))
+import           Data.Text.Prettyprint.Doc.Render.Text (hPutDoc)
+import           Data.Tree                             (Forest, Tree (..))
+import           Data.Void                             (Void)
+import           Data.Word                             (Word8)
+import           GHC.Generics                          (Generic)
+import           Game.Chess.Internal                   (Color (..), Ply,
+                                                        Position (color, moveNumber),
+                                                        fromFEN, startpos,
+                                                        unsafeDoPly)
+import           Game.Chess.SAN                        (relaxedSAN, unsafeToSAN)
+import           Language.Haskell.TH.Syntax            (Lift)
+import           System.IO                             (Handle, hPutStrLn)
+import           Text.Megaparsec                       (MonadParsec (eof),
+                                                        Parsec, anySingleBut,
+                                                        errorBundlePretty, many,
+                                                        match, oneOf, optional,
+                                                        parse, single, (<?>),
+                                                        (<|>))
+import           Text.Megaparsec.Byte                  (alphaNumChar, space,
+                                                        space1, string)
 import qualified Text.Megaparsec.Byte.Lexer            as L
 
-gameFromForest :: [(ByteString, Text)] -> Forest Ply -> Outcome -> Game
-gameFromForest tags forest o = (("Result", r):tags, (o, (fmap . fmap) f forest)) where
-  f pl = PlyData [] pl []
-  r = case o of
+data Annotated a = Ann {
+  _annPrefixNAG                    :: ![Int]
+,
+  _annPly                          :: !a
+,
+  _annSuffixNAG :: ![Int]
+} deriving (Eq, Functor, Generic, Lift, Show)
+
+instance Applicative Annotated where
+  pure a = Ann [] a []
+  Ann pn1 f sn1 <*> Ann pn2 a sn2 = Ann (pn1 <> pn2) (f a) (sn1 <> sn2)
+
+type PGNPly = Annotated Ply
+
+instance Hashable a => Hashable (Annotated a)
+
+data Outcome = Win Color
+             | Draw
+             | Undecided
+             deriving (Eq, Generic, Lift, Show)
+
+instance Hashable Outcome
+
+makePrisms ''Outcome
+
+data Game = CG {
+  _cgTags    :: ![(Text, Text)]
+, _cgForest  :: !(Forest (Annotated Ply))
+, _cgOutcome :: !Outcome
+} deriving (Eq, Generic)
+
+instance Hashable a => Hashable (Tree a)
+
+instance Hashable Game
+
+makeLenses ''Game
+
+newtype PGN = PGN [Game] deriving (Eq, Hashable, Monoid, Semigroup)
+
+makeWrapped ''PGN
+
+gameFromForest :: [(Text, Text)] -> Forest Ply -> Outcome -> Game
+gameFromForest tags forest _cgOutcome = CG { .. } where
+  _cgTags = ("Result", r):tags
+  _cgForest = (fmap . fmap) pure forest
+  r = case _cgOutcome of
     Win White -> "1-0"
     Win Black -> "0-1"
     Draw      -> "1/2-1/2"
     Undecided -> "*"
 
-newtype PGN = PGN [Game] deriving (Eq, Monoid, Semigroup)
-type Game = ([(ByteString, Text)], (Outcome, Forest PlyData))
-data Outcome = Win Color
-             | Draw
-             | Undecided
-             deriving (Eq, Show)
-
 pgnForest :: PGN -> Forest Ply
-pgnForest (PGN gs) = merge $ concatMap ((fmap . fmap) pgnPly . snd . snd) gs
+pgnForest (PGN gs) = merge $ concatMap ((fmap . fmap) _annPly . _cgForest) gs
 
 merge :: Eq a => Forest a -> Forest a
 merge = foldl mergeTree [] where
@@ -69,7 +129,6 @@ merge = foldl mergeTree [] where
   mergeTree (x:xs) y
     | rootLabel x == rootLabel y = x `merge'` y : xs
     | otherwise = x : xs `mergeTree` y
-
 
 instance Ord Outcome where
   Win _ `compare` Win _         = EQ
@@ -85,12 +144,6 @@ instance Pretty Outcome where
   pretty (Win Black) = "0-1"
   pretty Draw        = "1/2-1/2"
   pretty Undecided   = "*"
-
-data PlyData = PlyData {
-  prefixNAG :: ![Int]
-, pgnPly    :: !Ply
-, suffixNAG :: ![Int]
-} deriving (Eq, Show)
 
 readPGNFile :: MonadIO m => FilePath -> m (Either String PGN)
 readPGNFile fp = liftIO $
@@ -124,8 +177,8 @@ eog = lexeme $  string "1-0" $> Win White
             <|> string "1/2-1/2" $> Draw
             <|> string "*" $> Undecided
 
-sym :: Parser ByteString
-sym = lexeme . fmap fst . match $ do
+sym :: Parser Text
+sym = lexeme . fmap (T.decodeUtf8 . fst) . match $ do
   void alphaNumChar
   many $ alphaNumChar <|> oneOf [35,43,45,58,61,95]
 
@@ -150,7 +203,7 @@ nag = lexeme $  single dollarChar *> L.decimal
             <|> string "!"  $> 1
             <|> string "?"  $> 2
 
-tagPair :: Parser (ByteString, Text)
+tagPair :: Parser (Text, Text)
 tagPair = lexeme $ do
   lbracketP
   k <- sym
@@ -158,10 +211,10 @@ tagPair = lexeme $ do
   rbracketP
   pure (k, v)
 
-tagList :: Parser [(ByteString, Text)]
+tagList :: Parser [(Text, Text)]
 tagList = many tagPair
 
-movetext :: Position -> Parser (Outcome, Forest PlyData)
+movetext :: Position -> Parser (Outcome, Forest PGNPly)
 movetext pos = (,[]) <$> eog <|> main pos where
   main p = ply p >>= \(m, n) -> fmap n <$> movetext (unsafeDoPly p m)
   var p = ply p >>= \(m, n) -> n <$> (rparenP $> [] <|> var (unsafeDoPly p m))
@@ -171,7 +224,7 @@ movetext pos = (,[]) <$> eog <|> main pos where
     m <- lexeme $ relaxedSAN p
     snags <- many nag
     rav <- concat <$> many (lparenP *> var p)
-    pure (m, \xs -> Node (PlyData pnags m snags) xs:rav)
+    pure (m, \xs -> Node (Ann pnags m snags) xs:rav)
   validateMoveNumber p =
     optional (lexeme $ L.decimal <* space <* many (single periodChar)) >>= \case
       Just n | moveNumber p /= n ->
@@ -183,13 +236,14 @@ pgn = spaceConsumer *> fmap PGN (many game) <* spaceConsumer <* eof
 
 game :: Parser Game
 game = do
-  tl <- tagList
-  pos <- case lookup "FEN" tl of
+  _cgTags <- tagList
+  pos <- case lookup "FEN" _cgTags of
     Nothing -> pure startpos
     Just fen -> case fromFEN (T.unpack fen) of
       Just p  -> pure p
       Nothing -> fail "Invalid FEN"
-  (tl,) <$> movetext pos
+  (_cgOutcome, _cgForest) <- movetext pos
+  pure $ CG { .. }
 
 str :: Parser Text
 str = p <?> "string" where
@@ -199,7 +253,7 @@ str = p <?> "string" where
                                )
     <|> anySingleBut quoteChar
 
-type RAVOrder a = (Forest PlyData -> a) -> Forest PlyData -> [a]
+type RAVOrder a = (Forest PGNPly -> a) -> Forest PGNPly -> [a]
 
 breadthFirst, depthFirst :: RAVOrder a
 breadthFirst _ [] = []
@@ -210,22 +264,22 @@ pgnDoc :: RAVOrder (Doc ann) -> PGN -> Doc ann
 pgnDoc ro (PGN games) = vsep $ gameDoc ro <$> games
 
 gameDoc :: RAVOrder (Doc ann) -> Game -> Doc ann
-gameDoc ro (tl, mt)
-  | null tl = moveDoc ro pos mt
-  | otherwise = tagsDoc tl <> line <> line <> moveDoc ro pos mt
+gameDoc ro CG { .. }
+  | null _cgTags = moveDoc ro pos (_cgOutcome, _cgForest)
+  | otherwise = tagsDoc _cgTags <> line <> line <> moveDoc ro pos (_cgOutcome, _cgForest)
  where
-  pos | Just fen <- lookup "FEN" tl = fromJust $ fromFEN (T.unpack fen)
+  pos | Just fen <- lookup "FEN" _cgTags = fromJust $ fromFEN (T.unpack fen)
       | otherwise = startpos
 
-tagsDoc :: [(ByteString, Text)] -> Doc ann
+tagsDoc :: [(Text, Text)] -> Doc ann
 tagsDoc = fuse Shallow . vsep . fmap tagpair where
-  tagpair (k, esc -> v) = brackets $ pretty (BS.unpack k) <+> dquotes (pretty v)
+  tagpair (k, esc -> v) = brackets $ pretty k <+> dquotes (pretty v)
   esc = T.concatMap e where
     e '\\' = T.pack "\\\\"
     e '"'  = T.pack "\\\""
     e c    = T.singleton c
 
-moveDoc :: RAVOrder (Doc ann) -> Position -> (Outcome, Forest PlyData) -> Doc ann
+moveDoc :: RAVOrder (Doc ann) -> Position -> (Outcome, Forest PGNPly) -> Doc ann
 moveDoc ro p (o,f) = fillSep (go p True f <> [pretty o]) <> line where
   go _ _ [] = []
   go pos pmn (t:ts)
@@ -234,25 +288,26 @@ moveDoc ro p (o,f) = fillSep (go p True f <> [pretty o]) <> line where
     | otherwise
     = pnag <> (san:snag) <> rav <> go pos' (not . null $ rav) (subForest t)
    where
-    pl = pgnPly . rootLabel $ t
+    pl = _annPly . rootLabel $ t
     san = pretty $ unsafeToSAN pos pl
     pos' = unsafeDoPly pos pl
-    pnag = prettynag <$> prefixNAG (rootLabel t)
+    pnag = prettynag <$> _annPrefixNAG (rootLabel t)
     mn = pretty (moveNumber pos) <> if color pos == White then "." else "..."
     rav = ro (parens . fillSep . go pos True) ts
-    snag = prettynag <$> suffixNAG (rootLabel t)
+    snag = prettynag <$> _annSuffixNAG (rootLabel t)
   prettynag n = "$" <> pretty n
 
 weightedForest :: PGN -> Forest (Rational, Ply)
-weightedForest (PGN games) = merge . concatMap rate $ snd <$> filter ok games where
-  ok (tags, (o, _)) = isNothing (lookup "FEN" tags) && o /= Undecided
-  rate (o, ts) = f startpos <$> trunk ts where
-    w c | o == Win c = 1
-        | o == Win (opponent c) = -1
-        | o == Draw = 1 % 2
-        | otherwise = 0
-    f pos (Node a ts') = Node (w (color pos), pgnPly a) $
-      f (unsafeDoPly pos (pgnPly a)) <$> ts'
+weightedForest (PGN games) = merge . concatMap rate $ filter ok games where
+  ok CG { .. } = isNothing (lookup "FEN" _cgTags) && _cgOutcome /= Undecided
+  rate CG { .. } = f startpos <$> trunk _cgForest where
+    w c = case _cgOutcome of
+      Win c' | c == c' -> 1
+             | otherwise -> -1
+      Draw -> 1 % 2
+      Undecided -> 0
+    f pos (Node a ts') = Node (w (color pos), _annPly a) $
+      f (unsafeDoPly pos (_annPly a)) <$> ts'
   trunk []    = []
   trunk (x:_) = [x { subForest = trunk (subForest x)}]
   merge [] = []
@@ -262,3 +317,4 @@ weightedForest (PGN games) = merge . concatMap rate $ snd <$> filter ok games wh
    where
     (good, bad) = partition (eq a . rootLabel) xs where eq x y = snd x == snd y
     w = fst a + sum (fst . rootLabel <$> good)
+

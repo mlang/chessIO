@@ -17,28 +17,34 @@ module Game.Chess.Polyglot (
 , findPosition
 ) where
 
-import           Control.Arrow
-import           Control.Lens (makeLenses, (%~))
+import           Control.Arrow            (Arrow ((&&&)))
+import           Control.Lens             (makeLenses, (%~))
 import           Control.Monad.Random     (Rand)
 import qualified Control.Monad.Random     as Rand
-import           Data.Bits
+import           Data.Bits                (Bits (shiftL, shiftR, (.|.)))
 import           Data.ByteString          (ByteString)
 import qualified Data.ByteString          as BS
 import qualified Data.ByteString.Internal as BS
-import           Data.FileEmbed
+import           Data.FileEmbed           (embedFile)
 import           Data.Foldable            (fold)
-import           Data.List
-import           Data.Ord
+import           Data.Hashable
+import           Data.List                (sort)
+import           Data.Ord                 (Down (Down))
 import           Data.String              (IsString (fromString))
-import           Data.Tree
+import           Data.Tree                (Forest, Tree (Node), foldTree)
+import Data.Vector.Instances
 import qualified Data.Vector.Storable     as VS
-import           Data.Word
+import           Data.Word                (Word16, Word32, Word64, Word8)
 import           Foreign.ForeignPtr       (castForeignPtr, plusForeignPtr)
-import           Foreign.Storable
+import           Foreign.Storable         (Storable (alignment, peek, poke, pokeElemOff, sizeOf))
+import           GHC.Generics (Generic)
 import           GHC.Ptr                  (Ptr, castPtr, plusPtr)
-import           Game.Chess.Internal
-import           Game.Chess.PGN
-import           Game.Chess.Polyglot.Hash
+import           Game.Chess.Internal      (Ply (..), Position (halfMoveClock),
+                                           doPly, fromPolyglot, startpos, toFEN,
+                                           toPolyglot, unsafeDoPly)
+import           Game.Chess.PGN           (Outcome (Undecided), PGN (..),
+                                           gameFromForest, weightedForest)
+import           Game.Chess.Polyglot.Hash (hashPosition)
 import           System.Random            (RandomGen)
 
 data BookEntry = BookEntry {

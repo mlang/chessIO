@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 95c0a8f1edc356cccd5c9556eb1f287f122c8e642b84382e74e756e01a73984f
+-- hash: 6013abd4129c12d3caa4356b4f4bab7d13cac0443228851eb9941552603abd56
 
 name:           chessIO
 version:        0.7.0.0
@@ -51,6 +51,7 @@ library
       BangPatterns
       BinaryLiterals
       BlockArguments
+      DeriveFunctor
       DeriveGeneric
       DeriveLift
       FlexibleContexts
@@ -108,6 +109,7 @@ executable cboard
       BangPatterns
       BinaryLiterals
       BlockArguments
+      DeriveFunctor
       DeriveGeneric
       DeriveLift
       FlexibleContexts
@@ -168,6 +170,7 @@ executable cbookview
       BangPatterns
       BinaryLiterals
       BlockArguments
+      DeriveFunctor
       DeriveGeneric
       DeriveLift
       FlexibleContexts
@@ -230,6 +233,7 @@ executable polyplay
       BangPatterns
       BinaryLiterals
       BlockArguments
+      DeriveFunctor
       DeriveGeneric
       DeriveLift
       FlexibleContexts
@@ -291,6 +295,7 @@ test-suite perft
       BangPatterns
       BinaryLiterals
       BlockArguments
+      DeriveFunctor
       DeriveGeneric
       DeriveLift
       FlexibleContexts

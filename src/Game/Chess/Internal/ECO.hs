@@ -98,13 +98,14 @@ fromPGN = fromList . fromPGN'
 
 fromPGN' :: PGN -> [Opening]
 fromPGN' (PGN games) = map mkCO games where
-  mkCO (tags, (_, forest)) = CO { .. } where
-    coCode = fromMaybe "" $ Prelude.lookup "ECO" tags
-    coName = fromMaybe "" $ Prelude.lookup "Opening" tags
-    coVariation = Prelude.lookup "Variation" tags
-    coPlies = Unboxed.fromList . head . concatMap (foldTree g) $ forest where
-      g a [] = [[pgnPly a]]
-      g a xs = (pgnPly a :) <$> fold xs
+  mkCO CG { .. } = CO { .. } where
+    lt = (`Prelude.lookup` _cgTags)
+    coCode = fromMaybe "" $ lt "ECO"
+    coName = fromMaybe "" $ lt "Opening"
+    coVariation = lt "Variation"
+    coPlies = Unboxed.fromList . head . concatMap (foldTree g) $ _cgForest where
+      g a [] = [[_annPly a]]
+      g a xs = (_annPly a :) <$> fold xs
 
 opening :: Parser Opening
 opening = CO <$> lexeme code <*> lexeme var <*> pure Nothing <*> lexeme (plies startpos)
