@@ -1,0 +1,343 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.34.4.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 95c0a8f1edc356cccd5c9556eb1f287f122c8e642b84382e74e756e01a73984f
+
+name:           chessIO
+version:        0.7.0.0
+synopsis:       Basic chess library
+description:    A simple and fast library for generating legal chess moves. Also includes a module for communication with external processes that speak the UCI (Universal Chess Interface) protocol, a PGN parser/pretty printer, and Polyglot opening book support. On top of that, provides a console frontend program (cboard) that can be used to interactively play against UCI engines, and a terminal program (cbookview) to explore commonly played chess openings.
+category:       Game
+homepage:       https://github.com/mlang/chessIO#readme
+bug-reports:    https://github.com/mlang/chessIO/issues
+author:         Mario Lang
+maintainer:     mlang@blind.guru
+copyright:      2021 Mario Lang
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+    CHANGELOG.md
+    book/eco.pgn
+    book/twic-9g.bin
+
+source-repository head
+  type: git
+  location: https://github.com/mlang/chessIO
+
+library
+  exposed-modules:
+      Game.Chess
+      Game.Chess.ECO
+      Game.Chess.PGN
+      Game.Chess.Polyglot
+      Game.Chess.SAN
+      Game.Chess.Tree
+      Game.Chess.UCI
+  other-modules:
+      Game.Chess.Internal
+      Game.Chess.Internal.ECO
+      Game.Chess.Internal.QuadBitboard
+      Game.Chess.Internal.Square
+      Game.Chess.Polyglot.Hash
+      Paths_chessIO
+  hs-source-dirs:
+      src
+  default-extensions:
+      BangPatterns
+      BinaryLiterals
+      BlockArguments
+      DeriveGeneric
+      DeriveLift
+      FlexibleContexts
+      FlexibleInstances
+      GeneralizedNewtypeDeriving
+      LambdaCase
+      MultiParamTypeClasses
+      MultiWayIf
+      NamedFieldPuns
+      NumericUnderscores
+      RecordWildCards
+      OverloadedStrings
+      PatternSynonyms
+      TupleSections
+      TypeApplications
+      TypeFamilies
+      ViewPatterns
+  ghc-options: -O2
+  build-depends:
+      MonadRandom
+    , attoparsec
+    , base >=4.10 && <5
+    , binary
+    , bytestring
+    , containers
+    , deepseq
+    , extra
+    , file-embed
+    , hashable
+    , lens
+    , megaparsec >=9.0
+    , mono-traversable
+    , o-clock
+    , prettyprinter
+    , process
+    , random
+    , stm
+    , template-haskell >=2.9.0.0
+    , text
+    , th-compat >=0.1.2
+    , th-lift-instances
+    , unordered-containers
+    , vector
+    , vector-binary-instances
+    , vector-instances
+  default-language: Haskell2010
+
+executable cboard
+  main-is: cboard.hs
+  other-modules:
+      Paths_chessIO
+  hs-source-dirs:
+      app
+  default-extensions:
+      BangPatterns
+      BinaryLiterals
+      BlockArguments
+      DeriveGeneric
+      DeriveLift
+      FlexibleContexts
+      FlexibleInstances
+      GeneralizedNewtypeDeriving
+      LambdaCase
+      MultiParamTypeClasses
+      MultiWayIf
+      NamedFieldPuns
+      NumericUnderscores
+      RecordWildCards
+      OverloadedStrings
+      PatternSynonyms
+      TupleSections
+      TypeApplications
+      TypeFamilies
+      ViewPatterns
+  ghc-options: -O2 -threaded
+  build-depends:
+      MonadRandom
+    , attoparsec
+    , base >=4.10 && <5
+    , binary
+    , bytestring
+    , chessIO
+    , containers
+    , deepseq
+    , extra
+    , file-embed
+    , hashable
+    , haskeline
+    , lens
+    , megaparsec >=9.0
+    , mono-traversable
+    , mtl
+    , o-clock
+    , prettyprinter
+    , process
+    , random
+    , stm
+    , template-haskell >=2.9.0.0
+    , text
+    , th-compat >=0.1.2
+    , th-lift-instances
+    , unordered-containers
+    , vector
+    , vector-binary-instances
+    , vector-instances
+  default-language: Haskell2010
+
+executable cbookview
+  main-is: cbookview.hs
+  other-modules:
+      Paths_chessIO
+  hs-source-dirs:
+      app
+  default-extensions:
+      BangPatterns
+      BinaryLiterals
+      BlockArguments
+      DeriveGeneric
+      DeriveLift
+      FlexibleContexts
+      FlexibleInstances
+      GeneralizedNewtypeDeriving
+      LambdaCase
+      MultiParamTypeClasses
+      MultiWayIf
+      NamedFieldPuns
+      NumericUnderscores
+      RecordWildCards
+      OverloadedStrings
+      PatternSynonyms
+      TupleSections
+      TypeApplications
+      TypeFamilies
+      ViewPatterns
+  ghc-options: -O2 -threaded
+  build-depends:
+      MonadRandom
+    , attoparsec
+    , base >=4.10 && <5
+    , binary
+    , brick
+    , bytestring
+    , chessIO
+    , containers
+    , deepseq
+    , extra
+    , file-embed
+    , filepath
+    , hashable
+    , lens
+    , megaparsec >=9.0
+    , mono-traversable
+    , o-clock
+    , prettyprinter
+    , process
+    , random
+    , rosezipper
+    , stm
+    , template-haskell >=2.9.0.0
+    , text
+    , th-compat >=0.1.2
+    , th-lift-instances
+    , unordered-containers
+    , vector
+    , vector-binary-instances
+    , vector-instances
+    , vty
+  default-language: Haskell2010
+
+executable polyplay
+  main-is: polyplay.hs
+  other-modules:
+      Paths_chessIO
+  hs-source-dirs:
+      app
+  default-extensions:
+      BangPatterns
+      BinaryLiterals
+      BlockArguments
+      DeriveGeneric
+      DeriveLift
+      FlexibleContexts
+      FlexibleInstances
+      GeneralizedNewtypeDeriving
+      LambdaCase
+      MultiParamTypeClasses
+      MultiWayIf
+      NamedFieldPuns
+      NumericUnderscores
+      RecordWildCards
+      OverloadedStrings
+      PatternSynonyms
+      TupleSections
+      TypeApplications
+      TypeFamilies
+      ViewPatterns
+  ghc-options: -O2
+  build-depends:
+      MonadRandom
+    , attoparsec
+    , base >=4.10 && <5
+    , binary
+    , bytestring
+    , chessIO
+    , containers
+    , deepseq
+    , extra
+    , file-embed
+    , hashable
+    , lens
+    , megaparsec >=9.0
+    , mono-traversable
+    , o-clock
+    , optparse-applicative
+    , prettyprinter
+    , process
+    , random
+    , stm
+    , template-haskell >=2.9.0.0
+    , text
+    , th-compat >=0.1.2
+    , th-lift-instances
+    , time
+    , unordered-containers
+    , vector
+    , vector-binary-instances
+    , vector-instances
+  default-language: Haskell2010
+
+test-suite perft
+  type: exitcode-stdio-1.0
+  main-is: Perft.hs
+  other-modules:
+      Paths_chessIO
+  hs-source-dirs:
+      test
+  default-extensions:
+      BangPatterns
+      BinaryLiterals
+      BlockArguments
+      DeriveGeneric
+      DeriveLift
+      FlexibleContexts
+      FlexibleInstances
+      GeneralizedNewtypeDeriving
+      LambdaCase
+      MultiParamTypeClasses
+      MultiWayIf
+      NamedFieldPuns
+      NumericUnderscores
+      RecordWildCards
+      OverloadedStrings
+      PatternSynonyms
+      TupleSections
+      TypeApplications
+      TypeFamilies
+      ViewPatterns
+  ghc-options: -O2 -threaded -rtsopts "-with-rtsopts=-N -s"
+  build-depends:
+      MonadRandom
+    , attoparsec
+    , base >=4.10 && <5
+    , binary
+    , bytestring
+    , chessIO
+    , containers
+    , deepseq
+    , directory
+    , extra
+    , file-embed
+    , hashable
+    , lens
+    , megaparsec >=9.0
+    , mono-traversable
+    , o-clock
+    , parallel
+    , prettyprinter
+    , process
+    , random
+    , stm
+    , template-haskell >=2.9.0.0
+    , text
+    , th-compat >=0.1.2
+    , th-lift-instances
+    , time
+    , unordered-containers
+    , vector
+    , vector-binary-instances
+    , vector-instances
+  default-language: Haskell2010
