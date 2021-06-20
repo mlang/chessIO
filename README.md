@@ -1,5 +1,7 @@
 # A Haskell chess library and console UCI frontend program
 
+[![Build status](https://github.com/mlang/chessIO/actions/workflows/ci.yml/badge.svg)](https://github.com/mlang/chessIO/actions/workflows/ci.yml)
+
 `chessIO` is a Haskell library for working with chess positions and moves,
 and a console frontend program (cboard) to work with UCI compatible
 chess engines.
