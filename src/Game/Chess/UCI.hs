@@ -33,36 +33,61 @@ module Game.Chess.UCI (
 , quit, quit'
 ) where
 
-import           Control.Applicative
-import           Control.Concurrent
-import           Control.Concurrent.STM           hiding (check)
-import           Control.Exception
-import           Control.Monad
-import           Control.Monad.IO.Class
-import           Data.Attoparsec.ByteString.Char8
-import           Data.Attoparsec.Combinator
-import           Data.ByteString.Builder
+import           Control.Applicative              (Alternative (many, (<|>)),
+                                                   optional)
+import           Control.Concurrent               (MVar, ThreadId, forkIO,
+                                                   killThread, newEmptyMVar,
+                                                   putMVar, takeMVar)
+import           Control.Concurrent.STM           (TChan, atomically, dupTChan,
+                                                   newBroadcastTChanIO,
+                                                   writeTChan)
+import           Control.Exception                (Exception, handle, throwIO)
+import           Control.Monad                    (forM, forever, void)
+import           Control.Monad.IO.Class           (MonadIO (..))
+import           Data.Attoparsec.ByteString.Char8 (Parser, anyChar, choice,
+                                                   decimal, endOfInput,
+                                                   manyTill, match, parseOnly,
+                                                   satisfy, sepBy, sepBy1,
+                                                   signed, skipSpace,
+                                                   takeByteString)
+import           Data.ByteString.Builder          (Builder, byteString,
+                                                   hPutBuilder, intDec,
+                                                   integerDec)
 import           Data.ByteString.Char8            (ByteString)
 import qualified Data.ByteString.Char8            as BS
-import           Data.Foldable
-import           Data.Functor
+import           Data.Foldable                    (Foldable (fold, foldl'))
+import           Data.Functor                     (($>))
 import           Data.HashMap.Strict              (HashMap)
 import qualified Data.HashMap.Strict              as HashMap
-import           Data.IORef
-import           Data.Ix
-import           Data.List
+import           Data.IORef                       (IORef, atomicModifyIORef',
+                                                   newIORef, readIORef,
+                                                   writeIORef)
+import           Data.Ix                          (Ix (inRange))
+import           Data.List                        (intersperse)
 import           Data.STRef                       (modifySTRef, newSTRef,
                                                    readSTRef, writeSTRef)
 import           Data.String                      (IsString (..))
 import qualified Data.Vector.Unboxed              as Unboxed
 import qualified Data.Vector.Unboxed.Mutable      as Unboxed
-import           Game.Chess
-import           Numeric.Natural
+import           Game.Chess                       (Color (..), Ply, Position,
+                                                   doPly, fromUCI, legalPlies,
+                                                   startpos, toFEN, toUCI,
+                                                   unsafeDoPly)
+import           Numeric.Natural                  (Natural)
 import           System.Exit                      (ExitCode)
-import           System.IO
-import           System.Process
-import           Time.Rational
-import           Time.Units
+import           System.IO                        (BufferMode (LineBuffering),
+                                                   Handle, hSetBuffering)
+import           System.Process                   (CreateProcess (std_in, std_out),
+                                                   ProcessHandle,
+                                                   StdStream (CreatePipe),
+                                                   createProcess,
+                                                   getProcessExitCode, proc,
+                                                   terminateProcess,
+                                                   waitForProcess)
+import           Time.Rational                    (KnownDivRat)
+import           Time.Units                       (Microsecond, Millisecond,
+                                                   Time (unTime), ms, sec,
+                                                   timeout, toUnit)
 
 type BestMove = Maybe (Ply, Maybe Ply)
 
@@ -280,6 +305,7 @@ initialise c@Engine{outH, outputStrLn, game} = do
     Right (Author a) -> initialise (c { author = Just a })
     Right (Option name opt) -> initialise (c { options = HashMap.insert name opt $ options c })
     Right UCIOk -> pure c
+    Right _ -> initialise c
 
 infoReader :: Engine -> IO ()
 infoReader e@Engine{..} = forever $ do
@@ -292,6 +318,7 @@ infoReader e@Engine{..} = forever $ do
     Right (BestMove bm) -> do
       writeIORef isSearching False
       atomically $ writeTChan bestMoveChan bm
+    Right _ -> pure ()
 
 -- | Wait until the engine is ready to take more commands.
 isready :: Engine -> IO ()
@@ -395,6 +422,8 @@ setOptionSpinButton n v c
   = liftIO $ do
     send c $ "setoption name " <> byteString n <> " value " <> intDec v
     pure $ c { options = HashMap.update (set v) n $ options c }
+  | otherwise
+  = error "No option with that name or value out of range"
  where
   set val opt@SpinButton{} = Just $ opt { spinButtonValue = val }
 

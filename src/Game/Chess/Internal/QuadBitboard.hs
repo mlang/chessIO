@@ -34,8 +34,7 @@ import           Control.Applicative         (liftA2)
 import           Control.DeepSeq
 import           Control.Lens                (view, (^.))
 import           Control.Lens.Iso            (from)
-import           Data.Bifunctor              (first)
-import           Data.Binary                 (Binary (get, put))
+import           Data.Binary                 (Binary)
 import           Data.Bits                   (Bits (clearBit, complement, popCount, setBit, testBit, unsafeShiftL, unsafeShiftR, xor, (.&.), (.|.)),
                                               FiniteBits (..))
 import           Data.Char                   (ord, toLower)
@@ -59,7 +58,7 @@ import           Language.Haskell.TH.Syntax  (Lift)
 import           Numeric                     (showHex)
 
 data QuadBitboard = QBB { black, pbq, nbk, rqk :: {-# UNPACK #-} !Word64 }
-                    deriving (Eq, Generic, Lift)
+                    deriving (Eq, Generic, Lift, Ord)
 
 instance NFData QuadBitboard
 
@@ -314,8 +313,8 @@ instance Show QuadBitboard where
     (", rqk = 0x" <> showHex rqk "}")))
 
 toString :: QuadBitboard -> String
-toString qbb = intercalate "/" $ rank <$> [Rank8, Rank7 .. Rank1] where
-  rank r = concatMap countEmpty . groupBy spaces $ charAt r <$> [FileA .. FileH]
+toString qbb = intercalate "/" $ rnk <$> [Rank8, Rank7 .. Rank1] where
+  rnk r = concatMap countEmpty . groupBy spaces $ charAt r <$> [FileA .. FileH]
   countEmpty xs | head xs == spc = show $ length xs
                 | otherwise      = xs
   spaces x y = x == spc && x == y

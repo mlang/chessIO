@@ -10,7 +10,7 @@ import qualified Data.List.NonEmpty   as NonEmpty
 import           Data.Maybe           (fromJust, fromMaybe)
 import           Data.Tree            (Forest, Tree (..), foldTree)
 import           Data.Tree.Zipper     (Full, TreePos, forest, fromForest, label,
-                                       nextTree, prevTree)
+                                       nextTree)
 import qualified Data.Tree.Zipper     as TreePos
 import qualified Data.Vector          as Vec
 import           Game.Chess           (Color (..), PieceType (..), Ply,
@@ -96,11 +96,11 @@ english pos sq = case pieceAt pos sq of
           | otherwise  -> str " "
 
 styles :: [(String, Style a)]
-styles = map where
-  map = [ ("English",  english)
-        , ("Deutsch",  german)
-        , ("Figurine", figurine)
-        ]
+styles = [ ("English",  english)
+         , ("Deutsch",  german)
+         , ("Figurine", figurine)
+         ]
+ where
   german pos sq = case pieceAt pos sq of
     Just piece           -> str . pure $ "bsltdkBSLTDK" !! index allPieces piece
     Nothing | isDark sq  -> str "+"

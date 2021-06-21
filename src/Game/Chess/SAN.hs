@@ -28,7 +28,7 @@ import           Control.Lens.Iso           (from)
 import           Data.Bifunctor             (first)
 import qualified Data.ByteString            as Strict (ByteString)
 import qualified Data.ByteString.Lazy       as Lazy (ByteString)
-import           Data.Char                  (chr, ord)
+import           Data.Char                  (ord)
 import           Data.Functor               (($>))
 import           Data.List                  (sortOn)
 import           Data.List.Extra            (chunksOf)
@@ -166,7 +166,7 @@ strictSAN pos = case legalPlies pos of
     case filter (pieceFrom p) ms of
       [] -> fail $ show (color pos) <> " has no " <> show p <> " which could be moved"
       ms' -> target p ms'
-  pieceFrom p (plySource -> from) = p == snd (fromJust (pieceAt pos from))
+  pieceFrom p (plySource -> src) = p == snd (fromJust (pieceAt pos src))
   target p ms = coords p ms >>= \m@(plyTarget -> to) -> case p of
     Pawn | lastRank to -> promoteTo m <$> promotion
     _                  -> pure m
@@ -190,9 +190,9 @@ relaxedSAN :: (Stream s, SANToken (Token s), IsString (Tokens s))
 relaxedSAN pos = (castling pos <|> normal) <* optional sanStatus where
   normal = do
     pc <- sanPiece <|> pure Pawn
-    (from, _, to) <- conv <$> location
+    (src, _, dst) <- conv <$> location
     prm <- optional $ optional (chunk "=") *> promotionPiece
-    case possible pc from to prm of
+    case possible pc src dst prm of
       [m] -> pure m
       []  -> fail "Illegal move"
       _   -> fail "Ambiguous move"
@@ -207,15 +207,15 @@ relaxedSAN pos = (castling pos <|> normal) <* optional sanStatus where
          <|>      (Nothing,Nothing,,) <$> capture <*> squareP
   capture = option False $ chunk "x" $> True
   ms = legalPlies pos
-  possible pc from to prm = filter (f from) ms where
-    f (Just (RF sq)) (unpack -> (from', to', prm')) =
-      pAt from' == pc && from' == sq && to' == to && prm' == prm
-    f (Just (F ff)) (unpack -> (from', to', prm')) =
-      pAt from' == pc && file from' == ff && to == to' && prm == prm'
-    f (Just (R fr)) (unpack -> (from', to', prm')) =
-      pAt from' == pc && rank from' == fr && to == to' && prm == prm'
-    f Nothing (unpack -> (from', to', prm')) =
-      pAt from' == pc && to == to' && prm == prm'
+  possible pc src dst prm = filter (f src) ms where
+    f (Just (RF sq)) (unpack -> (src', dst', prm')) =
+      pAt src' == pc && src' == sq && dst' == dst && prm' == prm
+    f (Just (F ff)) (unpack -> (src', dst', prm')) =
+      pAt src' == pc && file src' == ff && dst == dst' && prm == prm'
+    f (Just (R fr)) (unpack -> (src', dst', prm')) =
+      pAt src' == pc && rank src' == fr && dst == dst' && prm == prm'
+    f Nothing (unpack -> (src', dst', prm')) =
+      pAt src' == pc && dst == dst' && prm == prm'
   pAt = snd . fromJust . pieceAt pos
 
 fromSAN :: (VisualStream s, TraversableStream s, SANToken (Token s), IsString (Tokens s))
@@ -230,7 +230,7 @@ toSAN pos m
 varToSAN :: (MonoFoldable variation, Element variation ~ Ply, IsString string)
          => Position -> variation -> string
 varToSAN p = fromString . go p . otoList where
-  go pos [] = ""
+  go _ [] = ""
   go pos plies
     | color pos == Black && length plies == 1
     = show (moveNumber pos) <> "..." <> toSAN pos (head plies)
@@ -245,31 +245,31 @@ varToSAN p = fromString . go p . otoList where
   f _ []     = []
 
 sanCoords :: IsString s => Position -> (PieceType, [Ply]) -> Ply -> s
-sanCoords pos (pc,lms) m@(unpack -> (from, to, _)) =
+sanCoords pos (pc,lms) m@(unpack -> (src, dst, _)) =
   fromString $ source <> target
  where
   capture = isCapture pos m
   source
-    | pc == Pawn && capture       = [fileChar from]
+    | pc == Pawn && capture       = [fileChar src]
     | pc == Pawn                  = []
     | length ms == 1              = []
-    | length (filter fEq ms) == 1 = [fileChar from]
-    | length (filter rEq ms) == 1 = [rankChar from]
-    | otherwise                   = toCoord from
+    | length (filter fEq ms) == 1 = [fileChar src]
+    | length (filter rEq ms) == 1 = [rankChar src]
+    | otherwise                   = toCoord src
   target
-    | capture   = "x" <> toCoord to
-    | otherwise = toCoord to
-  ms = filter ((to ==) . plyTarget) lms
-  fEq (file . plySource -> file) = file == fromFile
-  rEq (rank . plySource -> rank) = rank == fromRank
-  (fromRank, fromFile) = view rankFile from
+    | capture   = "x" <> toCoord dst
+    | otherwise = toCoord dst
+  ms = filter ((dst ==) . plyTarget) lms
+  fEq (file . plySource -> fl) = fl == srcFile
+  rEq (rank . plySource -> rnk) = rnk == srcRank
+  (srcRank, srcFile) = view rankFile src
 
 unsafeToSAN :: Position -> Ply -> String
-unsafeToSAN pos m@(unpack -> (from, to, promo)) =
+unsafeToSAN pos m@(unpack -> (src, dst, promo)) =
   moveStr <> status
  where
   moveStr = case piece of
-    Pawn | capture -> fileChar from : target <> promotion
+    Pawn | capture -> fileChar src : target <> promotion
          | otherwise -> target <> promotion
     King | color pos == White && m == wKscm -> "O-O"
          | color pos == White && m == wQscm -> "O-O-O"
@@ -280,16 +280,16 @@ unsafeToSAN pos m@(unpack -> (from, to, promo)) =
     Bishop -> 'B' : source <> target
     Rook   -> 'R' : source <> target
     Queen  -> 'Q' : source <> target
-  piece = fromJust $ snd <$> pieceAt pos from
+  piece = fromJust $ snd <$> pieceAt pos src
   capture = isCapture pos m
   source
     | length ms == 1              = []
-    | length (filter fEq ms) == 1 = [fileChar from]
-    | length (filter rEq ms) == 1 = [rankChar from]
-    | otherwise                   = toCoord from
+    | length (filter fEq ms) == 1 = [fileChar src]
+    | length (filter rEq ms) == 1 = [rankChar src]
+    | otherwise                   = toCoord src
   target
-    | capture = "x" <> toCoord to
-    | otherwise = toCoord to
+    | capture = "x" <> toCoord dst
+    | otherwise = toCoord dst
   promotion = case promo of
     Just Knight -> "N"
     Just Bishop -> "B"
@@ -301,11 +301,11 @@ unsafeToSAN pos m@(unpack -> (from, to, promo)) =
          | otherwise                                                    = ""
   nextPos = unsafeDoPly pos m
   ms = filter movesTo $ legalPlies pos
-  movesTo (unpack -> (from', to', _)) =
-    fmap snd (pieceAt pos from') == Just piece && to' == to
-  fEq (file . plySource -> file) = file == fromFile
-  rEq (rank . plySource -> rank) = rank == fromRank
-  (fromRank, fromFile) = view rankFile from
+  movesTo (unpack -> (src', dst', _)) =
+    fmap snd (pieceAt pos src') == Just piece && dst' == dst
+  fEq (file . plySource -> thisFile) = thisFile == srcFile
+  rEq (rank . plySource -> thisRank) = thisRank == srcRank
+  (srcRank, srcFile) = view rankFile src
 
 {-# SPECIALISE relaxedSAN :: Position -> Parser Strict.ByteString Ply #-}
 {-# SPECIALISE relaxedSAN :: Position -> Parser Lazy.ByteString Ply #-}

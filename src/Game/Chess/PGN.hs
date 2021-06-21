@@ -12,7 +12,8 @@ A PGN file consists of a list of games.
 Each game consists of a tag list, the outcome, and a forest of rosetrees.
 -}
 module Game.Chess.PGN (
-  PGN(..), Game(..), Outcome(..), Annotated(..)
+  PGN(..), Game(..), cgTags, cgOutcome, cgForest,
+  Outcome(..), Annotated(..)
 , readPGNFile, gameFromForest, pgnForest
   -- * A PGN parser
 , pgn
@@ -21,9 +22,8 @@ module Game.Chess.PGN (
 , weightedForest
 ) where
 
-import           Control.Lens                          (at, makeLenses,
-                                                        makePrisms, makeWrapped,
-                                                        (^.))
+import           Control.Lens                          (makeLenses, makePrisms,
+                                                        makeWrapped)
 import           Control.Monad                         (void)
 import           Control.Monad.IO.Class                (MonadIO (..))
 import           Data.Bifunctor                        (Bifunctor (first))
@@ -47,7 +47,7 @@ import           Data.Text.Prettyprint.Doc             (Doc,
                                                         fillSep, fuse, line,
                                                         parens, vsep, (<+>))
 import           Data.Text.Prettyprint.Doc.Render.Text (hPutDoc)
-import           Data.Tree                             (Forest, Tree (..))
+import           Data.Tree                             (Tree (..))
 import           Data.Void                             (Void)
 import           Data.Word                             (Word8)
 import           GHC.Generics                          (Generic)
@@ -69,18 +69,14 @@ import           Text.Megaparsec.Byte                  (alphaNumChar, space,
 import qualified Text.Megaparsec.Byte.Lexer            as L
 
 data Annotated a = Ann {
-  _annPrefixNAG                    :: ![Int]
-,
-  _annPly                          :: !a
-,
-  _annSuffixNAG :: ![Int]
+  _annPrefixNAG :: ![Int]
+, _annPly       :: !a
+, _annSuffixNAG :: ![Int]
 } deriving (Eq, Functor, Generic, Lift, Show)
 
 instance Applicative Annotated where
   pure a = Ann [] a []
   Ann pn1 f sn1 <*> Ann pn2 a sn2 = Ann (pn1 <> pn2) (f a) (sn1 <> sn2)
-
-type PGNPly = Annotated Ply
 
 instance Hashable a => Hashable (Annotated a)
 
@@ -95,21 +91,17 @@ makePrisms ''Outcome
 
 data Game = CG {
   _cgTags    :: ![(Text, Text)]
-, _cgForest  :: !(Forest (Annotated Ply))
+, _cgForest  :: ![Tree (Annotated Ply)]
 , _cgOutcome :: !Outcome
 } deriving (Eq, Generic)
 
-instance Hashable a => Hashable (Tree a)
-
-instance Hashable Game
-
 makeLenses ''Game
 
-newtype PGN = PGN [Game] deriving (Eq, Hashable, Monoid, Semigroup)
+newtype PGN = PGN [Game] deriving (Eq, Monoid, Semigroup)
 
 makeWrapped ''PGN
 
-gameFromForest :: [(Text, Text)] -> Forest Ply -> Outcome -> Game
+gameFromForest :: [(Text, Text)] -> [Tree Ply] -> Outcome -> Game
 gameFromForest tags forest _cgOutcome = CG { .. } where
   _cgTags = ("Result", r):tags
   _cgForest = (fmap . fmap) pure forest
@@ -119,16 +111,15 @@ gameFromForest tags forest _cgOutcome = CG { .. } where
     Draw      -> "1/2-1/2"
     Undecided -> "*"
 
-pgnForest :: PGN -> Forest Ply
-pgnForest (PGN gs) = merge $ concatMap ((fmap . fmap) _annPly . _cgForest) gs
-
-merge :: Eq a => Forest a -> Forest a
-merge = foldl mergeTree [] where
-  merge' l r = l { subForest = foldl mergeTree (subForest l) (subForest r) }
-  mergeTree [] y = [y]
-  mergeTree (x:xs) y
-    | rootLabel x == rootLabel y = x `merge'` y : xs
-    | otherwise = x : xs `mergeTree` y
+pgnForest :: PGN -> [Tree Ply]
+pgnForest (PGN gs) = merge $ concatMap ((fmap . fmap) _annPly . _cgForest) gs where
+  merge :: Eq a => [Tree a] -> [Tree a]
+  merge = foldl mergeTree [] where
+    merge' l r = l { subForest = foldl mergeTree (subForest l) (subForest r) }
+    mergeTree [] y = [y]
+    mergeTree (x:xs) y
+      | rootLabel x == rootLabel y = x `merge'` y : xs
+      | otherwise = x : xs `mergeTree` y
 
 instance Ord Outcome where
   Win _ `compare` Win _         = EQ
@@ -214,7 +205,7 @@ tagPair = lexeme $ do
 tagList :: Parser [(Text, Text)]
 tagList = many tagPair
 
-movetext :: Position -> Parser (Outcome, Forest PGNPly)
+movetext :: Position -> Parser (Outcome, [Tree (Annotated Ply)])
 movetext pos = (,[]) <$> eog <|> main pos where
   main p = ply p >>= \(m, n) -> fmap n <$> movetext (unsafeDoPly p m)
   var p = ply p >>= \(m, n) -> n <$> (rparenP $> [] <|> var (unsafeDoPly p m))
@@ -253,7 +244,7 @@ str = p <?> "string" where
                                )
     <|> anySingleBut quoteChar
 
-type RAVOrder a = (Forest PGNPly -> a) -> Forest PGNPly -> [a]
+type RAVOrder a = ([Tree (Annotated Ply)] -> a) -> [Tree (Annotated Ply)] -> [a]
 
 breadthFirst, depthFirst :: RAVOrder a
 breadthFirst _ [] = []
@@ -279,7 +270,8 @@ tagsDoc = fuse Shallow . vsep . fmap tagpair where
     e '"'  = T.pack "\\\""
     e c    = T.singleton c
 
-moveDoc :: RAVOrder (Doc ann) -> Position -> (Outcome, Forest PGNPly) -> Doc ann
+moveDoc :: RAVOrder (Doc ann) -> Position -> (Outcome, [Tree (Annotated Ply)])
+        -> Doc ann
 moveDoc ro p (o,f) = fillSep (go p True f <> [pretty o]) <> line where
   go _ _ [] = []
   go pos pmn (t:ts)
@@ -297,7 +289,7 @@ moveDoc ro p (o,f) = fillSep (go p True f <> [pretty o]) <> line where
     snag = prettynag <$> _annSuffixNAG (rootLabel t)
   prettynag n = "$" <> pretty n
 
-weightedForest :: PGN -> Forest (Rational, Ply)
+weightedForest :: PGN -> [Tree (Rational, Ply)]
 weightedForest (PGN games) = merge . concatMap rate $ filter ok games where
   ok CG { .. } = isNothing (lookup "FEN" _cgTags) && _cgOutcome /= Undecided
   rate CG { .. } = f startpos <$> trunk _cgForest where

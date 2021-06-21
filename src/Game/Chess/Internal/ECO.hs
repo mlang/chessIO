@@ -3,51 +3,50 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Game.Chess.Internal.ECO where
 
-import           Control.DeepSeq
-import           Control.Exception          (Exception (displayException),
-                                             throwIO)
-import           Control.Monad
-import           Control.Monad.IO.Class
-import           Data.Bifunctor
-import           Data.Binary
-import           Data.ByteString.Char8      (ByteString)
-import qualified Data.ByteString.Char8      as BS
-import qualified Data.ByteString.Lazy.Char8 as Lazy
-import           Data.Char
-import           Data.Data
-import           Data.Either                (fromRight)
-import           Data.FileEmbed             (embedFile)
-import           Data.Foldable              (fold)
-import           Data.Functor
-import           Data.HashMap.Strict        (HashMap)
-import qualified Data.HashMap.Strict        as HashMap
-import           Data.Hashable              (Hashable)
-import           Data.Maybe
-import           Data.MonoTraversable       (MonoFoldable (ofoldl'))
-import           Data.Ord
-import           Data.Ratio
-import           Data.Text                  (Text)
-import qualified Data.Text                  as T
-import           Data.Tree                  (foldTree)
-import           Data.Typeable              (Typeable)
-import           Data.Vector.Binary
-import           Data.Vector.Instances
-import qualified Data.Vector.Unboxed        as Unboxed
-import           Data.Void
-import           Data.Word                  (Word8)
-import           GHC.Generics               (Generic)
-import           Game.Chess
-import           Game.Chess.PGN
-import           Game.Chess.SAN
-import           Instances.TH.Lift
-import           Language.Haskell.TH.Syntax (Lift)
-import           Language.Haskell.TH.Syntax.Compat (liftTypedQuote, IsCode(fromCode), SpliceQ)
-import           Prelude                    hiding (lookup)
+import           Control.DeepSeq                   (NFData)
+import           Control.Monad.IO.Class            (MonadIO (..))
+import           Data.Bifunctor                    (Bifunctor (first))
+import           Data.Binary                       (Binary (get, put))
+import           Data.ByteString.Char8             (ByteString)
+import qualified Data.ByteString.Char8             as BS
+import           Data.Char                         (chr, ord)
+import           Data.Data                         ()
+import           Data.Foldable                     (fold)
+import           Data.Functor                      (($>))
+import           Data.HashMap.Strict               (HashMap)
+import qualified Data.HashMap.Strict               as HashMap
+import           Data.Hashable                     (Hashable)
+import           Data.Maybe                        (fromMaybe)
+import           Data.MonoTraversable              (MonoFoldable (ofoldl'))
+import           Data.Text                         (Text)
+import qualified Data.Text                         as T
+import           Data.Tree                         (foldTree)
+import           Data.Vector.Binary                ()
+import           Data.Vector.Instances             ()
+import qualified Data.Vector.Unboxed               as Unboxed
+import           Data.Void                         (Void)
+import           Data.Word                         (Word8)
+import           GHC.Generics                      (Generic)
+import           Game.Chess.Internal               (Ply, Position (moveNumber),
+                                                    startpos, unsafeDoPly)
+import           Game.Chess.PGN                    (Annotated (_annPly),
+                                                    Game (CG, _cgForest, _cgOutcome, _cgTags),
+                                                    PGN (..), readPGNFile)
+import           Game.Chess.SAN                    (relaxedSAN)
+import           Instances.TH.Lift                 ()
+import           Language.Haskell.TH.Syntax        (Lift)
+import           Language.Haskell.TH.Syntax.Compat (IsCode (fromCode), SpliceQ,
+                                                    liftTypedQuote)
+import           Prelude                           hiding (lookup)
 import qualified Prelude
-import           System.IO
-import           Text.Megaparsec
-import           Text.Megaparsec.Byte
-import qualified Text.Megaparsec.Byte.Lexer as L
+import           Text.Megaparsec                   (MonadParsec (eof), Parsec,
+                                                    anySingleBut,
+                                                    errorBundlePretty, many,
+                                                    optional, parse, single,
+                                                    (<?>), (<|>))
+import           Text.Megaparsec.Byte              (alphaNumChar, digitChar,
+                                                    space, space1, string)
+import qualified Text.Megaparsec.Byte.Lexer        as L
 
 -- | A Chess Opening
 data Opening = CO {

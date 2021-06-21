@@ -27,17 +27,17 @@ import qualified Data.ByteString          as BS
 import qualified Data.ByteString.Internal as BS
 import           Data.FileEmbed           (embedFile)
 import           Data.Foldable            (fold)
-import           Data.Hashable
+import           Data.Hashable            (Hashable)
 import           Data.List                (sort)
 import           Data.Ord                 (Down (Down))
 import           Data.String              (IsString (fromString))
-import           Data.Tree                (Forest, Tree (Node), foldTree)
-import Data.Vector.Instances
+import           Data.Tree                (Tree (Node), foldTree)
+import           Data.Vector.Instances    ()
 import qualified Data.Vector.Storable     as VS
 import           Data.Word                (Word16, Word32, Word64, Word8)
 import           Foreign.ForeignPtr       (castForeignPtr, plusForeignPtr)
 import           Foreign.Storable         (Storable (alignment, peek, poke, pokeElemOff, sizeOf))
-import           GHC.Generics (Generic)
+import           GHC.Generics             (Generic)
 import           GHC.Ptr                  (Ptr, castPtr, plusPtr)
 import           Game.Chess.Internal      (Ply (..), Position (halfMoveClock),
                                            doPly, fromPolyglot, startpos, toFEN,
@@ -140,7 +140,7 @@ makeBook = fromList . concatMap (foldTree f . annot startpos) . weightedForest
     | otherwise
     = concat xs
 
-bookForest :: PolyglotBook -> Position -> Forest Ply
+bookForest :: PolyglotBook -> Position -> [Tree Ply]
 bookForest b = (fmap . fmap) (snd . head) . forest [] where
   forest pls p = tree pls p <$> filter (not . seen pls) (plies p)
   tree pls p (pl, p') = Node pls' $ forest pls' p' where pls' = (p, pl) : pls
