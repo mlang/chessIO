@@ -52,7 +52,9 @@ data BookEntry = BookEntry {
 , _bePly    :: {-# UNPACK #-} !Ply
 , _beWeight :: {-# UNPACK #-} !Word16
 , _beLearn  :: {-# UNPACK #-} !Word32
-} deriving (Eq, Show)
+} deriving (Eq, Generic, Show)
+
+instance Hashable BookEntry
 
 makeLenses ''BookEntry
 
@@ -89,7 +91,13 @@ defaultBook = twic
 twic = fromByteString $(embedFile "book/twic-9g.bin")
 
 -- | A Polyglot opening book.
-newtype PolyglotBook = Book (VS.Vector BookEntry) deriving (Eq)
+newtype PolyglotBook = Book (VS.Vector BookEntry) deriving (Eq, Hashable)
+
+instance Semigroup PolyglotBook where
+  Book a <> Book b = fromList . VS.toList $ a <> b
+
+instance Monoid PolyglotBook where
+  mempty = Book mempty
 
 -- | Create a PolyglotBook from a ByteString.
 fromByteString :: ByteString -> PolyglotBook
