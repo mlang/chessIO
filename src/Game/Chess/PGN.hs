@@ -12,8 +12,10 @@ A PGN file consists of a list of games.
 Each game consists of a tag list, the outcome, and a forest of rosetrees.
 -}
 module Game.Chess.PGN (
-  PGN(..), Game(..), cgTags, cgOutcome, cgForest,
-  Outcome(..), Annotated(..)
+  PGN(..)
+, Game(..), cgTags, cgOutcome, cgForest
+, Outcome(..), _Win, _Draw, _Undecided
+, Annotated(..), annPrefixNAG, annPly, annSuffixNAG
 , readPGNFile, gameFromForest, pgnForest
   -- * A PGN parser
 , pgn
@@ -32,7 +34,7 @@ import qualified Data.ByteString.Char8                 as BS
 import           Data.Char                             (chr, ord)
 import           Data.Foldable                         (for_)
 import           Data.Functor                          (($>))
-import           Data.Hashable                         (Hashable)
+import           Data.Hashable                         (Hashable(..))
 import           Data.List                             (partition, sortOn)
 import           Data.Maybe                            (fromJust, isNothing)
 import           Data.Ord                              (Down (Down))
@@ -47,7 +49,7 @@ import           Data.Text.Prettyprint.Doc             (Doc,
                                                         fillSep, fuse, line,
                                                         parens, vsep, (<+>))
 import           Data.Text.Prettyprint.Doc.Render.Text (hPutDoc)
-import           Data.Tree                             (Tree (..))
+import           Data.Tree                             (Tree (..), foldTree)
 import           Data.Void                             (Void)
 import           Data.Word                             (Word8)
 import           GHC.Generics                          (Generic)
@@ -78,6 +80,8 @@ instance Applicative Annotated where
   pure a = Ann [] a []
   Ann pn1 f sn1 <*> Ann pn2 a sn2 = Ann (pn1 <> pn2) (f a) (sn1 <> sn2)
 
+makeLenses ''Annotated
+
 instance Hashable a => Hashable (Annotated a)
 
 data Outcome = Win Color
@@ -93,7 +97,13 @@ data Game = CG {
   _cgTags    :: ![(Text, Text)]
 , _cgForest  :: ![Tree (Annotated Ply)]
 , _cgOutcome :: !Outcome
-} deriving (Eq, Generic)
+} deriving (Eq, Generic, Show)
+
+instance Hashable Game where
+  hashWithSalt s CG { .. } = s
+    `hashWithSalt` _cgTags
+    `hashWithSalt` foldTree (hashWithSalt . hash) <$> _cgForest
+    `hashWithSalt` _cgOutcome
 
 makeLenses ''Game
 
