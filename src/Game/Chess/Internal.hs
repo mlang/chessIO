@@ -112,6 +112,11 @@ instance NFData Position
 instance Eq Position where
   a == b = qbb a == qbb b && color a == color b && flags a == flags b
 
+instance Ord Position where
+  a `compare` b = qbb a `compare` qbb b
+             <> color a `compare` color b
+             <> flags a `compare` flags b
+
 instance Hashable Position where
   hashWithSalt s Position{qbb, color, flags} =
     s `hashWithSalt` qbb `hashWithSalt` color `hashWithSalt` flags
@@ -204,7 +209,7 @@ bitScanForward, bitScanReverse :: Word64 -> Int
 bitScanForward = countTrailingZeros
 bitScanReverse = (63 -) . countLeadingZeros
 
-newtype Ply = Ply Word16 deriving (Binary, Eq, Hashable, Lift, Storable)
+newtype Ply = Ply Word16 deriving (Binary, Eq, Hashable, Ord, Lift, Storable)
 
 instance Show Ply where
   show (unpack -> (f, t, p)) = "move " <> show f <> " " <> show t <> p' where
