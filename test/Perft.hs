@@ -18,10 +18,10 @@ type Testsuite = [(Position, [(Depth, PerftResult)])]
 main :: IO ()
 main = do
   start <- getCurrentTime
-  exists <- doesFileExist "perftsuite.epd"
+  exists <- doesFileExist "test/perftsuite.epd"
   result <- if exists
     then do
-      suite <- readTestSuite "perftsuite.epd"
+      suite <- readTestSuite "test/perftsuite.epd"
       runTestSuite suite
     else do
       fmap (Just . fold) . for [0..6] $ \n -> do
