@@ -19,7 +19,6 @@ module Game.Chess.Polyglot (
 
 import           Control.Arrow            (Arrow ((&&&)))
 import           Control.Lens             (makeLenses, (%~))
-import           Control.Monad.Primitive (primToST)
 import           Control.Monad.ST (ST, runST)
 import           Control.Monad.Random     (Rand)
 import qualified Control.Monad.Random     as Rand
@@ -34,7 +33,6 @@ import           Data.List                (sort)
 import           Data.Ord                 (Down (Down))
 import           Data.String              (IsString (fromString))
 import           Data.Tree                (Tree (Node), foldTree)
-import qualified Data.Vector.Algorithms.Intro as V
 import           Data.Vector.Instances    ()
 import qualified Data.Vector.Storable     as VS
 import           Data.Word                (Word16, Word32, Word64, Word8)
@@ -53,7 +51,7 @@ import           System.Random            (RandomGen)
 
 data BookEntry a = BE {
   _beKey    :: {-# UNPACK #-} !Word64
-, _bePly    :: {-# UNPACK #-} !a
+, _bePly    :: !a
 , _beWeight :: {-# UNPACK #-} !Word16
 , _beLearn  :: {-# UNPACK #-} !Word32
 } deriving (Eq, Functor, Generic, Show)
@@ -148,7 +146,7 @@ bookForest :: PolyglotBook -> Position -> [Tree Ply]
 bookForest b = (fmap . fmap) (snd . head) . forest [] where
   forest pls p = tree pls p <$> filter (not . seen pls) (plies p)
   tree pls p (pl, p') = Node pls' $ forest pls' p' where pls' = (p, pl) : pls
-  plies p = f <$> bookPlies b p where f pl = (pl, doPly p pl)
+  plies p = f <$> bookPlies b p where f (_bePly -> pl) = (pl, doPly p pl)
   seen pls (_, p') = p' `elem` map fst pls
 
 -- | Pick a random ply from the book.
@@ -158,10 +156,10 @@ bookPly b pos = case findPosition b pos of
   l  -> Just . Rand.fromList $ map (_bePly &&& fromIntegral . _beWeight) l
 
 -- | Probe the book for all plies known for the given position.
-bookPlies :: PolyglotBook -> Position -> [Ply]
+bookPlies :: PolyglotBook -> Position -> [BookEntry Ply]
 bookPlies b pos
   | halfMoveClock pos > 150 = []
-  | otherwise = _bePly <$> findPosition b pos
+  | otherwise = findPosition b pos
 
 -- | Predicted Variations.  Return the most popular game.
 variations :: PolyglotBook -> Position -> [[Ply]]
@@ -225,4 +223,3 @@ fromPly pos pl@(unpack -> (src, dst, _)) = unPly $ case color pos of
         , dst == C8
         -> src `move` A8
   _ -> pl
-

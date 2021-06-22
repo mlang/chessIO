@@ -19,7 +19,7 @@ import Game.Chess
       PieceType(King, Pawn, Knight, Bishop, Rook, Queen),
       Ply, Position, Square(H8, A1) )
 import Game.Chess.Polyglot
-    ( PolyglotBook, defaultBook, readPolyglotFile, bookPlies, bookPly )
+    ( PolyglotBook, _bePly, defaultBook, readPolyglotFile, bookPlies, bookPly )
 import Game.Chess.SAN ( fromSAN, toSAN, unsafeToSAN, varToSAN )
 import Game.Chess.UCI
     ( addPly,
@@ -173,7 +173,7 @@ loop = do
       | "book" == input -> do
         b <- lift $ gets book
         pos <- currentPosition e
-        let plies = bookPlies b pos
+        let plies = _bePly <$> bookPlies b pos
         if not . null $ plies
           then do
             addPly e (head plies)

@@ -3,8 +3,6 @@ cabal-version: 1.12
 -- This file has been generated from package.yaml by hpack version 0.34.4.
 --
 -- see: https://github.com/sol/hpack
---
--- hash: 6013abd4129c12d3caa4356b4f4bab7d13cac0443228851eb9941552603abd56
 
 name:           chessIO
 version:        0.7.0.0
