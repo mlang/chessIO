@@ -19,6 +19,8 @@ module Game.Chess.Polyglot (
 
 import           Control.Arrow            (Arrow ((&&&)))
 import           Control.Lens             (makeLenses, (%~))
+import           Control.Monad.Primitive (primToST)
+import           Control.Monad.ST (ST, runST)
 import           Control.Monad.Random     (Rand)
 import qualified Control.Monad.Random     as Rand
 import           Data.Bits                (Bits (shiftL, shiftR, (.|.)))
@@ -32,6 +34,7 @@ import           Data.List                (sort)
 import           Data.Ord                 (Down (Down))
 import           Data.String              (IsString (fromString))
 import           Data.Tree                (Tree (Node), foldTree)
+import qualified Data.Vector.Algorithms.Intro as V
 import           Data.Vector.Instances    ()
 import qualified Data.Vector.Storable     as VS
 import           Data.Word                (Word16, Word32, Word64, Word8)
@@ -39,41 +42,42 @@ import           Foreign.ForeignPtr       (castForeignPtr, plusForeignPtr)
 import           Foreign.Storable         (Storable (alignment, peek, poke, pokeElemOff, sizeOf))
 import           GHC.Generics             (Generic)
 import           GHC.Ptr                  (Ptr, castPtr, plusPtr)
-import           Game.Chess.Internal      (Ply (..), Position (halfMoveClock),
-                                           doPly, fromPolyglot, startpos, toFEN,
-                                           toPolyglot, unsafeDoPly)
+import           Game.Chess.Internal      (Ply (..), unpack, move, Color(..), Position (color, halfMoveClock), canCastleQueenside, canCastleKingside, wKscm, bKscm, wQscm, bQscm, 
+                                           doPly, startpos, toFEN,
+                                           unsafeDoPly)
+import           Game.Chess.Internal.Square
 import           Game.Chess.PGN           (Outcome (Undecided), PGN (..),
                                            gameFromForest, weightedForest)
 import           Game.Chess.Polyglot.Hash (hashPosition)
 import           System.Random            (RandomGen)
 
-data BookEntry = BookEntry {
+data BookEntry a = BE {
   _beKey    :: {-# UNPACK #-} !Word64
-, _bePly    :: {-# UNPACK #-} !Ply
+, _bePly    :: {-# UNPACK #-} !a
 , _beWeight :: {-# UNPACK #-} !Word16
 , _beLearn  :: {-# UNPACK #-} !Word32
-} deriving (Eq, Generic, Show)
+} deriving (Eq, Functor, Generic, Show)
 
-instance Hashable BookEntry
+instance Hashable a => Hashable (BookEntry a)
 
 makeLenses ''BookEntry
 
-instance Ord BookEntry where
-  compare (BookEntry k1 _ w1 _) (BookEntry k2 _ w2 _) =
-    compare k1 k2 <> compare (Down w1) (Down w2)
+instance Ord a => Ord (BookEntry a) where
+  compare (BE k1 p1 w1 _) (BE k2 p2 w2 _) =
+    k1 `compare` k2 <> Down w1 `compare` Down w2 <> p1 `compare` p2
 
-instance Storable BookEntry where
+instance Storable (BookEntry Word16) where
   sizeOf _ = 16
   alignment _ = alignment (undefined :: Word64)
-  peek ptr = BookEntry <$> peekBE (castPtr ptr)
-                       <*> (Ply <$> peekBE (castPtr ptr `plusPtr` 8))
-                       <*> peekBE (castPtr ptr `plusPtr` 10)
-                       <*> peekBE (castPtr ptr `plusPtr` 12)
-  poke ptr (BookEntry key (Ply ply) weight learn) = do
-    pokeBE (castPtr ptr) key
-    pokeBE (castPtr ptr `plusPtr` 8) ply
-    pokeBE (castPtr ptr `plusPtr` 10) weight
-    pokeBE (castPtr ptr `plusPtr` 12) learn
+  peek ptr = BE <$> peekBE (castPtr ptr)
+                <*> peekBE (castPtr ptr `plusPtr` 8)
+                <*> peekBE (castPtr ptr `plusPtr` 10)
+                <*> peekBE (castPtr ptr `plusPtr` 12)
+  poke ptr BE { .. } = do
+    pokeBE (castPtr ptr) _beKey
+    pokeBE (castPtr ptr `plusPtr` 8) _bePly
+    pokeBE (castPtr ptr `plusPtr` 10) _beWeight
+    pokeBE (castPtr ptr `plusPtr` 12) _beLearn
 
 peekBE :: forall a. (Bits a, Num a, Storable a) => Ptr Word8 -> IO a
 peekBE ptr = go ptr 0 (sizeOf (undefined :: a)) where
@@ -91,7 +95,7 @@ defaultBook = twic
 twic = fromByteString $(embedFile "book/twic-9g.bin")
 
 -- | A Polyglot opening book.
-newtype PolyglotBook = Book (VS.Vector BookEntry) deriving (Eq, Hashable)
+newtype PolyglotBook = Book (VS.Vector (BookEntry Word16)) deriving (Eq, Hashable)
 
 instance Semigroup PolyglotBook where
   Book a <> Book b = fromList . VS.toList $ a <> b
@@ -118,10 +122,10 @@ readPolyglotFile = fmap fromByteString . BS.readFile
 writePolyglotFile :: FilePath -> PolyglotBook -> IO ()
 writePolyglotFile fp = BS.writeFile fp . toByteString
 
-fromList :: [BookEntry] -> PolyglotBook
+fromList :: [BookEntry Word16] -> PolyglotBook
 fromList = Book . VS.fromList . sort
 
---toList :: PolyglotBook -> [BookEntry]
+--toList :: PolyglotBook -> [BookEntry Word16]
 --toList (Book v) = VS.toList v
 
 toPGN :: PolyglotBook -> Position -> PGN
@@ -136,7 +140,7 @@ makeBook = fromList . concatMap (foldTree f . annot startpos) . weightedForest
     Node (pos, a) $ annot (unsafeDoPly pos (snd a)) <$> ts
   f (pos, (w, pl)) xs
     | w > 0
-    = BookEntry (hashPosition pos) (toPolyglot pos pl) (floor w) 0 : concat xs
+    = BE (hashPosition pos) (fromPly pos pl) (floor w) 0 : concat xs
     | otherwise
     = concat xs
 
@@ -165,9 +169,9 @@ variations b = concatMap (foldTree f) . bookForest b where
   f a [] = [[a]]
   f a xs = (a :) <$> fold xs
 
-findPosition :: PolyglotBook -> Position -> [BookEntry]
+findPosition :: PolyglotBook -> Position -> [BookEntry Ply]
 findPosition (Book v) pos =
-  fmap (bePly %~ fromPolyglot pos) .
+  (fmap . fmap) (toPly pos) .
   VS.toList .
   VS.takeWhile ((hash ==) . _beKey) .
   VS.unsafeDrop (lowerBound hash) $ v
@@ -181,3 +185,44 @@ bsearch f (lo, hi) x
   | x <= f mid = bsearch f (lo, mid) x
   | otherwise  = bsearch f (mid + 1, hi) x
  where mid = lo + ((hi - lo) `div` 2)
+
+toPly :: Position -> Word16 -> Ply
+toPly pos pl@(unpack . Ply -> (src, dst, _)) = case color pos of
+  White | src == E1
+        , canCastleKingside pos
+        , dst == H1
+        -> wKscm
+        | src == E1
+        , canCastleQueenside pos
+        , dst == A1
+        -> wQscm
+  Black | src == E8
+        , canCastleKingside pos
+        , dst == H8
+        -> bKscm
+        | src == E8
+        , canCastleQueenside pos
+        , dst == A8
+        -> bQscm
+  _ -> Ply pl
+
+fromPly :: Position -> Ply -> Word16
+fromPly pos pl@(unpack -> (src, dst, _)) = unPly $ case color pos of
+  White | src == E1
+        , canCastleKingside pos
+        , dst == G1
+        -> src `move` H1
+        | src == E1
+        , canCastleQueenside pos
+        , dst == C1
+        -> src `move` A1
+  Black | src == E8
+        , canCastleKingside pos
+        , dst == G8
+        -> src `move` H8
+        | src == E8
+        , canCastleQueenside pos
+        , dst == C8
+        -> src `move` A8
+  _ -> pl
+

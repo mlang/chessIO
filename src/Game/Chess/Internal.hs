@@ -58,16 +58,14 @@ startpos = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
 instance IsString Position where fromString = fromJust . fromFEN
 
-data PieceType = Pawn | Knight | Bishop | Rook | Queen | King deriving (Eq, Ix, Ord, Show)
+data PieceType = Pawn | Knight | Bishop | Rook | Queen | King
+               deriving (Eq, Generic, Ix, Lift, Ord, Read, Show)
 
 data Color = Black | White deriving (Eq, Generic, Ix, Ord, Lift, Show)
 
 instance Binary Color
 instance NFData Color
-
-instance Hashable Color where
-  hashWithSalt s Black = s `hashWithSalt` (0 :: Int)
-  hashWithSalt s White = s `hashWithSalt` (1 :: Int)
+instance Hashable Color
 
 pieceAt :: Position -> Square -> Maybe (Color, PieceType)
 pieceAt Position{qbb} sq = case qbb QBB.! sq of
@@ -88,8 +86,6 @@ pieceAt Position{qbb} sq = case qbb QBB.! sq of
 opponent :: Color -> Color
 opponent White = Black
 opponent Black = White
-
-data Piece = Piece !Color !PieceType deriving (Eq, Show)
 
 data Position = Position {
   qbb           :: {-# UNPACK #-} !QuadBitboard
@@ -118,13 +114,14 @@ instance Ord Position where
              <> flags a `compare` flags b
 
 instance Hashable Position where
-  hashWithSalt s Position{qbb, color, flags} =
-    s `hashWithSalt` qbb `hashWithSalt` color `hashWithSalt` flags
+  hashWithSalt s Position{qbb, color, flags} = s
+    `hashWithSalt` qbb
+    `hashWithSalt` color
+    `hashWithSalt` flags
 
 repetitions :: [Position] -> Maybe (Int, Position)
-repetitions p = listToMaybe . sortOn (Down . fst) . fmap f $ nub p where
-  f x = (count x p, x)
-  count x = length . filter (== x)
+repetitions xs = listToMaybe . sortOn (Down . fst) $ f <$> nub xs where
+  f x = (length . filter (== x) $ xs, x)
 
 instance Show Position where
   show p = '"' : toFEN p <> ['"']
@@ -135,14 +132,19 @@ insufficientMaterial = QBB.insufficientMaterial . qbb
 -- | Construct a position from Forsyth-Edwards-Notation.
 fromFEN :: String -> Maybe Position
 fromFEN fen
-  | length parts /= 6
-  = Nothing
-  | otherwise =
-    Position <$> Just (fromString (parts !! 0))
+  | length parts == 6
+  = Position <$> pure (fromString (parts !! 0))
              <*> readColor (parts !! 1)
              <*> readFlags (parts !! 2) (parts !! 3)
              <*> readMaybe (parts !! 4)
              <*> readMaybe (parts !! 5)
+  | length parts == 4
+  = Position <$> pure (fromString (parts !! 0))
+             <*> readColor (parts !! 1)
+             <*> readFlags (parts !! 2) (parts !! 3)
+             <*> pure 0
+             <*> pure 1
+  | otherwise = Nothing
  where
   parts = words fen
   readColor "w" = Just White
@@ -150,13 +152,13 @@ fromFEN fen
   readColor _   = Nothing
 
   readFlags cst ep = (.|.) <$> readCst cst <*> readEP ep where
-    readCst "-" = Just 0
+    readCst "-" = pure 0
     readCst x = go x where
       go ('K':xs) = (crwKs .|.) <$> go xs
       go ('Q':xs) = (crwQs .|.) <$> go xs
       go ('k':xs) = (crbKs .|.) <$> go xs
       go ('q':xs) = (crbQs .|.) <$> go xs
-      go []       = Just 0
+      go []       = pure 0
       go _        = Nothing
     readEP "-" = Just 0
     readEP [f,r]
@@ -203,13 +205,13 @@ occupied = QBB.occupied
 foldBits :: (a -> Int -> a) -> a -> Word64 -> a
 foldBits f = go where
   go a 0 = a
-  go a n = go (f a $ countTrailingZeros n) $! n .&. pred n
+  go a n = go (f a $ countTrailingZeros n) $! n .&. (n - 1)
 
 bitScanForward, bitScanReverse :: Word64 -> Int
 bitScanForward = countTrailingZeros
 bitScanReverse = (63 -) . countLeadingZeros
 
-newtype Ply = Ply Word16 deriving (Binary, Eq, Hashable, Ord, Lift, Storable)
+newtype Ply = Ply { unPly :: Word16 } deriving (Binary, Eq, Hashable, Ord, Lift, Storable)
 
 instance Show Ply where
   show (unpack -> (f, t, p)) = "move " <> show f <> " " <> show t <> p' where
@@ -273,46 +275,6 @@ plyPromotion (Ply x) = case x `unsafeShiftR` 12 of
 
 unpack :: Ply -> (Square, Square, Maybe PieceType)
 unpack pl = ( plySource pl, plyTarget pl, plyPromotion pl)
-
-fromPolyglot :: Position -> Ply -> Ply
-fromPolyglot pos pl@(unpack -> (src, dst, _)) = case color pos of
-  White | src == E1
-        , canCastleKingside pos
-        , dst == H1
-        -> wKscm
-        | src == E1
-        , canCastleQueenside pos
-        , dst == A1
-        -> wQscm
-  Black | src == E8
-        , canCastleKingside pos
-        , dst == H8
-        -> bKscm
-        | src == E8
-        , canCastleQueenside pos
-        , dst == A8
-        -> bQscm
-  _ -> pl
-
-toPolyglot :: Position -> Ply -> Ply
-toPolyglot pos pl@(unpack -> (src, dst, _)) = case color pos of
-  White | src == E1
-        , canCastleKingside pos
-        , dst == G1
-        -> src `move` H1
-        | src == E1
-        , canCastleQueenside pos
-        , dst == C1
-        -> src `move` A1
-  Black | src == E8
-        , canCastleKingside pos
-        , dst == G8
-        -> src `move` H8
-        | src == E8
-        , canCastleQueenside pos
-        , dst == C8
-        -> src `move` A8
-  _ -> pl
 
 -- | Parse a move in the format used by the Universal Chess Interface protocol.
 fromUCI :: Position -> String -> Maybe Ply

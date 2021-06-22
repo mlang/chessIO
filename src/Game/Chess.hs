@@ -49,7 +49,7 @@ module Game.Chess (
   -- * Chess moves
 , Ply, plySource, plyTarget, plyPromotion
   -- ** Convertion
-, fromUCI, toUCI, fromPolyglot, toPolyglot
+, fromUCI, toUCI
   -- ** Move generation
 , legalPlies
   -- ** Executing moves
