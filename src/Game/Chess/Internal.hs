@@ -1,3 +1,4 @@
+{-# LANGUAGE UnboxedTuples #-}
 {-|
 Module      : Game.Chess
 Description : Basic data types and functions related to the game of chess
@@ -444,24 +445,28 @@ legalPlies pos@Position{color, qbb, flags} = filter legalPly $
   !them = occupiedBy (opponent color) qbb
   !notOurs = complement ours
   !occ = ours .|. them
-  (!pawnMoves, !knightMoves, !kingMoves) = case color of
+  (# pawnMoves, knightMoves, kingMoves #) = case color of
     White ->
-      ( wPawnMoves (QBB.wPawns qbb) (complement occ) (them .|. (flags .&. epMask))
-      , flip (foldBits genNMoves) (QBB.wKnights qbb)
-      , flip (foldBits genKMoves) (QBB.wKings qbb) . wShort . wLong)
+      (#
+       wPawnMoves (QBB.wPawns qbb) (complement occ) (them .|. (flags .&. epMask)),
+       flip (foldBits genNMoves) (QBB.wKnights qbb),
+       flip (foldBits genKMoves) (QBB.wKings qbb) . wShort . wLong
+       #)
     Black ->
-      ( bPawnMoves (QBB.bPawns qbb) (complement occ) (them .|. (flags .&. epMask))
-      , flip (foldBits genNMoves) (QBB.bKnights qbb)
-      , flip (foldBits genKMoves) (QBB.bKings qbb) . bShort . bLong)
+      (#
+       bPawnMoves (QBB.bPawns qbb) (complement occ) (them .|. (flags .&. epMask)),
+       flip (foldBits genNMoves) (QBB.bKnights qbb),
+       flip (foldBits genKMoves) (QBB.bKings qbb) . bShort . bLong
+       #)
   genNMoves ms sq = foldBits (mkM sq) ms ((knightAttacks ! sq) .&. notOurs)
   genKMoves ms sq = foldBits (mkM sq) ms ((kingAttacks ! sq) .&. notOurs)
-  wShort ml | canCastleKingside' pos occ = wKscm : ml
+  wShort ml | canWhiteCastleKingside pos occ = wKscm : ml
             | otherwise             = ml
-  wLong ml  | canCastleQueenside' pos occ = wQscm : ml
+  wLong ml  | canWhiteCastleQueenside pos occ = wQscm : ml
             | otherwise                   = ml
-  bShort ml | canCastleKingside' pos occ = bKscm : ml
+  bShort ml | canBlackCastleKingside pos occ = bKscm : ml
             | otherwise                  = ml
-  bLong ml  | canCastleQueenside' pos occ = bQscm : ml
+  bLong ml  | canBlackCastleQueenside pos occ = bQscm : ml
             | otherwise              = ml
   mkM !src ms !dst = move (Sq src) (Sq dst) : ms
 
@@ -502,27 +507,22 @@ bPawnMoves !pawns !emptySquares !opponentPieces =
   mkPly diff ms tsq
     | tsq <= 7  = (promoteTo m <$> [Queen, Rook, Bishop, Knight]) <> ms
     | otherwise = m : ms
-   where m = move (Sq (tsq + diff)) (Sq  tsq)
+   where m = move (Sq (tsq + diff)) (Sq tsq)
 
 slideMoves :: PieceType -> Position -> Word64 -> Word64 -> [Ply] -> [Ply]
-slideMoves piece (Position bb c _ _ _) !notOurs !occ =
-  flip (foldBits gen) pieces
+slideMoves piece Position{qbb, color} !notOurs !occ =
+  flip (foldBits gen) (pieces qbb)
  where
-  gen ms src = foldBits (mkPly src) ms (targets src)
+  gen ms src = foldBits (mkPly src) ms (targets src occ .&. notOurs)
   mkPly src ms dst = move (Sq src) (Sq dst) : ms
-  targets sq = case piece of
-    Rook   -> rookTargets sq occ .&. notOurs
-    Bishop -> bishopTargets sq occ .&. notOurs
-    Queen  -> queenTargets sq occ .&. notOurs
-    _      -> error "Not a sliding piece"
-  pieces = case (c, piece) of
-    (White, Bishop) -> QBB.wBishops bb
-    (Black, Bishop) -> QBB.bBishops bb
-    (White, Rook)   -> QBB.wRooks bb
-    (Black, Rook)   -> QBB.bRooks bb
-    (White, Queen)  -> QBB.wQueens bb
-    (Black, Queen)  -> QBB.bQueens bb
-    _               -> 0
+  (# targets, pieces #) = case (# color, piece #) of
+    (# White, Bishop #) -> (# bishopTargets, QBB.wBishops #)
+    (# Black, Bishop #) -> (# bishopTargets, QBB.bBishops #)
+    (# White, Rook #)   -> (# rookTargets, QBB.wRooks #)
+    (# Black, Rook #)   -> (# rookTargets, QBB.bRooks #)
+    (# White, Queen #)  -> (# queenTargets, QBB.wQueens #)
+    (# Black, Queen #)  -> (# queenTargets, QBB.bQueens #)
+    _                   -> error "Not a sliding piece"
 
 data Castle = Kingside | Queenside deriving (Eq, Ix, Ord, Show)
 
@@ -543,20 +543,26 @@ enPassantSquare Position{flags} = case flags .&. epMask of
   x -> Just . Sq . bitScanForward $ x
 
 canCastleKingside, canCastleQueenside :: Position -> Bool
-canCastleKingside pos@Position{qbb} = canCastleKingside' pos (occupied qbb)
-canCastleQueenside pos@Position{qbb} = canCastleQueenside' pos (occupied qbb)
+canCastleKingside pos@Position{qbb, color = White} =
+  canWhiteCastleKingside pos (occupied qbb)
+canCastleKingside pos@Position{qbb, color = Black} =
+  canBlackCastleKingside pos (occupied qbb)
+canCastleQueenside pos@Position{qbb, color = White} =
+  canWhiteCastleQueenside pos (occupied qbb)
+canCastleQueenside pos@Position{qbb, color = Black} =
+  canBlackCastleQueenside pos (occupied qbb)
 
-canCastleKingside', canCastleQueenside' :: Position -> Word64 -> Bool
-canCastleKingside' Position{qbb, color = White, flags} !occ =
+canWhiteCastleKingside, canBlackCastleKingside, canWhiteCastleQueenside, canBlackCastleQueenside :: Position -> Word64 -> Bool
+canWhiteCastleKingside Position{qbb, flags} !occ =
   flags `testMask` crwKs && occ .&. crwKe == 0 &&
   not (any (attackedBy Black qbb occ) [E1, F1, G1])
-canCastleKingside' Position{qbb, color = Black, flags} !occ =
+canBlackCastleKingside Position{qbb, flags} !occ =
   flags `testMask` crbKs && occ .&. crbKe == 0 &&
   not (any (attackedBy White qbb occ) [E8, F8, G8])
-canCastleQueenside' Position{qbb, color = White, flags} !occ =
+canWhiteCastleQueenside Position{qbb, flags} !occ =
   flags `testMask` crwQs && occ .&. crwQe == 0 &&
   not (any (attackedBy Black qbb occ) [E1, D1, C1])
-canCastleQueenside' Position{qbb, color = Black, flags} !occ =
+canBlackCastleQueenside Position{qbb, flags} !occ =
   flags `testMask` crbQs && occ .&. crbQe == 0 &&
   not (any (attackedBy White qbb occ) [E8, D8, C8])
 
@@ -567,15 +573,15 @@ bKscm = move E8 G8
 bQscm = move E8 C8
 
 attackedBy :: Color -> QuadBitboard -> Word64 -> Square -> Bool
-attackedBy White qbb !occ (unSquare -> sq)
-  | (wPawnAttacks ! sq) .&. QBB.wPawns qbb /= 0 = True
+attackedBy White qbb !occ (Sq sq)
+  | wPawnAttacks ! sq .&. QBB.wPawns qbb /= 0 = True
   | (knightAttacks ! sq) .&. QBB.wKnights qbb /= 0 = True
   | bishopTargets sq occ .&. QBB.wBishops qbb /= 0 = True
   | rookTargets sq occ .&.   QBB.wRooks qbb /= 0 = True
   | queenTargets sq occ .&. QBB.wQueens qbb /= 0 = True
   | (kingAttacks ! sq) .&. QBB.wKings qbb /= 0   = True
   | otherwise                        = False
-attackedBy Black qbb !occ (unSquare -> sq)
+attackedBy Black qbb !occ (Sq sq)
   | (bPawnAttacks ! sq) .&. QBB.bPawns qbb /= 0 = True
   | (knightAttacks ! sq) .&. QBB.bKnights qbb /= 0 = True
   | bishopTargets sq occ .&. QBB.bBishops qbb /= 0 = True
@@ -626,26 +632,26 @@ bPawnAttacks = Vector.generate 64 $ \sq -> let b = bit sq in
 data Direction = N | NE | E | SE | S | SW | W | NW deriving (Eq, Show)
 
 rookTargets, bishopTargets, queenTargets :: Int -> Word64 -> Word64
-rookTargets !sq !occ = getRayTargets sq N occ .|. getRayTargets sq E occ
-                   .|. getRayTargets sq S occ .|. getRayTargets sq W occ
-bishopTargets !sq !occ = getRayTargets sq NW occ .|. getRayTargets sq NE occ
-                     .|. getRayTargets sq SE occ .|. getRayTargets sq SW occ
+rookTargets !sq !occ = getRayTargets N occ sq .|. getRayTargets E occ sq
+                   .|. getRayTargets S occ sq .|. getRayTargets W occ sq
+bishopTargets !sq !occ = getRayTargets NW occ sq .|. getRayTargets NE occ sq
+                     .|. getRayTargets SE occ sq .|. getRayTargets SW occ sq
 queenTargets sq occ = rookTargets sq occ .|. bishopTargets sq occ
 
-getRayTargets :: Int -> Direction -> Word64 -> Word64
-getRayTargets sq dir occ = blocked $ attacks .&. occ where
+getRayTargets :: Direction -> Word64 -> Int -> Word64
+getRayTargets dir occ sq = blocked $ attacks .&. occ where
   blocked 0  = attacks
-  blocked bb = attacks `xor` (ray ! bitScan bb)
-  attacks = ray ! sq
-  (bitScan, ray) = case dir of
-    NW -> (bitScanForward, attackNW)
-    N  -> (bitScanForward, attackN)
-    NE -> (bitScanForward, attackNE)
-    E  -> (bitScanForward, attackE)
-    SE -> (bitScanReverse, attackSE)
-    S  -> (bitScanReverse, attackS)
-    SW -> (bitScanReverse, attackSW)
-    W  -> (bitScanReverse, attackW)
+  blocked bb = attacks `xor` ray ! bitScan bb
+  !attacks = ray ! sq
+  (# bitScan, ray #) = case dir of
+    NW -> (# bitScanForward, attackNW #)
+    N  -> (# bitScanForward, attackN  #)
+    NE -> (# bitScanForward, attackNE #)
+    E  -> (# bitScanForward, attackE  #)
+    SE -> (# bitScanReverse, attackSE #)
+    S  -> (# bitScanReverse, attackS  #)
+    SW -> (# bitScanReverse, attackSW #)
+    W  -> (# bitScanReverse, attackW  #)
 
 attackDir :: (Word64 -> Word64) -> Vector Word64
 attackDir s = Vector.generate 64 $ \sq ->
@@ -667,16 +673,3 @@ clearMask a b = a .&. complement b
 testMask :: Bits a => a -> a -> Bool
 testMask a b = a .&. b == b
 
-{-# INLINE clearMask #-}
-{-# INLINE testMask #-}
-{-# INLINE attackedBy #-}
-{-# INLINE slideMoves #-}
-{-# INLINE wPawnMoves #-}
-{-# INLINE bPawnMoves #-}
-{-# INLINE plySource #-}
-{-# INLINE plyTarget #-}
-{-# INLINE plyPromotion #-}
-{-# INLINE unpack #-}
-{-# INLINE foldBits #-}
-{-# INLINE bitScanForward #-}
-{-# INLINE bitScanReverse #-}
