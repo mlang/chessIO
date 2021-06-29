@@ -40,7 +40,7 @@ module Game.Chess (
 , file, File(FileA, FileB, FileC, FileD, FileE, FileF, FileG, FileH), mkFile, unFile
 , rankFile, isLight, isDark
 , rankChar, fileChar, toCoord
-, PieceType(..), Castle(..)
+, PieceType(Pawn, Knight, Bishop, Rook, Queen, King), Castle(..)
 , Position, startpos, color, moveNumber, halfMoveClock, pieceAt, inCheck
 , castlingRights, canCastleKingside, canCastleQueenside
 , insufficientMaterial, repetitions, enPassantSquare

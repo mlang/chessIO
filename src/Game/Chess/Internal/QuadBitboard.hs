@@ -271,6 +271,8 @@ singleton (Sq sq) !nb = QBB (f 0) (f 1) (f 2) (f 3) where
 (!) QBB{..} (Sq sq) = fromIntegral $ f black 0 .|. f pbq 1 .|. f nbk 2 .|. f rqk 3 where
   f !bb !n = ((bb `unsafeShiftR` sq) .&. 1) `unsafeShiftL` n
 
+{-# INLINE (!) #-}
+
 setNibble :: Bits nibble => QuadBitboard -> Int -> nibble -> QuadBitboard
 setNibble QBB{..} sq nb = QBB (f 0 black) (f 1 pbq) (f 2 nbk) (f 3 rqk) where
   f n | nb `testBit` n = (`setBit` sq)
@@ -331,6 +333,8 @@ move qbb fromSq toSq = qbb <> move' fromSq (qbb ! fromSq) toSq (qbb ! toSq)
 move' :: Square -> Word4 -> Square -> Word4 -> QuadBitboard
 move' fromSq fromCode toSq toCode =
   singleton fromSq fromCode <> singleton toSq (fromCode `xor` toCode)
+
+{-# INLINE move' #-}
 
 whiteKingsideCastle, whiteQueensideCastle, blackKingsideCastle, blackQueensideCastle
   :: QuadBitboard
