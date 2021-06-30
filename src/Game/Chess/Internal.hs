@@ -32,7 +32,7 @@ import           Data.Ord                         (Down (..))
 import           Data.String                      (IsString (..))
 import qualified Data.Vector.Generic              as G
 import qualified Data.Vector.Generic.Mutable      as M
-import           Data.Vector.Unboxed              (MVector, Unbox, Vector, (!))
+import           Data.Vector.Unboxed              (MVector, Unbox, Vector, unsafeIndex)
 import qualified Data.Vector.Unboxed              as Vector
 import           Foreign.Storable
 import           GHC.Generics                     (Generic)
@@ -488,8 +488,8 @@ legalPlies pos@Position{color, qbb, flags} = filter legalPly $
        flip (foldBits genNMoves) (QBB.bKnights qbb),
        flip (foldBits genKMoves) (QBB.bKings qbb) . bShort . bLong
        #)
-  genNMoves ms sq = foldBits (mkM sq) ms ((knightAttacks ! sq) .&. notOurs)
-  genKMoves ms sq = foldBits (mkM sq) ms ((kingAttacks ! sq) .&. notOurs)
+  genNMoves ms sq = foldBits (mkM sq) ms ((unsafeIndex knightAttacks sq) .&. notOurs)
+  genKMoves ms sq = foldBits (mkM sq) ms ((unsafeIndex kingAttacks sq) .&. notOurs)
   wShort ml | canWhiteCastleKingside pos occ = wKscm : ml
             | otherwise             = ml
   wLong ml  | canWhiteCastleQueenside pos occ = wQscm : ml
@@ -606,20 +606,20 @@ bQscm = move E8 C8
 
 attackedBy :: Color -> QuadBitboard -> Word64 -> Square -> Bool
 attackedBy White !qbb !occ (Sq sq)
-  | wPawnAttacks ! sq .&. QBB.wPawns qbb /= 0 = True
-  | knightAttacks ! sq .&. QBB.wKnights qbb /= 0 = True
+  | unsafeIndex wPawnAttacks sq .&. QBB.wPawns qbb /= 0 = True
+  | unsafeIndex knightAttacks sq .&. QBB.wKnights qbb /= 0 = True
   | bishopTargets sq occ .&. QBB.wBishops qbb /= 0 = True
   | rookTargets sq occ .&.   QBB.wRooks qbb /= 0 = True
   | queenTargets sq occ .&. QBB.wQueens qbb /= 0 = True
-  | kingAttacks ! sq .&. QBB.wKings qbb /= 0   = True
+  | unsafeIndex kingAttacks sq .&. QBB.wKings qbb /= 0   = True
   | otherwise                        = False
 attackedBy Black !qbb !occ (Sq sq)
-  | bPawnAttacks ! sq .&. QBB.bPawns qbb /= 0 = True
-  | knightAttacks ! sq .&. QBB.bKnights qbb /= 0 = True
+  | unsafeIndex bPawnAttacks sq .&. QBB.bPawns qbb /= 0 = True
+  | unsafeIndex knightAttacks sq .&. QBB.bKnights qbb /= 0 = True
   | bishopTargets sq occ .&. QBB.bBishops qbb /= 0 = True
   | rookTargets sq occ .&.   QBB.bRooks qbb /= 0 = True
   | queenTargets sq occ .&.  QBB.bQueens qbb /= 0 = True
-  | kingAttacks ! sq .&. QBB.bKings qbb /= 0   = True
+  | unsafeIndex kingAttacks sq .&. QBB.bKings qbb /= 0   = True
   | otherwise                        = False
 
 {-# INLINE attackedBy #-}
@@ -663,8 +663,6 @@ wPawnAttacks = Vector.generate 64 $ \sq -> let b = bit sq in
 bPawnAttacks = Vector.generate 64 $ \sq -> let b = bit sq in
   shiftNE b .|. shiftNW b
 
-data Direction = N | NE | E | SE | S | SW | W | NW deriving (Eq, Show)
-
 rookTargets, bishopTargets, queenTargets :: Int -> Word64 -> Word64
 rookTargets !sq !occ = rayN occ sq .|. rayE occ sq
                    .|. rayS occ sq .|. rayW occ sq
@@ -673,21 +671,21 @@ bishopTargets !sq !occ = rayNW occ sq .|. rayNE occ sq
 queenTargets !sq !occ = rookTargets sq occ .|. bishopTargets sq occ
 
 rayTargets :: Vector Word64 -> (Word64 -> Int) -> Word64 -> Int -> Word64
-rayTargets !ray !bitScan !occ !sq = let a = ray ! sq in case a .&. occ of
-  0 -> a
-  bb -> a `xor` ray ! bitScan bb
+rayTargets !ray !bitScan !occ (unsafeIndex ray -> a) = case a .&. occ of
+  0               -> a
+  (bitScan -> sq) -> a `xor` unsafeIndex ray sq
 
 {-# INLINE rayTargets #-}
 
 rayNW, rayN, rayNE, rayE, raySE, rayS, raySW, rayW :: Word64 -> Int -> Word64
 rayNW = rayTargets attackNW bitScanForward 
-rayN = rayTargets attackN bitScanForward 
+rayN  = rayTargets attackN  bitScanForward 
 rayNE = rayTargets attackNE bitScanForward 
-rayE = rayTargets attackE bitScanForward 
+rayE  = rayTargets attackE  bitScanForward 
 raySE = rayTargets attackSE bitScanReverse
-rayS = rayTargets attackS bitScanReverse
+rayS  = rayTargets attackS  bitScanReverse
 raySW = rayTargets attackSW bitScanReverse
-rayW = rayTargets attackW bitScanReverse
+rayW  = rayTargets attackW  bitScanReverse
 
 {-# INLINE rayNW #-}
 {-# INLINE rayN #-}
@@ -697,23 +695,6 @@ rayW = rayTargets attackW bitScanReverse
 {-# INLINE rayS #-}
 {-# INLINE raySW #-}
 {-# INLINE rayW #-}
-
-getRayTargets :: Direction -> Word64 -> Int -> Word64
-getRayTargets dir occ sq = blocked $ attacks .&. occ where
-  blocked 0  = attacks
-  blocked bb = attacks `xor` ray ! bitScan bb
-  !attacks = ray ! sq
-  (# bitScan, ray #) = case dir of
-    NW -> (# bitScanForward, attackNW #)
-    N  -> (# bitScanForward, attackN  #)
-    NE -> (# bitScanForward, attackNE #)
-    E  -> (# bitScanForward, attackE  #)
-    SE -> (# bitScanReverse, attackSE #)
-    S  -> (# bitScanReverse, attackS  #)
-    SW -> (# bitScanReverse, attackSW #)
-    W  -> (# bitScanReverse, attackW  #)
-
-{-# INLINE getRayTargets #-}
 
 attackDir :: (Word64 -> Word64) -> Vector Word64
 attackDir s = Vector.generate 64 $ \sq ->
