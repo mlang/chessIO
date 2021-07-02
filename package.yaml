@@ -69,7 +69,7 @@ default-extensions:
 
 extra-source-files:
 - README.md
-- CHANGELOG.md
+- ChangeLog.md
 - book/eco.pgn
 - book/twic-9g.bin
 

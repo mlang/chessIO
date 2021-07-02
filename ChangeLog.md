@@ -1,9 +1,12 @@
 # Releases
 
-## chessIO 0.7.0.1
+## chessIO 0.8.0.0
 
-- Use th-compat to work around compatibility issues
+- Speedup of about 1.4 compared to previous release
+- PGN: Replace nested tuples with records
 - Export mkFile, unFile, mkRank, unRank
+- Unexport fromPolyglot and toPolyglot which always should have been internal functions
+- Use th-compat to work around compatibility issues
 
 ## chessIO 0.7.0.0
 
