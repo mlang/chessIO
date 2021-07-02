@@ -17,6 +17,10 @@ copyright:      2021 Mario Lang
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
+tested-with:
+    GHC==8.6.5
+  , GHC==8.8.4
+  , GHC==8.10.5
 extra-source-files:
     README.md
     ChangeLog.md
