@@ -7,15 +7,18 @@ import           Data.Vector.Unboxed (Vector, fromList, unsafeIndex)
 import           Data.Word           (Word64)
 import           Game.Chess          (Castle (..), Color (..),
                                       PieceType (King, Pawn), Position (color),
-                                      Square (A1, H8), castlingRights, opponent,
-                                      pieceAt)
+                                      Square (A1, H8), file, unFile, castlingRights, opponent,
+                                      pieceAt, enPassantSquare)
+import           Game.Chess.Internal (attackedByPawn)
 
 hashPosition :: Position -> Word64
 hashPosition pos = piece `xor` castling `xor` ep `xor` turn where
   piece = foldr xor 0 $ mapMaybe f [A1 .. H8] where
     f sq = (\(c, p) -> pieceKey (p, c, sq)) <$> pieceAt pos sq
   castling = foldr (xor . castleKey) 0 $ castlingRights pos
-  ep = 0 -- TODO
+  ep = case enPassantSquare pos of
+    Just sq | attackedByPawn sq pos -> unsafeIndex epKeys (unFile (file sq))
+    _ -> 0
   turn = case color pos of
     White -> turnKey
     Black -> 0

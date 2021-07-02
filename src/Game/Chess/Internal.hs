@@ -624,6 +624,10 @@ attackedBy Black !qbb !occ (Sq sq)
 
 {-# INLINE attackedBy #-}
 
+attackedByPawn (Sq sq) Position{qbb, color} = case color of
+  White -> unsafeIndex wPawnAttacks sq .&. QBB.wPawns qbb /= 0
+  Black -> unsafeIndex bPawnAttacks sq .&. QBB.bPawns qbb /= 0
+
 notAFile, notABFile, notGHFile, notHFile, rank1, rank2, rank3, rank4, rank5, rank6, rank7, rank8 :: Word64
 notAFile = 0xfefefefefefefefe
 notABFile = 0xfcfcfcfcfcfcfcfc
