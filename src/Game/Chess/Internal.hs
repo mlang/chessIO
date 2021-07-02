@@ -624,6 +624,7 @@ attackedBy Black !qbb !occ (Sq sq)
 
 {-# INLINE attackedBy #-}
 
+attackedByPawn :: Square -> Position -> Bool
 attackedByPawn (Sq sq) Position{qbb, color} = case color of
   White -> unsafeIndex wPawnAttacks sq .&. QBB.wPawns qbb /= 0
   Black -> unsafeIndex bPawnAttacks sq .&. QBB.bPawns qbb /= 0
