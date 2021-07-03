@@ -292,7 +292,7 @@ test-suite perft
   other-modules:
       Paths_chessIO
   hs-source-dirs:
-      test
+      test/perft
   default-extensions:
       BangPatterns
       BinaryLiterals
@@ -343,6 +343,67 @@ test-suite perft
     , th-compat >=0.1.2
     , th-lift-instances
     , time
+    , unordered-containers
+    , vector
+    , vector-binary-instances
+    , vector-instances
+  default-language: Haskell2010
+
+test-suite polyglot
+  type: exitcode-stdio-1.0
+  main-is: Polyglot.hs
+  other-modules:
+      Paths_chessIO
+  hs-source-dirs:
+      test/polyglot
+  default-extensions:
+      BangPatterns
+      BinaryLiterals
+      BlockArguments
+      DeriveFunctor
+      DeriveGeneric
+      DeriveLift
+      FlexibleContexts
+      FlexibleInstances
+      GeneralizedNewtypeDeriving
+      LambdaCase
+      MultiParamTypeClasses
+      MultiWayIf
+      NamedFieldPuns
+      NumericUnderscores
+      RecordWildCards
+      OverloadedStrings
+      PatternSynonyms
+      TupleSections
+      TypeApplications
+      TypeFamilies
+      ViewPatterns
+  ghc-options: -O2
+  build-depends:
+      HUnit
+    , MonadRandom
+    , attoparsec
+    , base >=4.10 && <5
+    , binary
+    , bytestring
+    , chessIO
+    , containers
+    , deepseq
+    , extra
+    , file-embed
+    , hashable
+    , lens
+    , megaparsec >=9.0
+    , mono-traversable
+    , o-clock
+    , prettyprinter
+    , process
+    , random
+    , stm
+    , template-haskell >=2.9.0.0
+    , text
+    , th-compat >=0.1.2
+    , th-lift-instances
     , unordered-containers
     , vector
     , vector-binary-instances

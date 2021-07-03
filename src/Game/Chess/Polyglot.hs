@@ -14,7 +14,7 @@ module Game.Chess.Polyglot (
 , bookPlies
 , bookForest
 , variations
-, findPosition
+, findPosition, hashPosition
 ) where
 
 import           Control.Arrow            (Arrow ((&&&)))
