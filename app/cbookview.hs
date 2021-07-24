@@ -1,32 +1,8 @@
-{-# LANGUAGE TemplateHaskell #-}
-import           Control.Lens         (makeLenses, over, (&), (.~), (^.))
-import           Control.Monad        (void)
-import           Data.Foldable        (foldl', toList)
-import           Data.Ix
-import           Data.List            (elemIndex, intersperse)
-import           Data.List.Extra      (chunksOf)
-import           Data.List.NonEmpty   (NonEmpty, cons)
-import qualified Data.List.NonEmpty   as NonEmpty
-import           Data.Maybe           (fromJust, fromMaybe)
-import           Data.Tree            (Forest, Tree (..), foldTree)
-import           Data.Tree.Zipper     (Full, TreePos, forest, fromForest, label,
-                                       nextTree)
-import qualified Data.Tree.Zipper     as TreePos
-import qualified Data.Vector          as Vec
-import           Game.Chess           (Color (..), PieceType (..), Ply,
-                                       Position, Square (A1, H8), color, doPly,
-                                       isDark, pieceAt, plyTarget, startpos,
-                                       toFEN)
-import           Game.Chess.ECO       (Opening (..), defaultECO)
-import qualified Game.Chess.ECO       as ECO
-import           Game.Chess.PGN       (pgnForest, readPGNFile)
-import           Game.Chess.Polyglot  (bookForest, defaultBook,
-                                       readPolyglotFile)
-import           Game.Chess.SAN       (toSAN, varToSAN)
-import           Game.Chess.Tree      (plyForest)
-import qualified Graphics.Vty         as V
-import           Prelude              hiding (last)
-
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE ViewPatterns      #-}
 import           Brick.AttrMap        (AttrName, attrMap)
 import qualified Brick.Focus          as F
 import           Brick.Main           (App (..), continue, defaultMain, halt)
@@ -39,6 +15,34 @@ import           Brick.Widgets.Core   (hBox, hLimit, showCursor, str, strWrap,
                                        txt, txtWrap, vBox, vLimit, withAttr,
                                        (<+>), (<=>))
 import qualified Brick.Widgets.List   as L
+import           Control.Lens         (makeLenses, over, view, (&), (.~), (^.))
+import           Control.Monad        (void)
+import           Data.Foldable        (foldl', toList)
+import           Data.Ix
+import           Data.List            (elemIndex, intersperse)
+import           Data.List.Extra      (chunksOf)
+import           Data.List.NonEmpty   (NonEmpty)
+import qualified Data.List.NonEmpty   as NonEmpty
+import           Data.Map             (Map)
+import qualified Data.Map             as Map
+import           Data.Maybe           (fromJust, fromMaybe)
+import           Data.Tree            (Tree (..), foldTree)
+import           Data.Tree.Zipper     (Full, TreePos, fromForest, label,
+                                       nextTree)
+import qualified Data.Tree.Zipper     as TreePos
+import qualified Data.Vector          as Vector
+import           Game.Chess           (Color (..), PieceType (..), Ply,
+                                       Position, Square (A1, H8), color, doPly,
+                                       isDark, pieceAt, plyTarget, startpos,
+                                       toFEN)
+import           Game.Chess.ECO       (Opening (..), defaultECO)
+import qualified Game.Chess.ECO       as ECO
+import           Game.Chess.PGN       (pgnForest, readPGNFile)
+import           Game.Chess.Polyglot  (bookForest, defaultBook,
+                                       readPolyglotFile)
+import           Game.Chess.SAN       (toSAN, varToSAN)
+import           Game.Chess.Tree      (plyForest)
+import qualified Graphics.Vty         as V
 import           System.Environment   (getArgs)
 import           System.FilePath
 
@@ -54,21 +58,29 @@ data St = St { _initialPosition :: Position
 
 makeLenses ''St
 
+initialState :: St
+initialState = St { .. } where
+  _initialPosition = startpos
+  _treePos = fromJust . nextTree . fromForest
+           $ pathTree <$> bookForest defaultBook _initialPosition
+  _boardStyle = L.list BoardStyle (Vector.fromList styles) 1
+  _focusRing = F.focusRing [List, Board, BoardStyle]
+
 position, previousPosition :: St -> Position
 position st = foldl' doPly (st^.initialPosition) (st^.treePos & label)
 previousPosition st = foldl' doPly (st^.initialPosition) (st^.treePos & label & NonEmpty.init)
 
 targetSquare :: St -> Square
-targetSquare = plyTarget . NonEmpty.last . label . (^. treePos)
+targetSquare = plyTarget . NonEmpty.last . label . view treePos
 
 elemList :: Eq a => n -> a -> [a] -> L.List n a
-elemList n x xs = L.list n (Vec.fromList xs) 1 & L.listSelectedL .~ i where
+elemList n x xs = L.list n (Vector.fromList xs) 1 & L.listSelectedL .~ i where
   i = x `elemIndex` xs
 
 plyList :: St -> L.List Name Ply
 plyList (_treePos -> tp) = elemList List ply plies where
-  ply = NonEmpty.last . label $ tp
-  plies = fmap (NonEmpty.last . rootLabel) . forest $ tp
+  ply = NonEmpty.last . TreePos.label $ tp
+  plies = fmap (NonEmpty.last . rootLabel) . TreePos.forest $ tp
 
 selectedAttr :: AttrName
 selectedAttr = "selected"
@@ -81,9 +93,7 @@ renderPosition pos persp tgt sty = ranks <+> border board <=> files where
   files = str $ rev "   a b c d e f g h   "
   board = hLimit 17 . vLimit 8 . vBox $ map (hBox . spacer . map pc) squares
   squares = reverse $ chunksOf 8 $ rev [A1 .. H8]
-  c sq | Just t <- tgt, t == sq = showCursor Board $ Location (0,0)
-       | otherwise              = id
-  pc sq = c sq $ sty pos sq
+  pc sq = putCursorIf (tgt == Just sq) Board (0,0) $ sty pos sq
   spacer = (str " " :) . (<> [str " "]) . intersperse (str " ")
 
 allPieces :: ((Color, PieceType), (Color, PieceType))
@@ -141,8 +151,8 @@ nextStyle, prevStyle :: Command
 nextStyle = continue . over boardStyle L.listMoveDown
 prevStyle = continue . over boardStyle L.listMoveUp
 
-keyMap :: [(V.Event, Command)]
-keyMap = cursor <> vi <> common where
+keyMap :: Map V.Event Command
+keyMap = Map.fromList $ cursor <> vi <> common where
   cursor =
     [ (V.EvKey V.KDown [],       next)
     , (V.EvKey V.KUp [],         prev)
@@ -168,8 +178,8 @@ keyMap = cursor <> vi <> common where
     , (V.EvKey (V.KChar 'h') [], parent)
     ]
 
-app :: App St e Name
-app = App { .. } where
+cbookview :: App St e Name
+cbookview = App { .. } where
   appStartEvent = pure
   appDraw st = [ui] where
     ui = hBox [ hLimit 9 list
@@ -198,46 +208,38 @@ app = App { .. } where
                   . withAttrIf foc selectedAttr
                   . str . toSAN p
     board = renderPosition (position st) (color (previousPosition st)) (Just . targetSquare $ st) selectedStyle
-    var = strWrap . varToSAN (st^.initialPosition) $ st^.treePos & label & toList
+    var = strWrap . varToSAN (st^.initialPosition) $ st^.treePos & TreePos.label & toList
     fen = str . toFEN $ position st
-  appHandleEvent st (VtyEvent e) = fromMaybe continue (lookup e keyMap) st
+  appHandleEvent st (VtyEvent e) = fromMaybe continue (Map.lookup e keyMap) st
   appHandleEvent st _            = continue st
   appAttrMap = const $ attrMap V.defAttr
              [(selectedAttr, V.white `on` V.green)
              ]
-  appChooseCursor = F.focusRingCursor (^. focusRing)
+  appChooseCursor = F.focusRingCursor (view focusRing)
 
-loadForest :: (Position -> Forest Ply) -> Position -> St -> Maybe St
+loadForest :: (Position -> [Tree Ply]) -> Position -> St -> Maybe St
 loadForest f p st = case f p of
   [] -> Nothing
   ts -> Just $ st & initialPosition .~ p & treePos .~ tp where
-    tp = fromJust . nextTree . fromForest . fmap pathTree $ ts
-
-initialState :: St
-initialState = St pos tp sl fr where
-  tp = fromJust . nextTree . fromForest . fmap pathTree . bookForest defaultBook
-     $ pos
-  pos = startpos
-  fr = F.focusRing [List, Board, BoardStyle]
-  sl = L.list BoardStyle (Vec.fromList styles) 1
+    tp = fromJust . nextTree . fromForest $ pathTree <$> ts
 
 pathTree :: Tree a -> Tree (NonEmpty a)
-pathTree = foldTree $ \a -> Node (pure a) . (fmap . fmap) (cons a)
+pathTree = foldTree $ \a -> Node (pure a) . (fmap . fmap) (NonEmpty.cons a)
 
 main :: IO ()
 main = do
   as <- getArgs
   case as of
-    [] -> void $ defaultMain app initialState
+    [] -> void $ defaultMain cbookview initialState
     [fp] -> case takeExtension fp of
       ".bin" -> do
         book <- readPolyglotFile fp
         case loadForest (bookForest book) startpos initialState of
-          Just st -> void $ defaultMain app st
+          Just st -> void $ defaultMain cbookview st
           Nothing -> putStrLn "No moves found in book"
       ".pgn" -> readPGNFile fp >>= \case
         Right pgn -> case loadForest (const $ pgnForest pgn) startpos initialState of
-          Just st -> void $ defaultMain app st
+          Just st -> void $ defaultMain cbookview st
           Nothing -> putStrLn "No moves found in PGN"
         Left err -> putStrLn err
       ext -> putStrLn $ "Unknown extension " <> ext <> ", only .bin (polyglot) and .pgn is supposed"

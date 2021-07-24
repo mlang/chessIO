@@ -1,24 +1,29 @@
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE MultiWayIf        #-}
+{-# LANGUAGE NamedFieldPuns    #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 module Main where
 
-import Control.Concurrent
-import Control.Concurrent.STM
-import Control.Monad
-import Control.Monad.Random
-import Data.IORef
-import Data.List
-import Data.String
-import Data.Text.Encoding (decodeUtf8)
-import Data.Text.Prettyprint.Doc.Render.Text
-import Data.Time.Clock
-import Data.Tree
-import Game.Chess
-import Game.Chess.PGN
-import Game.Chess.Polyglot
-import Game.Chess.SAN
-import Game.Chess.UCI
-import Options.Applicative
-import System.IO (hPutStrLn, stderr)
-import Time.Units
+import           Control.Concurrent
+import           Control.Concurrent.STM
+import           Control.Monad
+import           Control.Monad.Random
+import           Data.IORef
+import           Data.List
+import           Data.String
+import           Data.Text.Encoding                    (decodeUtf8)
+import           Data.Text.Prettyprint.Doc.Render.Text
+import           Data.Time.Clock
+import           Data.Tree
+import           Game.Chess
+import           Game.Chess.PGN
+import           Game.Chess.Polyglot
+import           Game.Chess.SAN
+import           Game.Chess.UCI
+import           Options.Applicative
+import           System.IO                             (hPutStrLn, stderr)
+import           Time.Units
 
 data Clock = Clock !Color !NominalDiffTime !NominalDiffTime !UTCTime
 
@@ -49,21 +54,21 @@ clockTimes (Clock _ w b _) = (f w, f b) where
   f x = if x <= 0 then Nothing else Just . ms . fromRational . toRational $ x * 1000
 
 data Polyplay = Polyplay {
-  hashSize :: Int
-, threadCount :: Int
-, tbPath :: Maybe FilePath
-, timeControl :: Int
-, bookFile :: FilePath
+  hashSize      :: Int
+, threadCount   :: Int
+, tbPath        :: Maybe FilePath
+, timeControl   :: Int
+, bookFile      :: FilePath
 , engineProgram :: FilePath
-, engineArgs :: [String]
+, engineArgs    :: [String]
 }
 
 data Runtime = Runtime {
-  book :: PolyglotBook
+  book    :: PolyglotBook
 , history :: (Position, [Ply])
-, active :: !(Player Active)
+, active  :: !(Player Active)
 , passive :: !(Player Passive)
-, clock :: !Clock
+, clock   :: !Clock
 }
 
 data Player s = Player Engine (Maybe s)
@@ -174,7 +179,7 @@ play rt@Runtime{book, history, active, passive, clock} = do
                      i <- atomically . readTChan $ ic
                      case find isScore i of
                        Just (Score s _) -> writeIORef sc (Just s)
-                       _ -> pure ()
+                       _                -> pure ()
                    mbm <- atomically . readTChan $ bmc
                    killThread itid
                    sc <- readIORef sc
@@ -211,12 +216,12 @@ play rt@Runtime{book, history, active, passive, clock} = do
                      Nothing -> pure (snd history, Win . opponent . color $ pos)
 
 toForest :: [Ply] -> Forest Ply
-toForest [] = []
+toForest []     = []
 toForest (x:xs) = [Node x $ toForest xs]
 
 isScore :: Info -> Bool
 isScore Score{} = True
-isScore _ = False
+isScore _       = False
 
 putLog :: String -> IO ()
 putLog = hPutStrLn stderr

@@ -1,7 +1,13 @@
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE PatternSynonyms     #-}
 {-# LANGUAGE PolyKinds           #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections       #-}
+{-# LANGUAGE ViewPatterns        #-}
 {-|
 Module      : Game.Chess.SAN
 Description : Standard Algebraic Notation
@@ -44,21 +50,17 @@ import           Data.Void                  (Void)
 import           Data.Word                  (Word8)
 import           GHC.Stack                  (HasCallStack)
 import           Game.Chess.Internal        (Castle (Kingside, Queenside),
-                                             Color (Black, White),
-                                             PieceType,
-                                             pattern Pawn,
-                                             pattern Knight,
-                                             pattern Bishop,
-                                             pattern Rook,
-                                             pattern Queen,
-                                             pattern King,
-                                             Ply,
-                                             Position (color, moveNumber),
+                                             Color (Black, White), PieceType,
+                                             Ply, Position (color, moveNumber),
                                              bKscm, bQscm, canCastleKingside,
                                              canCastleQueenside, doPly, inCheck,
-                                             isCapture, legalPlies, pieceAt,
-                                             plySource, plyTarget, promoteTo,
-                                             unpack, unsafeDoPly, wKscm, wQscm)
+                                             isCapture, legalPlies,
+                                             pattern Bishop, pattern King,
+                                             pattern Knight, pattern Pawn,
+                                             pattern Queen, pattern Rook,
+                                             pieceAt, plySource, plyTarget,
+                                             promoteTo, unpack, unsafeDoPly,
+                                             wKscm, wQscm)
 import           Game.Chess.Internal.Square
 import           Text.Megaparsec            (MonadParsec (token, try), Parsec,
                                              Stream, Token, Tokens,

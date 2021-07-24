@@ -1,5 +1,17 @@
-{-# LANGUAGE GADTs           #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveFunctor              #-}
+{-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE DeriveLift                 #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GADTs                      #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TupleSections              #-}
+{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE ViewPatterns               #-}
 {-|
 Module      : Game.Chess.PGN
 Description : Portable Game Notation
@@ -34,7 +46,7 @@ import qualified Data.ByteString.Char8                 as BS
 import           Data.Char                             (chr, ord)
 import           Data.Foldable                         (for_)
 import           Data.Functor                          (($>))
-import           Data.Hashable                         (Hashable(..))
+import           Data.Hashable                         (Hashable (..))
 import           Data.List                             (partition, sortOn)
 import           Data.Maybe                            (fromJust, isNothing)
 import           Data.Ord                              (Down (Down))

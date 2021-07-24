@@ -1,4 +1,17 @@
-{-# LANGUAGE UnboxedTuples #-}
+{-# LANGUAGE BangPatterns               #-}
+{-# LANGUAGE BinaryLiterals             #-}
+{-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE DeriveLift                 #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE MultiWayIf                 #-}
+{-# LANGUAGE NamedFieldPuns             #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE PatternSynonyms            #-}
+{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE UnboxedTuples              #-}
+{-# LANGUAGE ViewPatterns               #-}
 {-|
 Module      : Game.Chess
 Description : Basic data types and functions related to the game of chess
@@ -32,7 +45,8 @@ import           Data.Ord                         (Down (..))
 import           Data.String                      (IsString (..))
 import qualified Data.Vector.Generic              as G
 import qualified Data.Vector.Generic.Mutable      as M
-import           Data.Vector.Unboxed              (MVector, Unbox, Vector, unsafeIndex)
+import           Data.Vector.Unboxed              (MVector, Unbox, Vector,
+                                                   unsafeIndex)
 import qualified Data.Vector.Unboxed              as Vector
 import           Foreign.Storable
 import           GHC.Generics                     (Generic)
@@ -286,8 +300,8 @@ move (Sq src) (Sq dst) =
 
 promoteTo :: Ply -> PieceType -> Ply
 promoteTo (Ply x) = Ply . set where
-  set Pawn   = x
-  set King   = x
+  set Pawn          = x
+  set King          = x
   set (PieceType v) = x .&. 0xfff .|. fromIntegral (v `unsafeShiftL` 12)
 
 plySource, plyTarget :: Ply -> Square
@@ -456,7 +470,7 @@ unsafeDoPly' pos@Position{qbb, flags} m@(unpack -> (src, dst, promo))
     | (pawns .&. (rank2 .|. rank7)) `testMask` fromMask
     = if | shiftNN fromMask == toMask -> shiftN fromMask
          | shiftSS fromMask == toMask -> shiftS fromMask
-         | otherwise                          -> 0
+         | otherwise                  -> 0
     | otherwise = 0
 
 -- | Generate a list of possible moves for the given position.
@@ -683,10 +697,10 @@ rayTargets !ray !bitScan !occ (unsafeIndex ray -> a) = case a .&. occ of
 {-# INLINE rayTargets #-}
 
 rayNW, rayN, rayNE, rayE, raySE, rayS, raySW, rayW :: Word64 -> Int -> Word64
-rayNW = rayTargets attackNW bitScanForward 
-rayN  = rayTargets attackN  bitScanForward 
-rayNE = rayTargets attackNE bitScanForward 
-rayE  = rayTargets attackE  bitScanForward 
+rayNW = rayTargets attackNW bitScanForward
+rayN  = rayTargets attackN  bitScanForward
+rayNE = rayTargets attackNE bitScanForward
+rayE  = rayTargets attackE  bitScanForward
 raySE = rayTargets attackSE bitScanReverse
 rayS  = rayTargets attackS  bitScanReverse
 raySW = rayTargets attackSW bitScanReverse

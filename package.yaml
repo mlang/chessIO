@@ -49,29 +49,6 @@ dependencies:
 - vector-instances
 - vector-binary-instances
 
-default-extensions:
-- BangPatterns
-- BinaryLiterals
-- BlockArguments
-- DeriveFunctor
-- DeriveGeneric
-- DeriveLift
-- FlexibleContexts
-- FlexibleInstances
-- GeneralizedNewtypeDeriving
-- LambdaCase
-- MultiParamTypeClasses
-- MultiWayIf
-- NamedFieldPuns
-- NumericUnderscores
-- RecordWildCards
-- OverloadedStrings
-- PatternSynonyms
-- TupleSections
-- TypeApplications
-- TypeFamilies
-- ViewPatterns
-
 extra-source-files:
 - README.md
 - ChangeLog.md

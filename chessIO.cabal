@@ -49,28 +49,6 @@ library
       Paths_chessIO
   hs-source-dirs:
       src
-  default-extensions:
-      BangPatterns
-      BinaryLiterals
-      BlockArguments
-      DeriveFunctor
-      DeriveGeneric
-      DeriveLift
-      FlexibleContexts
-      FlexibleInstances
-      GeneralizedNewtypeDeriving
-      LambdaCase
-      MultiParamTypeClasses
-      MultiWayIf
-      NamedFieldPuns
-      NumericUnderscores
-      RecordWildCards
-      OverloadedStrings
-      PatternSynonyms
-      TupleSections
-      TypeApplications
-      TypeFamilies
-      ViewPatterns
   ghc-options: -O2
   build-depends:
       MonadRandom
@@ -107,28 +85,6 @@ executable cboard
       Paths_chessIO
   hs-source-dirs:
       app
-  default-extensions:
-      BangPatterns
-      BinaryLiterals
-      BlockArguments
-      DeriveFunctor
-      DeriveGeneric
-      DeriveLift
-      FlexibleContexts
-      FlexibleInstances
-      GeneralizedNewtypeDeriving
-      LambdaCase
-      MultiParamTypeClasses
-      MultiWayIf
-      NamedFieldPuns
-      NumericUnderscores
-      RecordWildCards
-      OverloadedStrings
-      PatternSynonyms
-      TupleSections
-      TypeApplications
-      TypeFamilies
-      ViewPatterns
   ghc-options: -O2 -threaded
   build-depends:
       MonadRandom
@@ -168,28 +124,6 @@ executable cbookview
       Paths_chessIO
   hs-source-dirs:
       app
-  default-extensions:
-      BangPatterns
-      BinaryLiterals
-      BlockArguments
-      DeriveFunctor
-      DeriveGeneric
-      DeriveLift
-      FlexibleContexts
-      FlexibleInstances
-      GeneralizedNewtypeDeriving
-      LambdaCase
-      MultiParamTypeClasses
-      MultiWayIf
-      NamedFieldPuns
-      NumericUnderscores
-      RecordWildCards
-      OverloadedStrings
-      PatternSynonyms
-      TupleSections
-      TypeApplications
-      TypeFamilies
-      ViewPatterns
   ghc-options: -O2 -threaded
   build-depends:
       MonadRandom
@@ -231,28 +165,6 @@ executable polyplay
       Paths_chessIO
   hs-source-dirs:
       app
-  default-extensions:
-      BangPatterns
-      BinaryLiterals
-      BlockArguments
-      DeriveFunctor
-      DeriveGeneric
-      DeriveLift
-      FlexibleContexts
-      FlexibleInstances
-      GeneralizedNewtypeDeriving
-      LambdaCase
-      MultiParamTypeClasses
-      MultiWayIf
-      NamedFieldPuns
-      NumericUnderscores
-      RecordWildCards
-      OverloadedStrings
-      PatternSynonyms
-      TupleSections
-      TypeApplications
-      TypeFamilies
-      ViewPatterns
   ghc-options: -O2
   build-depends:
       MonadRandom
@@ -293,28 +205,6 @@ test-suite perft
       Paths_chessIO
   hs-source-dirs:
       test/perft
-  default-extensions:
-      BangPatterns
-      BinaryLiterals
-      BlockArguments
-      DeriveFunctor
-      DeriveGeneric
-      DeriveLift
-      FlexibleContexts
-      FlexibleInstances
-      GeneralizedNewtypeDeriving
-      LambdaCase
-      MultiParamTypeClasses
-      MultiWayIf
-      NamedFieldPuns
-      NumericUnderscores
-      RecordWildCards
-      OverloadedStrings
-      PatternSynonyms
-      TupleSections
-      TypeApplications
-      TypeFamilies
-      ViewPatterns
   ghc-options: -O2 -threaded -rtsopts "-with-rtsopts=-N -s"
   build-depends:
       MonadRandom
@@ -356,28 +246,6 @@ test-suite polyglot
       Paths_chessIO
   hs-source-dirs:
       test/polyglot
-  default-extensions:
-      BangPatterns
-      BinaryLiterals
-      BlockArguments
-      DeriveFunctor
-      DeriveGeneric
-      DeriveLift
-      FlexibleContexts
-      FlexibleInstances
-      GeneralizedNewtypeDeriving
-      LambdaCase
-      MultiParamTypeClasses
-      MultiWayIf
-      NamedFieldPuns
-      NumericUnderscores
-      RecordWildCards
-      OverloadedStrings
-      PatternSynonyms
-      TupleSections
-      TypeApplications
-      TypeFamilies
-      ViewPatterns
   ghc-options: -O2
   build-depends:
       HUnit

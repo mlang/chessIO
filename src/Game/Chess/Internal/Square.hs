@@ -1,13 +1,15 @@
+{-# LANGUAGE PatternSynonyms #-}
 module Game.Chess.Internal.Square where
 
-import           Control.Lens.Iso (Iso', iso)
-import           Data.Bits        (Bits (testBit))
-import           Data.Char        (chr, ord)
-import           Data.Coerce      (coerce)
-import           Data.Ix          (Ix (..))
-import           Data.String      (IsString (fromString))
+import           Control.Lens   (Iso', from, iso, view)
+import           Data.Bifunctor (Bifunctor (..))
+import           Data.Bits      (Bits (testBit))
+import           Data.Char      (chr, ord)
+import           Data.Coerce    (coerce)
+import           Data.Ix        (Ix (..))
+import           Data.String    (IsString (fromString))
 import           Data.Word
-import           GHC.Stack        (HasCallStack)
+import           GHC.Stack      (HasCallStack)
 
 newtype Rank = Rank Int deriving (Eq, Ord)
 
@@ -216,9 +218,15 @@ file :: Square -> File
 file = File . (`mod` 8) . coerce
 
 rankFile :: Iso' Square (Rank, File)
-rankFile = iso from to where
-  from (Sq i) = case i `divMod` 8 of (r, f) -> (Rank r, File f)
-  to (Rank r, File f) = Sq $ r*8 + f
+rankFile = iso f t where
+  f (Sq i) = bimap Rank File $ i `divMod` 8
+  t (Rank r, File f) = Sq $ r*8 + f
+
+mapRank :: (Rank -> Rank) -> Square -> Square
+mapRank f = view (from rankFile) . first f . view rankFile
+
+mapFile :: (File -> File) -> Square -> Square
+mapFile f = view (from rankFile) . second f . view rankFile
 
 fileChar, rankChar :: Square -> Char
 fileChar = chr . (ord 'a' +) . unFile . file

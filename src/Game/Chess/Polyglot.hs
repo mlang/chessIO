@@ -1,5 +1,13 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE BangPatterns               #-}
+{-# LANGUAGE DeriveFunctor              #-}
+{-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE ViewPatterns               #-}
 module Game.Chess.Polyglot (
   -- * Data type
   PolyglotBook, BookEntry(..), beKey, bePly, beWeight, beLearn
@@ -17,37 +25,40 @@ module Game.Chess.Polyglot (
 , findPosition, hashPosition
 ) where
 
-import           Control.Arrow            (Arrow ((&&&)))
-import           Control.Lens             (makeLenses, (%~))
-import           Control.Monad.ST (ST, runST)
-import           Control.Monad.Random     (Rand)
-import qualified Control.Monad.Random     as Rand
-import           Data.Bits                (Bits (shiftL, shiftR, (.|.)))
-import           Data.ByteString          (ByteString)
-import qualified Data.ByteString          as BS
-import qualified Data.ByteString.Internal as BS
-import           Data.FileEmbed           (embedFile)
-import           Data.Foldable            (fold)
-import           Data.Hashable            (Hashable)
-import           Data.List                (sort)
-import           Data.Ord                 (Down (Down))
-import           Data.String              (IsString (fromString))
-import           Data.Tree                (Tree (Node), foldTree)
-import           Data.Vector.Instances    ()
-import qualified Data.Vector.Storable     as VS
-import           Data.Word                (Word16, Word32, Word64, Word8)
-import           Foreign.ForeignPtr       (castForeignPtr, plusForeignPtr)
-import           Foreign.Storable         (Storable (alignment, peek, poke, pokeElemOff, sizeOf))
-import           GHC.Generics             (Generic)
-import           GHC.Ptr                  (Ptr, castPtr, plusPtr)
-import           Game.Chess.Internal      (Ply (..), unpack, move, Color(..), Position (color, halfMoveClock), canCastleQueenside, canCastleKingside, wKscm, bKscm, wQscm, bQscm, 
-                                           doPly, startpos, toFEN,
-                                           unsafeDoPly)
+import           Control.Arrow              (Arrow ((&&&)))
+import           Control.Lens               (makeLenses, (%~))
+import           Control.Monad.Random       (Rand)
+import qualified Control.Monad.Random       as Rand
+import           Control.Monad.ST           (ST, runST)
+import           Data.Bits                  (Bits (shiftL, shiftR, (.|.)))
+import           Data.ByteString            (ByteString)
+import qualified Data.ByteString            as BS
+import qualified Data.ByteString.Internal   as BS
+import           Data.FileEmbed             (embedFile)
+import           Data.Foldable              (fold)
+import           Data.Hashable              (Hashable)
+import           Data.List                  (sort)
+import           Data.Ord                   (Down (Down))
+import           Data.String                (IsString (fromString))
+import           Data.Tree                  (Tree (Node), foldTree)
+import           Data.Vector.Instances      ()
+import qualified Data.Vector.Storable       as VS
+import           Data.Word                  (Word16, Word32, Word64, Word8)
+import           Foreign.ForeignPtr         (castForeignPtr, plusForeignPtr)
+import           Foreign.Storable           (Storable (alignment, peek, poke, pokeElemOff, sizeOf))
+import           GHC.Generics               (Generic)
+import           GHC.Ptr                    (Ptr, castPtr, plusPtr)
+import           Game.Chess.Internal        (Color (..), Ply (..),
+                                             Position (color, halfMoveClock),
+                                             bKscm, bQscm, canCastleKingside,
+                                             canCastleQueenside, doPly, move,
+                                             startpos, toFEN, unpack,
+                                             unsafeDoPly, wKscm, wQscm)
 import           Game.Chess.Internal.Square
-import           Game.Chess.PGN           (Outcome (Undecided), PGN (..),
-                                           gameFromForest, weightedForest)
-import           Game.Chess.Polyglot.Hash (hashPosition)
-import           System.Random            (RandomGen)
+import           Game.Chess.PGN             (Outcome (Undecided), PGN (..),
+                                             gameFromForest, weightedForest)
+import           Game.Chess.Polyglot.Hash   (hashPosition)
+import           System.Random              (RandomGen)
 
 data BookEntry a = BE {
   _beKey    :: {-# UNPACK #-} !Word64

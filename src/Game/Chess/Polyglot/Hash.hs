@@ -1,3 +1,4 @@
+{-# LANGUAGE PatternSynonyms #-}
 module Game.Chess.Polyglot.Hash (hashPosition) where
 
 import           Data.Bits                  (Bits (xor))
