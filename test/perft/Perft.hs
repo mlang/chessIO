@@ -1,16 +1,18 @@
+{-# LANGUAGE DeriveGeneric  #-}
+{-# LANGUAGE NamedFieldPuns #-}
 module Main where
 
-import Control.Parallel.Strategies
-import Data.Foldable
-import Data.Maybe
-import Data.Monoid
-import Data.Time.Clock
-import Data.Traversable
-import Game.Chess
-import GHC.Generics (Generic)
-import System.Directory
-import System.Exit
-import System.IO
+import           Control.Parallel.Strategies
+import           Data.Foldable
+import           Data.Maybe
+import           Data.Monoid
+import           Data.Time.Clock
+import           Data.Traversable
+import           GHC.Generics                (Generic)
+import           Game.Chess
+import           System.Directory
+import           System.Exit
+import           System.IO
 
 type Depth = Int
 type Testsuite = [(Position, [(Depth, PerftResult)])]
@@ -82,6 +84,6 @@ readTestSuite fp = do
   epd <- readFile fp
   pure $ fmap readData . (\ws -> (fromJust (fromFEN (unwords $ take 6 ws)), drop 6 ws)) . words <$> lines epd
  where
-  readData [] = []
+  readData []                 = []
   readData ((';':'D':d):v:xs) = (read d, PerftResult $ read v) : readData xs
-  readData _ = error "Failed to parse test suite"
+  readData _                  = error "Failed to parse test suite"

@@ -1,8 +1,9 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import Test.HUnit
-import Game.Chess
-import Game.Chess.Polyglot
+import           Game.Chess
+import           Game.Chess.Polyglot
+import           Test.HUnit
 
 tests = test
   [ "t1" ~: "start position" ~: hashPosition startpos ~=? 0x463b96181691fc9c
