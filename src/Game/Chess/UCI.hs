@@ -62,7 +62,7 @@ import           Data.ByteString.Builder          (Builder, byteString,
                                                    integerDec)
 import           Data.ByteString.Char8            (ByteString)
 import qualified Data.ByteString.Char8            as BS
-import           Data.Foldable                    (Foldable (fold, foldl'))
+import           Data.Foldable                    (Foldable (fold, foldl', toList))
 import           Data.Functor                     (($>))
 import           Data.HashMap.Strict              (HashMap)
 import qualified Data.HashMap.Strict              as HashMap
@@ -73,6 +73,8 @@ import           Data.Ix                          (Ix (inRange))
 import           Data.List                        (intersperse)
 import           Data.STRef                       (modifySTRef, newSTRef,
                                                    readSTRef, writeSTRef)
+import           Data.Sequence                    (Seq, ViewR ((:>)), (|>))
+import qualified Data.Sequence                    as Seq
 import           Data.String                      (IsString (..))
 import qualified Data.Vector.Unboxed              as Unboxed
 import qualified Data.Vector.Unboxed.Mutable      as Unboxed
@@ -111,19 +113,16 @@ data Engine = Engine {
 , isSearching  :: IORef Bool
 , infoChan     :: TChan [Info]
 , bestMoveChan :: TChan BestMove
-, game         :: IORef (Position, [Ply])
+, game         :: IORef (Position, Seq Ply)
 }
 
--- | Set the starting position of the current game, also clearing any
--- pre-existing history.
-setPosition :: MonadIO m
-            => Engine -> Position
-            -> m (Position, [Ply])
-              -- ^ the game previously in progress
-setPosition e@Engine{game} p = liftIO $ do
-  oldGame <- atomicModifyIORef' game ((p, []),)
+-- | Set the starting position and plies of the current game.
+setPosition :: (Foldable f, MonadIO m)
+            => Engine -> Position -> f Ply
+            -> m ()
+setPosition e@Engine{game} p pl = liftIO $ do
+  void $ atomicModifyIORef' game ((p, Seq.fromList $ toList pl),)
   sendPosition e
-  pure oldGame
 
 data UCIException = IllegalMove Ply deriving Show
 
@@ -292,7 +291,7 @@ start' tout outputStrLn cmd args = do
   e <- Engine inH outH procH outputStrLn Nothing Nothing Nothing HashMap.empty <$>
        newEmptyMVar <*> newIORef False <*>
        newBroadcastTChanIO <*> newBroadcastTChanIO <*>
-       newIORef (startpos, [])
+       newIORef (startpos, Seq.empty)
   send e "uci"
   timeout tout (initialise e) >>= \case
     Just e' -> do
@@ -454,19 +453,19 @@ addPly :: MonadIO m => Engine -> Ply -> m ()
 addPly e@Engine{game} m = liftIO $ do
   pos <- currentPosition e
   if m `notElem` legalPlies pos then throwIO $ IllegalMove m else do
-    atomicModifyIORef' game $ \g -> (fmap (<> [m]) g, ())
+    atomicModifyIORef' game $ \g -> (fmap (|> m) g, ())
     sendPosition e
 
 replacePly :: MonadIO m => Engine -> Ply -> m ()
 replacePly e@Engine{game} pl = liftIO $ do
   atomicModifyIORef' game $ \g ->
-    (fmap init g, ())
+    (fmap (\xs -> case Seq.viewr xs of xs' :> _ -> xs') g, ())
   addPly e pl
 
 sendPosition :: Engine -> IO ()
 sendPosition e@Engine{game} = readIORef game >>= send e . cmd where
   cmd (p, h) = fold . intersperse " " $
-    "position" : "fen" : fromString (toFEN p) : line h
+    "position" : "fen" : fromString (toFEN p) : line (toList h)
   line [] = []
   line h  = "moves" : (fromString . toUCI <$> h)
 
