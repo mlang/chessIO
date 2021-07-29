@@ -132,7 +132,7 @@ loop = do
     Just input
       | null input -> outputBoard *> loop
       | Just position <- fromFEN input -> do
-        void $ setPosition e position
+        void $ setPosition e position []
         outputBoard
         loop
       | "hint" == input -> do
@@ -183,7 +183,7 @@ loop = do
           else pure ()
         loop
       | "midgame" == input -> do
-        void $ setPosition e startpos
+        void $ setPosition e startpos []
         midgame
         loop
       | otherwise -> do
