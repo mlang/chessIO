@@ -1,8 +1,8 @@
-resolver: lts-18.3
+resolver: lts-18.4
 packages:
 - .
 extra-deps:
-- o-clock-1.2.0
+- o-clock-1.2.1
 flags:
   brick:
     demos: false

@@ -101,6 +101,8 @@ pattern Rook = PieceType 3
 pattern Queen = PieceType 4
 pattern King = PieceType 5
 
+{-# COMPLETE Pawn, Knight, Bishop, Rook, Queen, King :: PieceType #-}
+
 instance Show PieceType where
   show = \case
     Pawn   -> "Pawn"
@@ -109,7 +111,6 @@ instance Show PieceType where
     Rook   -> "Rook"
     Queen  -> "Queen"
     King   -> "King"
-    n      -> "PieceType n"
 
 data Color = Black | White deriving (Eq, Generic, Ix, Ord, Lift, Show)
 
@@ -393,7 +394,7 @@ doPly p m
 -- can be applied to the position.  This is useful if the move has been generated
 -- by the 'legalPlies' function.
 unsafeDoPly :: Position -> Ply -> Position
-unsafeDoPly pos@Position{qbb, color, halfMoveClock, moveNumber} m =
+unsafeDoPly pos@Position{color, halfMoveClock, moveNumber} m =
   (unsafeDoPly' pos m)
   { color = opponent color
   , halfMoveClock = if isCapture pos m || isPawnPush pos m

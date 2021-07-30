@@ -1,61 +1,49 @@
 {-# LANGUAGE LambdaCase #-}
 module Main where
 
-import Control.Arrow ((&&&))
-import Control.Concurrent ( forkIO, killThread, ThreadId )
-import Control.Concurrent.STM ( atomically, readTChan, TChan )
-import Control.Monad ( forever, void )
-import Control.Monad.Extra ( ifM, unlessM )
-import Control.Monad.IO.Class ( MonadIO(..) )
-import Control.Monad.Random ( evalRandIO, MonadTrans(lift) )
-import Control.Monad.State.Strict
-    ( StateT, evalStateT, gets, modify, modify' )
-import Data.Char ( toLower, toUpper )
-import Data.IORef ( newIORef, readIORef, writeIORef, IORef )
-import Data.List ( find, isPrefixOf )
-import Data.List.Extra ( chunksOf )
-import Game.Chess
-    ( fromFEN, fromUCI, isDark, legalPlies, pieceAt, startpos,
-      Color(Black, White),
-      PieceType(King, Pawn, Knight, Bishop, Rook, Queen),
-      Ply, Position, Square(H8, A1) )
-import Game.Chess.Polyglot
-    ( PolyglotBook, _bePly, defaultBook, readPolyglotFile, bookPlies, bookPly )
-import Game.Chess.SAN ( fromSAN, toSAN, unsafeToSAN, varToSAN )
-import Game.Chess.UCI
-    ( addPly,
-      currentPosition,
-      infinite,
-      movetime,
-      quit,
-      search,
-      searching,
-      setPosition,
-      start,
-      stop,
-      Engine,
-      BestMove, Info(Score, PV) )
-import System.Console.Haskeline
-    ( defaultSettings,
-      getExternalPrint,
-      getInputLine,
-      outputStr,
-      outputStrLn,
-      completeWord,
-      simpleCompletion,
-      runInputT,
-      setComplete,
-      Completion(isFinished),
-      CompletionFunc,
-      InputT )
-import System.Exit ( ExitCode(ExitFailure), exitSuccess, exitWith )
-import System.Environment ( getArgs )
-import Time.Units ( ms, sec )
+import           Control.Arrow              ((&&&))
+import           Control.Concurrent         (ThreadId, forkIO, killThread)
+import           Control.Concurrent.STM     (TChan, atomically, readTChan)
+import           Control.Monad              (forever, void)
+import           Control.Monad.Extra        (ifM, unlessM)
+import           Control.Monad.IO.Class     (MonadIO (..))
+import           Control.Monad.Random       (evalRandIO)
+import           Control.Monad.State.Strict (StateT, evalStateT, gets, lift,
+                                             modify, modify')
+import           Data.Char                  (toLower, toUpper)
+import           Data.IORef                 (IORef, newIORef, readIORef,
+                                             writeIORef)
+import           Data.List                  (find, isPrefixOf)
+import           Data.List.Extra            (chunksOf)
+import           Game.Chess                 (Color (Black, White),
+                                             PieceType (Bishop, King, Knight, Pawn, Queen, Rook),
+                                             Ply, Position, Square (A1, H8),
+                                             fromFEN, fromUCI, isDark,
+                                             legalPlies, pieceAt, startpos)
+import           Game.Chess.Polyglot        (PolyglotBook, _bePly, bookPlies,
+                                             bookPly, defaultBook,
+                                             readPolyglotFile)
+import           Game.Chess.SAN             (fromSAN, toSAN, unsafeToSAN,
+                                             varToSAN)
+import           Game.Chess.UCI             (BestMove, Engine, Info (PV, Score),
+                                             addPly, currentPosition, infinite,
+                                             movetime, quit, search, searching,
+                                             setPosition, start, stop)
+import           System.Console.Haskeline   (Completion (isFinished),
+                                             CompletionFunc, InputT,
+                                             completeWord, defaultSettings,
+                                             getExternalPrint, getInputLine,
+                                             outputStr, outputStrLn, runInputT,
+                                             setComplete, simpleCompletion)
+import           System.Environment         (getArgs)
+import           System.Exit                (ExitCode (ExitFailure),
+                                             exitSuccess, exitWith)
+import           Time.Units                 (ms, sec)
 
 data S = S {
-  engine :: Engine
-, mover :: Maybe ThreadId
-, book :: PolyglotBook
+  engine  :: Engine
+, mover   :: Maybe ThreadId
+, book    :: PolyglotBook
 , hintRef :: IORef (Maybe Ply)
 }
 
@@ -161,7 +149,7 @@ loop = do
             killThread itid
             case bm of
               Just (bm', _) -> externalPrint $ "Best move: " <> toSAN pos bm'
-              Nothing -> pure ()
+              Nothing       -> pure ()
           lift $ modify' $ \s -> s { mover = Just tid }
         loop
       | "stop" == input -> do
@@ -207,7 +195,7 @@ searchBestMove = do
 
 parseMove :: Position -> String -> Either String Ply
 parseMove pos s = case fromUCI pos s of
-  Just m -> pure m
+  Just m  -> pure m
   Nothing -> fromSAN pos s
 
 printBoard :: (String -> IO ()) -> Position -> IO ()
@@ -254,7 +242,7 @@ printPV externalPrint ic = forever $ do
     Nothing -> pure ()
 
 isPV, isScore :: Info -> Bool
-isPV PV{}       = True
-isPV _          = False
+isPV PV{} = True
+isPV _    = False
 isScore Score{} = True
 isScore _       = False
