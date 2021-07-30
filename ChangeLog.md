@@ -1,5 +1,15 @@
 # Releases
 
+## chessIO 0.9.0.0
+
+- New functions:
+  - move :: Square -> Square -> Ply
+  - promoteTo :: Ply -> PieceType -> Ply
+  - mapRank :: (Rank -> Rank) -> Square -> Square
+  - mapFile :: (File -> File) -> Square -> Square
+- Game.Chess.UCI: 'setPosition' now also takes the list of plies from start pos
+- Fix compilation with GHC 9.0.1
+
 ## chessIO 0.8.0.0
 
 - Speedup of about 1.4 compared to previous release
