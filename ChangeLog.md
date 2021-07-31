@@ -1,5 +1,9 @@
 # Releases
 
+## chessIO 0.9.1.0
+
+- Add a Binary instance for Square
+
 ## chessIO 0.9.0.0
 
 - New functions:

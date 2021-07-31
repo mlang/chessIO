@@ -8,6 +8,7 @@ import           Data.Char      (chr, ord)
 import           Data.Coerce    (coerce)
 import           Data.Ix        (Ix (..))
 import           Data.String    (IsString (fromString))
+import Data.Binary
 import           Data.Word
 import           GHC.Stack      (HasCallStack)
 
@@ -96,6 +97,10 @@ pattern FileH = File 7
 {-# COMPLETE FileA, FileB, FileC, FileD, FileE, FileF, FileG, FileH :: File #-}
 
 newtype Square = Sq Int deriving (Eq, Ord)
+
+instance Binary Square where
+  put = putWord8 . fromIntegral . unSquare
+  get = mkSq . fromIntegral <$> getWord8
 
 instance Ix Square where
   range (Sq i, Sq j) = [Sq k | k <- [i..j]]
