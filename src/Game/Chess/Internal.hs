@@ -33,21 +33,26 @@ module Game.Chess.Internal where
 import           Control.DeepSeq
 import           Control.Lens                     (view)
 import           Control.Lens.Iso                 (from)
+import           Control.Monad                    (when)
+import           Control.Monad.ST
 import           Data.Binary
 import           Data.Bits                        (Bits (bit, complement, testBit, unsafeShiftL, unsafeShiftR, xor, (.&.), (.|.)),
                                                    FiniteBits (countLeadingZeros, countTrailingZeros))
 import           Data.Char                        (chr, ord)
+import           Data.Foldable                    (for_)
 import           Data.Hashable
 import           Data.Ix                          (Ix (inRange))
 import           Data.List                        (nub, sortOn)
 import           Data.Maybe                       (fromJust, listToMaybe)
 import           Data.Ord                         (Down (..))
+import           Data.STRef
 import           Data.String                      (IsString (..))
 import qualified Data.Vector.Generic              as G
 import qualified Data.Vector.Generic.Mutable      as M
 import           Data.Vector.Unboxed              (MVector, Unbox, Vector,
                                                    unsafeIndex)
 import qualified Data.Vector.Unboxed              as Vector
+import qualified Data.Vector.Unboxed.Mutable      as VUM
 import           Foreign.Storable
 import           GHC.Generics                     (Generic)
 import           GHC.Stack                        (HasCallStack)
@@ -94,6 +99,7 @@ instance IsString Position where fromString = fromJust . fromFEN
 
 newtype PieceType = PieceType Int deriving (Eq, Ix, Lift, Ord)
 
+pattern Pawn, Knight, Bishop, Rook, Queen, King :: PieceType
 pattern Pawn = PieceType 0
 pattern Knight = PieceType 1
 pattern Bishop = PieceType 2
@@ -135,8 +141,8 @@ data Position = Position {
 , color         :: !Color
   -- ^ active color
 , flags         :: {-# UNPACK #-} !Word64
-, halfMoveClock :: {-# UNPACK #-} !Int
-, moveNumber    :: {-# UNPACK #-} !Int
+, halfMoveClock :: {-# UNPACK #-} !Word16
+, moveNumber    :: {-# UNPACK #-} !Word16
   -- ^ number of the full move
 } deriving (Generic, Lift)
 
@@ -194,7 +200,7 @@ fromFEN fen
   readColor "b" = Just Black
   readColor _   = Nothing
 
-  readFlags cst ep = (.|.) <$> readCst cst <*> readEP ep where
+  readFlags c e = (.|.) <$> readCst c <*> readEP e where
     readCst "-" = pure 0
     readCst x = go x where
       go ('K':xs) = (crwKs .|.) <$> go xs
@@ -244,11 +250,6 @@ occupiedBy Black = QBB.black
 
 occupied :: QuadBitboard -> Word64
 occupied = QBB.occupied
-
-foldBits :: (a -> Int -> a) -> a -> Word64 -> a
-foldBits f = go where
-  go a 0 = a
-  go a n = go (f a $ countTrailingZeros n) $! n .&. (n - 1)
 
 bitScanForward, bitScanReverse :: Word64 -> Int
 bitScanForward = countTrailingZeros
@@ -314,7 +315,6 @@ plyPromotion (Ply x) = case fromIntegral $ (x `unsafeShiftR` 12) .&. 0b111 of
   0 -> Nothing
   n -> Just . PieceType $ n
 
-
 unpack :: Ply -> (Square, Square, Maybe PieceType)
 unpack pl = ( plySource pl, plyTarget pl, plyPromotion pl)
 
@@ -353,7 +353,7 @@ toUCI (unpack -> (src, dst, promo)) = coord src <> coord dst <> p where
 
 -- | Validate that a certain move is legal in the given position.
 relativeTo :: Position -> Ply -> Maybe Ply
-relativeTo pos m | m `elem` legalPlies pos = Just m
+relativeTo pos m | m `Vector.elem` legalPlies' pos = Just m
                  | otherwise = Nothing
 
 shiftN, shiftNN, shiftNNE, shiftNE, shiftENE, shiftE, shiftESE, shiftSE, shiftSSE, shiftS, shiftSS, shiftSSW, shiftSW, shiftWSW, shiftW, shiftWNW, shiftNW, shiftNNW :: Word64 -> Word64
@@ -387,7 +387,7 @@ shiftNNW w = w `unsafeShiftL` 15 .&. notHFile
 -- if it isn't.  See 'unsafeDoPly' for a version that omits the legality check.
 doPly :: HasCallStack => Position -> Ply -> Position
 doPly p m
-  | m `elem` legalPlies p = unsafeDoPly p m
+  | m `Vector.elem` legalPlies' p = unsafeDoPly p m
   | otherwise        = error "Game.Chess.doPly: Illegal move"
 
 -- | An unsafe version of 'doPly'.  Only use this if you are sure the given move
@@ -474,46 +474,159 @@ unsafeDoPly' pos@Position{qbb, flags} m@(unpack -> (src, dst, promo))
          | otherwise                  -> 0
     | otherwise = 0
 
+forBits :: Word64 -> (Int -> ST s ()) -> ST s ()
+forBits w f = go w where
+  go 0 = pure ()
+  go n = f (countTrailingZeros n) *> go (n .&. (n - 1))
+{-# INLINE forBits #-}
+
 -- | Generate a list of possible moves for the given position.
 legalPlies :: Position -> [Ply]
-legalPlies pos@Position{color, qbb, flags} = filter legalPly $
-      kingMoves
-    . knightMoves
-    . slideMoves Queen pos notOurs occ
-    . slideMoves Rook pos notOurs occ
-    . slideMoves Bishop pos notOurs occ
-    . pawnMoves
-    $ []
- where
-  legalPly = not . inCheck color . unsafeDoPly' pos
-  !ours = occupiedBy color qbb
-  !them = ours `xor` QBB.occupied qbb
-  !notOurs = complement ours
-  !occ = ours .|. them
-  (# pawnMoves, knightMoves, kingMoves #) = case color of
-    White ->
-      (#
-       wPawnMoves (QBB.wPawns qbb) (complement occ) (them .|. ep flags),
-       flip (foldBits genNMoves) (QBB.wKnights qbb),
-       flip (foldBits genKMoves) (QBB.wKings qbb) . wShort . wLong
-       #)
-    Black ->
-      (#
-       bPawnMoves (QBB.bPawns qbb) (complement occ) (them .|. ep flags),
-       flip (foldBits genNMoves) (QBB.bKnights qbb),
-       flip (foldBits genKMoves) (QBB.bKings qbb) . bShort . bLong
-       #)
-  genNMoves ms sq = foldBits (mkM sq) ms ((unsafeIndex knightAttacks sq) .&. notOurs)
-  genKMoves ms sq = foldBits (mkM sq) ms ((unsafeIndex kingAttacks sq) .&. notOurs)
-  wShort ml | canWhiteCastleKingside pos occ = wKscm : ml
-            | otherwise             = ml
-  wLong ml  | canWhiteCastleQueenside pos occ = wQscm : ml
-            | otherwise                   = ml
-  bShort ml | canBlackCastleKingside pos occ = bKscm : ml
-            | otherwise                  = ml
-  bLong ml  | canBlackCastleQueenside pos occ = bQscm : ml
-            | otherwise              = ml
-  mkM !src ms !dst = move (Sq src) (Sq dst) : ms
+legalPlies = Vector.toList . legalPlies'
+
+legalPlies' :: Position -> Vector Ply
+legalPlies' pos@Position{color, qbb, flags} = runST $ do
+  v <- VUM.new 100
+  i <- newSTRef 0
+  let add pl
+        | not $ inCheck color (unsafeDoPly' pos pl) = do
+          i' <- readSTRef i
+          VUM.unsafeWrite v i' pl
+          modifySTRef' i (+ 1)
+        | otherwise = pure ()
+
+  case color of
+    White -> do
+      let !us = QBB.white qbb
+          !them = QBB.black qbb
+          !notUs = complement us
+          !occ = us .|. them
+          !notOcc = complement occ
+          !captureTargets = them .|. ep flags
+
+      -- Pawn
+      let !wPawns = QBB.wPawns qbb
+      let !singlePushTargets = shiftN wPawns .&. notOcc
+      let !doublePushTargets = shiftN singlePushTargets .&. notOcc .&. rank4
+      let !eastCaptureTargets = shiftNE wPawns .&. captureTargets
+      let !westCaptureTargets = shiftNW wPawns .&. captureTargets
+      let pawn s d
+            | d >= 56
+            = let pl = move (Sq s) (Sq d)
+              in for_ [Queen, Rook, Bishop, Knight] $ \p ->
+                   add $ pl `promoteTo` p
+            | otherwise
+            = add $ move (Sq s) (Sq d)
+      forBits westCaptureTargets $ \dst -> do
+        pawn (dst - 7) dst
+      forBits eastCaptureTargets $ \dst -> do
+        pawn (dst - 9) dst
+      forBits singlePushTargets $ \dst ->
+        pawn (dst - 8) dst
+      forBits doublePushTargets $ \dst ->
+        pawn (dst - 16) dst
+
+      -- Knight
+      forBits (QBB.wKnights qbb) $ \src -> do
+        forBits (knightAttacks `unsafeIndex` src .&. notUs) $ \dst -> do
+          add $ move (Sq src) (Sq dst)
+
+      -- sliders (QBB.wBishops qbb) (QBB.wRooks qbb) (QBB.wQueens qbb) occ notOurs add
+      -- Bishop
+      forBits (QBB.wBishops qbb) $ \src -> do
+        forBits (bishopTargets src occ .&. notUs) $ \dst -> do
+          add $ move (Sq src) (Sq dst)
+
+      -- Rook
+      forBits (QBB.wRooks qbb) $ \src -> do
+        forBits (rookTargets src occ .&. notUs) $ \dst -> do
+          add $ move (Sq src) (Sq dst)
+
+      -- Queen
+      forBits (QBB.wQueens qbb) $ \src -> do
+        forBits (queenTargets src occ .&. notUs) $ \dst -> do
+          add $ move (Sq src) (Sq dst)
+
+      -- King
+      forBits (QBB.wKings qbb) $ \src -> do
+        forBits (kingAttacks `unsafeIndex` src .&. notUs) $ \dst -> do
+          add $ move (Sq src) (Sq dst)
+      when (canWhiteCastleKingside pos occ) $ add wKscm
+      when (canWhiteCastleQueenside pos occ) $ add wQscm
+
+    Black -> do
+      let !us = QBB.black qbb
+          !them = QBB.white qbb
+          !notUs = complement us
+          !occ = us .|. them
+          !notOcc = complement occ
+          !captureTargets = them .|. ep flags
+
+      -- Pawn
+      let !bPawns = QBB.bPawns qbb
+      let !singlePushTargets = shiftS bPawns .&. notOcc
+      let !doublePushTargets = shiftS singlePushTargets .&. notOcc .&. rank5
+      let !eastCaptureTargets = shiftSE bPawns .&. captureTargets
+      let !westCaptureTargets = shiftSW bPawns .&. captureTargets
+      let pawn s d
+            | d <= 7
+            = let pl = move (Sq s) (Sq d)
+              in for_ [Queen, Rook, Bishop, Knight] $ \p ->
+                   add $ pl `promoteTo` p
+            | otherwise
+            = add $ move (Sq s) (Sq d)
+      forBits westCaptureTargets $ \dst -> do
+        pawn (dst + 9) dst
+      forBits eastCaptureTargets $ \dst -> do
+        pawn (dst + 7) dst
+      forBits singlePushTargets $ \dst ->
+        pawn (dst + 8) dst
+      forBits doublePushTargets $ \dst ->
+        pawn (dst + 16) dst
+
+      -- Knight
+      forBits (QBB.bKnights qbb) $ \src -> do
+        forBits (knightAttacks `unsafeIndex` src .&. notUs) $ \dst -> do
+          add $ move (Sq src) (Sq dst)
+
+      -- sliders (QBB.bBishops qbb) (QBB.bRooks qbb) (QBB.bQueens qbb) occ notOurs add
+      -- Bishop
+      forBits (QBB.bBishops qbb) $ \src -> do
+        forBits (bishopTargets src occ .&. notUs) $ \dst -> do
+          add $ move (Sq src) (Sq dst)
+
+      -- Rook
+      forBits (QBB.bRooks qbb) $ \src -> do
+        forBits (rookTargets src occ .&. notUs) $ \dst -> do
+          add $ move (Sq src) (Sq dst)
+
+      -- Queen
+      forBits (QBB.bQueens qbb) $ \src -> do
+        forBits (queenTargets src occ .&. notUs) $ \dst -> do
+          add $ move (Sq src) (Sq dst)
+
+      -- King
+      forBits (QBB.bKings qbb) $ \src -> do
+        forBits (kingAttacks `unsafeIndex` src .&. notUs) $ \dst -> do
+          add $ move (Sq src) (Sq dst)
+      when (canBlackCastleKingside pos occ) $ add bKscm
+      when (canBlackCastleQueenside pos occ) $ add bQscm
+
+  i' <- readSTRef i
+  Vector.freeze $ VUM.slice 0 i' v
+
+sliders :: Word64 -> Word64 -> Word64 -> Word64 -> Word64 -> (Ply -> ST s ())
+        -> ST s ()
+sliders !bishops !rooks !queens !occ !notOurs add = do
+  forBits bishops $ \src -> do
+    forBits (bishopTargets src occ .&. notOurs) $ \dst -> do
+      add $ move (Sq src) (Sq dst)
+  forBits rooks $ \src -> do
+    forBits (rookTargets src occ .&. notOurs) $ \dst -> do
+      add $ move (Sq src) (Sq dst)
+  forBits queens $ \src -> do
+    forBits (queenTargets src occ .&. notOurs) $ \dst -> do
+      add $ move (Sq src) (Sq dst)
 
 -- | Returns 'True' if 'Color' is in check in the given position.
 inCheck :: Color -> Position -> Bool
@@ -523,53 +636,6 @@ inCheck Black Position{qbb} =
   attackedBy White qbb (QBB.occupied qbb) (Sq (bitScanForward (QBB.bKings qbb)))
 
 {-# INLINE inCheck #-}
-
-wPawnMoves :: Word64 -> Word64 -> Word64 -> [Ply] -> [Ply]
-wPawnMoves !pawns !emptySquares !opponentPieces =
-    flip (foldBits $ mkPly 9) eastCaptureTargets
-  . flip (foldBits $ mkPly 7) westCaptureTargets
-  . flip (foldBits $ mkPly 8) singlePushTargets
-  . flip (foldBits $ mkPly 16) doublePushTargets
- where
-  !doublePushTargets = shiftN singlePushTargets .&. emptySquares .&. rank4
-  !singlePushTargets = shiftN pawns .&. emptySquares
-  !eastCaptureTargets = shiftNE pawns .&. opponentPieces
-  !westCaptureTargets = shiftNW pawns .&. opponentPieces
-  mkPly diff ms tsq
-    | tsq >= 56 = (promoteTo m <$> [Queen, Rook, Bishop, Knight]) <> ms
-    | otherwise = m : ms
-   where m = move (Sq (tsq - diff)) (Sq tsq)
-
-bPawnMoves :: Word64 -> Word64 -> Word64 -> [Ply] -> [Ply]
-bPawnMoves !pawns !emptySquares !opponentPieces =
-    flip (foldBits $ mkPly 9) westCaptureTargets
-  . flip (foldBits $ mkPly 7) eastCaptureTargets
-  . flip (foldBits $ mkPly 8) singlePushTargets
-  . flip (foldBits $ mkPly 16) doublePushTargets
- where
-  !doublePushTargets = shiftS singlePushTargets .&. emptySquares .&. rank5
-  !singlePushTargets = shiftS pawns .&. emptySquares
-  !eastCaptureTargets = shiftSE pawns .&. opponentPieces
-  !westCaptureTargets = shiftSW pawns .&. opponentPieces
-  mkPly diff ms tsq
-    | tsq <= 7  = (promoteTo m <$> [Queen, Rook, Bishop, Knight]) <> ms
-    | otherwise = m : ms
-   where m = move (Sq (tsq + diff)) (Sq tsq)
-
-slideMoves :: PieceType -> Position -> Word64 -> Word64 -> [Ply] -> [Ply]
-slideMoves piece Position{qbb, color} !notOurs !occ =
-  flip (foldBits gen) (pieces qbb)
- where
-  gen ms src = foldBits (mkPly src) ms (targets src occ .&. notOurs)
-  mkPly src ms dst = move (Sq src) (Sq dst) : ms
-  (# targets, pieces #) = case (# color, piece #) of
-    (# White, Bishop #) -> (# bishopTargets, QBB.wBishops #)
-    (# Black, Bishop #) -> (# bishopTargets, QBB.bBishops #)
-    (# White, Rook #)   -> (# rookTargets, QBB.wRooks #)
-    (# Black, Rook #)   -> (# rookTargets, QBB.bRooks #)
-    (# White, Queen #)  -> (# queenTargets, QBB.wQueens #)
-    (# Black, Queen #)  -> (# queenTargets, QBB.bQueens #)
-    _                   -> error "Not a sliding piece"
 
 data Castle = Kingside | Queenside deriving (Eq, Ix, Ord, Show)
 

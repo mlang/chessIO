@@ -3,8 +3,10 @@
 module Main where
 
 import           Control.Parallel.Strategies
+import Data.MonoTraversable
 import           Data.Foldable
 import           Data.Maybe
+import qualified Data.Vector.Unboxed as Vector
 import           Data.Monoid
 import           Data.Time.Clock
 import           Data.Traversable
@@ -54,10 +56,10 @@ showResult depth PerftResult{nodes} = show depth <> " " <> show nodes
 
 perft :: Depth -> Position -> PerftResult
 perft 0 _ = PerftResult 1
-perft 1 p = PerftResult . fromIntegral . length $ legalPlies p
+perft 1 p = PerftResult . fromIntegral . Vector.length $ legalPlies' p
 perft n p
-  | n < 4
-  = foldMap (perft (pred n) . unsafeDoPly p) $ legalPlies p
+  | n < 5
+  = Vector.foldMap' (perft (pred n) . unsafeDoPly p) $ legalPlies' p
   | otherwise
   = fold . parMap rdeepseq (perft (pred n) . unsafeDoPly p) $ legalPlies p
 

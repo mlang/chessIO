@@ -3,13 +3,13 @@ module Game.Chess.Internal.Square where
 
 import           Control.Lens   (Iso', from, iso, view)
 import           Data.Bifunctor (Bifunctor (..))
-import           Data.Binary
+import           Data.Binary    (Binary (get, put), getWord8, putWord8)
 import           Data.Bits      (Bits (testBit))
 import           Data.Char      (chr, ord)
 import           Data.Coerce    (coerce)
 import           Data.Ix        (Ix (..))
 import           Data.String    (IsString (fromString))
-import           Data.Word
+import           Data.Word      (Word64)
 import           GHC.Stack      (HasCallStack)
 
 newtype Rank = Rank Int deriving (Eq, Ord)
@@ -223,9 +223,9 @@ file :: Square -> File
 file = File . (`mod` 8) . coerce
 
 rankFile :: Iso' Square (Rank, File)
-rankFile = iso f t where
-  f (Sq i) = bimap Rank File $ i `divMod` 8
-  t (Rank r, File f) = Sq $ r*8 + f
+rankFile = iso rf sq where
+  rf (Sq i) = bimap Rank File $ i `divMod` 8
+  sq (Rank r, File f) = Sq $ r*8 + f
 
 mapRank :: (Rank -> Rank) -> Square -> Square
 mapRank f = view (from rankFile) . first f . view rankFile

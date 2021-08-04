@@ -46,6 +46,7 @@ import           Data.String                (IsString (fromString))
 import qualified Data.Text                  as Strict (Text)
 import qualified Data.Text.Lazy             as Lazy (Text)
 import           Data.Traversable           (mapAccumL)
+import qualified Data.Vector.Unboxed        as Vector
 import           Data.Void                  (Void)
 import           Data.Word                  (Word8)
 import           GHC.Stack                  (HasCallStack)
@@ -54,7 +55,7 @@ import           Game.Chess.Internal        (Castle (Kingside, Queenside),
                                              Ply, Position (color, moveNumber),
                                              bKscm, bQscm, canCastleKingside,
                                              canCastleQueenside, doPly, inCheck,
-                                             isCapture, legalPlies,
+                                             isCapture, legalPlies, legalPlies',
                                              pattern Bishop, pattern King,
                                              pattern Knight, pattern Pawn,
                                              pattern Queen, pattern Rook,
@@ -202,9 +203,9 @@ relaxedSAN pos = (castling pos <|> normal) <* optional sanStatus where
     (src, _, dst) <- conv <$> location
     prm <- optional $ optional (chunk "=") *> promotionPiece
     case possible pc src dst prm of
-      [m] -> pure m
-      []  -> fail "Illegal move"
-      _   -> fail "Ambiguous move"
+      cand | Vector.length cand == 1 -> pure $ Vector.unsafeIndex cand 0
+           | Vector.length cand == 0 -> fail "Illegal move"
+      _ -> fail "Ambiguous move"
   conv (Nothing, Nothing, cap, to) = (Nothing, cap, to)
   conv (Just f, Nothing, cap, to) = (Just (F f), cap, to)
   conv (Nothing, Just r, cap, to) = (Just (R r), cap, to)
@@ -215,8 +216,8 @@ relaxedSAN pos = (castling pos <|> normal) <* optional sanStatus where
                         <*> capture <*> squareP)
          <|>      (Nothing,Nothing,,) <$> capture <*> squareP
   capture = option False $ chunk "x" $> True
-  ms = legalPlies pos
-  possible pc src dst prm = filter (f src) ms where
+  ms = legalPlies' pos
+  possible pc src dst prm = Vector.filter (f src) ms where
     f (Just (RF sq)) (unpack -> (src', dst', prm')) =
       pAt src' == pc && src' == sq && dst' == dst && prm' == prm
     f (Just (F ff)) (unpack -> (src', dst', prm')) =

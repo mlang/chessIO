@@ -26,10 +26,9 @@ module Game.Chess.Polyglot (
 ) where
 
 import           Control.Arrow              (Arrow ((&&&)))
-import           Control.Lens               (makeLenses, (%~))
+import           Control.Lens               (makeLenses)
 import           Control.Monad.Random       (Rand)
 import qualified Control.Monad.Random       as Rand
-import           Control.Monad.ST           (ST, runST)
 import           Data.Bits                  (Bits (shiftL, shiftR, (.|.)))
 import           Data.ByteString            (ByteString)
 import qualified Data.ByteString            as BS

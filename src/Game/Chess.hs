@@ -52,7 +52,7 @@ module Game.Chess (
   -- ** Convertion
 , fromUCI, toUCI
   -- ** Move generation
-, legalPlies
+, legalPlies, legalPlies'
   -- ** Executing moves
 , doPly, unsafeDoPly
 ) where
