@@ -3,6 +3,8 @@
 ## chessIO 0.9.1.0
 
 - Add a Binary instance for Square
+- Reimplement move generator in the ST monad with unboxed vector.
+  New function legalPlies' and speedup of roughly 15% and 300% less allocations.
 
 ## chessIO 0.9.0.0
 
