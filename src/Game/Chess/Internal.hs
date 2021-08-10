@@ -71,7 +71,6 @@ type Bitboard = Word64
 
 testSquare :: Bitboard -> Square -> Bool
 testSquare bb (Sq sq) = 1 `unsafeShiftL` sq .&. bb /= 0
-
 {-# INLINE testSquare #-}
 
 capturing :: Position -> Ply -> Maybe PieceType
@@ -141,8 +140,8 @@ data Position = Position {
 , color         :: !Color
   -- ^ active color
 , flags         :: {-# UNPACK #-} !Word64
-, halfMoveClock :: {-# UNPACK #-} !Word16
-, moveNumber    :: {-# UNPACK #-} !Word16
+, halfMoveClock :: {-# UNPACK #-} !Int
+, moveNumber    :: {-# UNPACK #-} !Int
   -- ^ number of the full move
 } deriving (Generic, Lift)
 
@@ -244,11 +243,11 @@ toFEN Position{qbb, color, flags, halfMoveClock, moveNumber} = unwords
   showEP 0 = "-"
   showEP x = toCoord . Sq . bitScanForward $ x
 
-occupiedBy :: Color -> QuadBitboard -> Word64
+occupiedBy :: Color -> QuadBitboard -> Bitboard
 occupiedBy White = QBB.white
 occupiedBy Black = QBB.black
 
-occupied :: QuadBitboard -> Word64
+occupied :: QuadBitboard -> Bitboard
 occupied = QBB.occupied
 
 bitScanForward, bitScanReverse :: Word64 -> Int
@@ -356,7 +355,7 @@ relativeTo :: Position -> Ply -> Maybe Ply
 relativeTo pos m | m `Vector.elem` legalPlies' pos = Just m
                  | otherwise = Nothing
 
-shiftN, shiftNN, shiftNNE, shiftNE, shiftENE, shiftE, shiftESE, shiftSE, shiftSSE, shiftS, shiftSS, shiftSSW, shiftSW, shiftWSW, shiftW, shiftWNW, shiftNW, shiftNNW :: Word64 -> Word64
+shiftN, shiftNN, shiftNNE, shiftNE, shiftENE, shiftE, shiftESE, shiftSE, shiftSSE, shiftS, shiftSS, shiftSSW, shiftSW, shiftWSW, shiftW, shiftWNW, shiftNW, shiftNNW :: Bitboard -> Bitboard
 shiftN   w = w `unsafeShiftL` 8
 shiftNN   w = w `unsafeShiftL` 16
 shiftNNE w = w `unsafeShiftL` 17 .&. notAFile
@@ -494,6 +493,7 @@ legalPlies' pos@Position{color, qbb, flags} = runST $ do
           VUM.unsafeWrite v i' pl
           modifySTRef' i (+ 1)
         | otherwise = pure ()
+      {-# INLINE add #-}
 
   case color of
     White -> do
@@ -502,12 +502,12 @@ legalPlies' pos@Position{color, qbb, flags} = runST $ do
           !notUs = complement us
           !occ = us .|. them
           !notOcc = complement occ
-          !captureTargets = them .|. ep flags
 
       -- Pawn
       let !wPawns = QBB.wPawns qbb
       let !singlePushTargets = shiftN wPawns .&. notOcc
       let !doublePushTargets = shiftN singlePushTargets .&. notOcc .&. rank4
+      let !captureTargets = them .|. ep flags
       let !eastCaptureTargets = shiftNE wPawns .&. captureTargets
       let !westCaptureTargets = shiftNW wPawns .&. captureTargets
       let pawn s d
@@ -526,26 +526,11 @@ legalPlies' pos@Position{color, qbb, flags} = runST $ do
       forBits doublePushTargets $ \dst ->
         pawn (dst - 16) dst
 
-      -- Knight
-      forBits (QBB.wKnights qbb) $ \src -> do
-        forBits (knightAttacks `unsafeIndex` src .&. notUs) $ \dst -> do
-          add $ move (Sq src) (Sq dst)
-
-      -- sliders (QBB.wBishops qbb) (QBB.wRooks qbb) (QBB.wQueens qbb) occ notOurs add
-      -- Bishop
-      forBits (QBB.wBishops qbb) $ \src -> do
-        forBits (bishopTargets src occ .&. notUs) $ \dst -> do
-          add $ move (Sq src) (Sq dst)
-
-      -- Rook
-      forBits (QBB.wRooks qbb) $ \src -> do
-        forBits (rookTargets src occ .&. notUs) $ \dst -> do
-          add $ move (Sq src) (Sq dst)
-
-      -- Queen
-      forBits (QBB.wQueens qbb) $ \src -> do
-        forBits (queenTargets src occ .&. notUs) $ \dst -> do
-          add $ move (Sq src) (Sq dst)
+      piecePlies (QBB.wKnights qbb)
+                 (QBB.wBishops qbb)
+                 (QBB.wRooks qbb)
+                 (QBB.wQueens qbb)
+        occ notUs add
 
       -- King
       forBits (QBB.wKings qbb) $ \src -> do
@@ -560,12 +545,12 @@ legalPlies' pos@Position{color, qbb, flags} = runST $ do
           !notUs = complement us
           !occ = us .|. them
           !notOcc = complement occ
-          !captureTargets = them .|. ep flags
 
       -- Pawn
       let !bPawns = QBB.bPawns qbb
       let !singlePushTargets = shiftS bPawns .&. notOcc
       let !doublePushTargets = shiftS singlePushTargets .&. notOcc .&. rank5
+      let !captureTargets = them .|. ep flags
       let !eastCaptureTargets = shiftSE bPawns .&. captureTargets
       let !westCaptureTargets = shiftSW bPawns .&. captureTargets
       let pawn s d
@@ -584,26 +569,11 @@ legalPlies' pos@Position{color, qbb, flags} = runST $ do
       forBits doublePushTargets $ \dst ->
         pawn (dst + 16) dst
 
-      -- Knight
-      forBits (QBB.bKnights qbb) $ \src -> do
-        forBits (knightAttacks `unsafeIndex` src .&. notUs) $ \dst -> do
-          add $ move (Sq src) (Sq dst)
-
-      -- sliders (QBB.bBishops qbb) (QBB.bRooks qbb) (QBB.bQueens qbb) occ notOurs add
-      -- Bishop
-      forBits (QBB.bBishops qbb) $ \src -> do
-        forBits (bishopTargets src occ .&. notUs) $ \dst -> do
-          add $ move (Sq src) (Sq dst)
-
-      -- Rook
-      forBits (QBB.bRooks qbb) $ \src -> do
-        forBits (rookTargets src occ .&. notUs) $ \dst -> do
-          add $ move (Sq src) (Sq dst)
-
-      -- Queen
-      forBits (QBB.bQueens qbb) $ \src -> do
-        forBits (queenTargets src occ .&. notUs) $ \dst -> do
-          add $ move (Sq src) (Sq dst)
+      piecePlies (QBB.bKnights qbb)
+                 (QBB.bBishops qbb)
+                 (QBB.bRooks qbb)
+                 (QBB.bQueens qbb)
+        occ notUs add
 
       -- King
       forBits (QBB.bKings qbb) $ \src -> do
@@ -612,21 +582,25 @@ legalPlies' pos@Position{color, qbb, flags} = runST $ do
       when (canBlackCastleKingside pos occ) $ add bKscm
       when (canBlackCastleQueenside pos occ) $ add bQscm
 
-  i' <- readSTRef i
-  Vector.freeze $ VUM.slice 0 i' v
+  Vector.unsafeFreeze =<< ($ v) . VUM.unsafeSlice 0 <$> readSTRef i
 
-sliders :: Word64 -> Word64 -> Word64 -> Word64 -> Word64 -> (Ply -> ST s ())
-        -> ST s ()
-sliders !bishops !rooks !queens !occ !notOurs add = do
+piecePlies :: Bitboard -> Bitboard -> Bitboard -> Bitboard
+           -> Bitboard -> Bitboard -> (Ply -> ST s ())
+           -> ST s ()
+piecePlies !knights !bishops !rooks !queens !occ !notUs add = do
+  forBits knights $ \src -> do
+    forBits (knightAttacks `unsafeIndex` src .&. notUs) $ \dst -> do
+      add $ move (Sq src) (Sq dst)
   forBits bishops $ \src -> do
-    forBits (bishopTargets src occ .&. notOurs) $ \dst -> do
+    forBits (bishopTargets src occ .&. notUs) $ \dst -> do
       add $ move (Sq src) (Sq dst)
   forBits rooks $ \src -> do
-    forBits (rookTargets src occ .&. notOurs) $ \dst -> do
+    forBits (rookTargets src occ .&. notUs) $ \dst -> do
       add $ move (Sq src) (Sq dst)
   forBits queens $ \src -> do
-    forBits (queenTargets src occ .&. notOurs) $ \dst -> do
+    forBits (queenTargets src occ .&. notUs) $ \dst -> do
       add $ move (Sq src) (Sq dst)
+{-# INLINE piecePlies #-}
 
 -- | Returns 'True' if 'Color' is in check in the given position.
 inCheck :: Color -> Position -> Bool
