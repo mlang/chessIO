@@ -1,5 +1,10 @@
 # Releases
 
+## chessIO 0.9.2.0
+
+- Move `cbookview` into a separate repository, removing the build-dep on brick
+- Update internal book
+
 ## chessIO 0.9.1.0
 
 - Add a Binary instance for Square
