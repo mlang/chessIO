@@ -13,8 +13,7 @@ import           Control.Monad.Random
 import           Data.IORef
 import           Data.List
 import           Data.String
-import           Data.Text.Encoding                    (decodeUtf8)
-import           Data.Text.Prettyprint.Doc.Render.Text
+import           Data.Text.Encoding        (decodeUtf8)
 import           Data.Time.Clock
 import           Data.Tree
 import           Game.Chess
@@ -23,7 +22,8 @@ import           Game.Chess.Polyglot
 import           Game.Chess.SAN
 import           Game.Chess.UCI
 import           Options.Applicative
-import           System.IO                             (hPutStrLn, stderr)
+import           Prettyprinter.Render.Text
+import           System.IO                 (hPutStrLn, stderr)
 import           Time.Units
 
 data Clock = Clock !Color !NominalDiffTime !NominalDiffTime !UTCTime

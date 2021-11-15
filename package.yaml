@@ -13,8 +13,7 @@ description: A simple and fast library for generating legal chess moves.
   speak the UCI (Universal Chess Interface) protocol, a PGN parser/pretty printer,
   and Polyglot opening book support.
   On top of that, provides a console frontend program (cboard) that can be used
-  to interactively play against UCI engines, and a terminal program (cbookview)
-  to explore commonly played chess openings.
+  to interactively play against UCI engines.
 
 tested-with:
 - GHC==8.6.5
@@ -37,7 +36,7 @@ dependencies:
 - mono-traversable
 - MonadRandom
 - o-clock
-- prettyprinter
+- prettyprinter >= 1.7.0
 - process
 - random
 - stm
@@ -87,17 +86,6 @@ executables:
     - chessIO
     - optparse-applicative
     - time
-  cbookview:
-    main:         cbookview.hs
-    source-dirs:  app
-    ghc-options: -threaded
-    dependencies:
-    - chessIO
-    - rosezipper
-    - filepath
-    - brick
-    - lens
-    - vty
 
 tests:
   perft:

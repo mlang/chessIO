@@ -7,7 +7,7 @@ cabal-version: 1.12
 name:           chessIO
 version:        0.9.1.0
 synopsis:       Basic chess library
-description:    A simple and fast library for generating legal chess moves. Also includes a module for communication with external processes that speak the UCI (Universal Chess Interface) protocol, a PGN parser/pretty printer, and Polyglot opening book support. On top of that, provides a console frontend program (cboard) that can be used to interactively play against UCI engines, and a terminal program (cbookview) to explore commonly played chess openings.
+description:    A simple and fast library for generating legal chess moves. Also includes a module for communication with external processes that speak the UCI (Universal Chess Interface) protocol, a PGN parser/pretty printer, and Polyglot opening book support. On top of that, provides a console frontend program (cboard) that can be used to interactively play against UCI engines.
 category:       Game
 homepage:       https://github.com/mlang/chessIO#readme
 bug-reports:    https://github.com/mlang/chessIO/issues
@@ -66,7 +66,7 @@ library
     , megaparsec >=9.0
     , mono-traversable
     , o-clock
-    , prettyprinter
+    , prettyprinter >=1.7.0
     , process
     , random
     , stm
@@ -105,7 +105,7 @@ executable cboard
     , mono-traversable
     , mtl
     , o-clock
-    , prettyprinter
+    , prettyprinter >=1.7.0
     , process
     , random
     , stm
@@ -117,47 +117,6 @@ executable cboard
     , vector
     , vector-binary-instances
     , vector-instances
-  default-language: Haskell2010
-
-executable cbookview
-  main-is: cbookview.hs
-  other-modules:
-      Paths_chessIO
-  hs-source-dirs:
-      app
-  ghc-options: -O2 -threaded
-  build-depends:
-      MonadRandom
-    , attoparsec
-    , base >=4.10 && <5
-    , binary
-    , brick
-    , bytestring
-    , chessIO
-    , containers
-    , deepseq
-    , extra
-    , file-embed
-    , filepath
-    , hashable
-    , lens
-    , megaparsec >=9.0
-    , mono-traversable
-    , o-clock
-    , prettyprinter
-    , process
-    , random
-    , rosezipper
-    , stm
-    , template-haskell >=2.9.0.0
-    , text
-    , th-compat >=0.1.2
-    , th-lift-instances
-    , unordered-containers
-    , vector
-    , vector-binary-instances
-    , vector-instances
-    , vty
   default-language: Haskell2010
 
 executable polyplay
@@ -184,7 +143,7 @@ executable polyplay
     , mono-traversable
     , o-clock
     , optparse-applicative
-    , prettyprinter
+    , prettyprinter >=1.7.0
     , process
     , random
     , stm
@@ -225,7 +184,7 @@ test-suite perft
     , mono-traversable
     , o-clock
     , parallel
-    , prettyprinter
+    , prettyprinter >=1.7.0
     , process
     , random
     , stm
@@ -265,7 +224,7 @@ test-suite polyglot
     , megaparsec >=9.0
     , mono-traversable
     , o-clock
-    , prettyprinter
+    , prettyprinter >=1.7.0
     , process
     , random
     , stm

@@ -524,7 +524,7 @@ legalPlies' pos@Position{color, qbb, flags} = runST $ do
       forBits singlePushTargets $ \dst ->
         pawn (dst - 8) dst
       forBits doublePushTargets $ \dst ->
-        pawn (dst - 16) dst
+        add $ move (Sq $ dst - 16) (Sq dst)
 
       piecePlies (QBB.wKnights qbb)
                  (QBB.wBishops qbb)
@@ -567,7 +567,7 @@ legalPlies' pos@Position{color, qbb, flags} = runST $ do
       forBits singlePushTargets $ \dst ->
         pawn (dst + 8) dst
       forBits doublePushTargets $ \dst ->
-        pawn (dst + 16) dst
+        add $ move (Sq $ dst + 16) (Sq dst)
 
       piecePlies (QBB.bKnights qbb)
                  (QBB.bBishops qbb)

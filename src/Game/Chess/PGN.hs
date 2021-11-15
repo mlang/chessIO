@@ -36,51 +36,46 @@ module Game.Chess.PGN (
 , weightedForest
 ) where
 
-import           Control.Lens                          (makeLenses, makePrisms,
-                                                        makeWrapped)
-import           Control.Monad                         (void)
-import           Control.Monad.IO.Class                (MonadIO (..))
-import           Data.Bifunctor                        (Bifunctor (first))
-import           Data.ByteString.Char8                 (ByteString)
-import qualified Data.ByteString.Char8                 as BS
-import           Data.Char                             (chr, ord)
-import           Data.Foldable                         (for_)
-import           Data.Functor                          (($>))
-import           Data.Hashable                         (Hashable (..))
-import           Data.List                             (partition, sortOn)
-import           Data.Maybe                            (fromJust, isNothing)
-import           Data.Ord                              (Down (Down))
-import           Data.Ratio                            ((%))
-import           Data.Text                             (Text)
-import qualified Data.Text                             as T
-import           Data.Text.Encoding                    as T (decodeUtf8)
-import           Data.Text.Prettyprint.Doc             (Doc,
-                                                        FusionDepth (Shallow),
-                                                        Pretty (pretty),
-                                                        brackets, dquotes,
-                                                        fillSep, fuse, line,
-                                                        parens, vsep, (<+>))
-import           Data.Text.Prettyprint.Doc.Render.Text (hPutDoc)
-import           Data.Tree                             (Tree (..), foldTree)
-import           Data.Void                             (Void)
-import           Data.Word                             (Word8)
-import           GHC.Generics                          (Generic)
-import           Game.Chess.Internal                   (Color (..), Ply,
-                                                        Position (color, moveNumber),
-                                                        fromFEN, startpos,
-                                                        unsafeDoPly)
-import           Game.Chess.SAN                        (relaxedSAN, unsafeToSAN)
-import           Language.Haskell.TH.Syntax            (Lift)
-import           System.IO                             (Handle, hPutStrLn)
-import           Text.Megaparsec                       (MonadParsec (eof),
-                                                        Parsec, anySingleBut,
-                                                        errorBundlePretty, many,
-                                                        match, oneOf, optional,
-                                                        parse, single, (<?>),
-                                                        (<|>))
-import           Text.Megaparsec.Byte                  (alphaNumChar, space,
-                                                        space1, string)
-import qualified Text.Megaparsec.Byte.Lexer            as L
+import           Control.Lens               (makeLenses, makePrisms,
+                                             makeWrapped)
+import           Control.Monad              (void)
+import           Control.Monad.IO.Class     (MonadIO (..))
+import           Data.Bifunctor             (Bifunctor (first))
+import           Data.ByteString.Char8      (ByteString)
+import qualified Data.ByteString.Char8      as BS
+import           Data.Char                  (chr, ord)
+import           Data.Foldable              (for_)
+import           Data.Functor               (($>))
+import           Data.Hashable              (Hashable (..))
+import           Data.List                  (partition, sortOn)
+import           Data.Maybe                 (fromJust, isNothing)
+import           Data.Ord                   (Down (Down))
+import           Data.Ratio                 ((%))
+import           Data.Text                  (Text)
+import qualified Data.Text                  as T
+import           Data.Text.Encoding         as T (decodeUtf8)
+import           Data.Tree                  (Tree (..), foldTree)
+import           Data.Void                  (Void)
+import           Data.Word                  (Word8)
+import           GHC.Generics               (Generic)
+import           Game.Chess.Internal        (Color (..), Ply,
+                                             Position (color, moveNumber),
+                                             fromFEN, startpos, unsafeDoPly)
+import           Game.Chess.SAN             (relaxedSAN, unsafeToSAN)
+import           Language.Haskell.TH.Syntax (Lift)
+import           Prettyprinter                (Doc, FusionDepth (Shallow),
+                                             Pretty (pretty), brackets, dquotes,
+                                             fillSep, fuse, line, parens, vsep,
+                                             (<+>))
+import           Prettyprinter.Render.Text    (hPutDoc)
+import           System.IO                  (Handle, hPutStrLn)
+import           Text.Megaparsec            (MonadParsec (eof), Parsec,
+                                             anySingleBut, errorBundlePretty,
+                                             many, match, oneOf, optional,
+                                             parse, single, (<?>), (<|>))
+import           Text.Megaparsec.Byte       (alphaNumChar, space, space1,
+                                             string)
+import qualified Text.Megaparsec.Byte.Lexer as L
 
 data Annotated a = Ann {
   _annPrefixNAG :: ![Int]
