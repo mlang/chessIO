@@ -52,11 +52,11 @@ import           Game.Chess.Internal        (Color (..), Ply (..),
                                              bKscm, bQscm, canCastleKingside,
                                              canCastleQueenside, doPly, move,
                                              startpos, toFEN, unpack,
-                                             unsafeDoPly, wKscm, wQscm)
+                                             unsafeDoPly, wKscm, wQscm,
+                                             hashPosition)
 import           Game.Chess.Internal.Square
 import           Game.Chess.PGN             (Outcome (Undecided), PGN (..),
                                              gameFromForest, weightedForest)
-import           Game.Chess.Polyglot.Hash   (hashPosition)
 import           System.Random              (RandomGen)
 
 data BookEntry a = BE {
