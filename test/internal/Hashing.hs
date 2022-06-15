@@ -2,7 +2,8 @@ module Main where
 
 import           Numeric                     (showHex)
 import           Data.Maybe                  (fromJust)
-import           Game.Chess.Internal         (Position (Position, key), Ply, doPly, startpos, legalPlies, fromFEN, toFEN, unsafeDoPly)
+import           Game.Chess.Internal         (Position (Position, key), Ply, doPly, startpos, legalPlies, fromFEN, toFEN, unsafeDoPly, hashPosition, repetitionInfo, move)
+import           Game.Chess.Internal.Square
 import           System.Exit                 (exitSuccess, exitFailure)
 import           Test.QuickCheck             (Arbitrary, arbitrary, Gen, chooseInt, sized, quickCheckResult, withMaxSuccess,
                                               Result (Success))
@@ -26,7 +27,7 @@ instance Arbitrary MoveSequence where
 
 toPositionSequence :: [Ply] -> [Position]
 toPositionSequence plies =
-  let inner _   []     = []
+  let inner pos []     = [pos]
       inner pos (p:ps) = pos:inner (unsafeDoPly pos p) ps
     in inner startpos plies
 
@@ -36,12 +37,12 @@ testGameTreeHashes :: MoveSequence -> Bool
 testGameTreeHashes = all hashesMatch . toPositionSequence . unwrapMoveSequence
   where
     hashesMatch pos = let
-        k  = key pos
-        k' = key . fromJust . fromFEN . toFEN $ pos
-      in k == k'
+        k = key pos
+        h = hashPosition pos
+      in k == h
 
 main = do
     result <- quickCheckResult testGameTreeHashes
     case result of
-        Success{} -> exitSuccess 
-        _ -> exitFailure 
+        Success{} -> exitSuccess
+        _ -> exitFailure

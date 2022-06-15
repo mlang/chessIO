@@ -11,7 +11,7 @@
 module Game.Chess.Internal.QuadBitboard (
   -- * The QuadBitboard data type
   QuadBitboard
-, occupied, black, white
+, occupied, black, white, anyBits
 , pawns, knights, bishops, rooks, queens, kings
 , wPawns, wKnights, wBishops, wRooks, wQueens, wKings
 , bPawns, bKnights, bBishops, bRooks, bQueens, bKings
@@ -82,6 +82,7 @@ bishops  = liftA2 (.&.) pbq nbk
 rooks    = liftA2 (.&.) pnr rqk
 queens   = liftA2 (.&.) pbq rqk
 kings    = liftA2 (.&.) nbk rqk
+anyBits  = liftA2 (.|.) occupied black
 
 wPawns, wKnights, wBishops, wRooks, wQueens, wKings :: QuadBitboard -> Word64
 wPawns   = liftA2 (.&.) pawns (complement . black)
