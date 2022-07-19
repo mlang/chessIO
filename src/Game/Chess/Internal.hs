@@ -123,7 +123,7 @@ instance Show PieceType where
     Queen  -> "Queen"
     King   -> "King"
 
-data Color = Black | White deriving (Eq, Generic, Bounded, Ix, Ord, Lift, Show)
+data Color = Black | White deriving (Eq, Generic, Ix, Ord, Lift, Show)
 
 instance Binary Color
 instance NFData Color

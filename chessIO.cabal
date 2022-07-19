@@ -35,13 +35,13 @@ source-repository head
 
 library
   exposed-modules:
-       Game.Chess
-       Game.Chess.ECO
-       Game.Chess.PGN
-       Game.Chess.Polyglot
-       Game.Chess.SAN
-       Game.Chess.Tree
-       Game.Chess.UCI
+      Game.Chess
+      Game.Chess.ECO
+      Game.Chess.PGN
+      Game.Chess.Polyglot
+      Game.Chess.SAN
+      Game.Chess.Tree
+      Game.Chess.UCI
   other-modules:
       Game.Chess.Internal
       Game.Chess.Internal.ECO
