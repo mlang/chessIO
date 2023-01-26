@@ -290,7 +290,7 @@ unsafeToSAN pos m@(unpack -> (src, dst, promo)) =
     Bishop -> 'B' : source <> target
     Rook   -> 'R' : source <> target
     Queen  -> 'Q' : source <> target
-  piece = fromJust $ snd <$> pieceAt pos src
+  piece = snd (fromJust (pieceAt pos src))
   capture = isCapture pos m
   source
     | length ms == 1              = []

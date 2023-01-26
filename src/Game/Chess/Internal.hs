@@ -582,7 +582,7 @@ legalPlies' pos@Position{color, qbb, flags} = runST $ do
       when (canBlackCastleKingside pos occ) $ add bKscm
       when (canBlackCastleQueenside pos occ) $ add bQscm
 
-  Vector.unsafeFreeze =<< ($ v) . VUM.unsafeSlice 0 <$> readSTRef i
+  Vector.unsafeFreeze . ($ v) . VUM.unsafeSlice 0 =<< readSTRef i
 
 piecePlies :: Bitboard -> Bitboard -> Bitboard -> Bitboard
            -> Bitboard -> Bitboard -> (Ply -> ST s ())

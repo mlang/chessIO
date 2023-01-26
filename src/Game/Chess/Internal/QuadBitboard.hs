@@ -189,7 +189,7 @@ instance Storable QuadBitboard where
   alignment _ = 8
   peek p = QBB <$> peek (castPtr p) <*> peek (castPtr $ p `plusPtr` 8) <*> peek (castPtr $ p `plusPtr` 16) <*> peek (castPtr $ p `plusPtr` 24)
   poke p QBB{black, pbq, nbk, rqk} = do
-    poke (castPtr $ p) black
+    poke (castPtr p) black
     poke (castPtr $ p `plusPtr` 8) pbq
     poke (castPtr $ p `plusPtr` 16) nbk
     poke (castPtr $ p `plusPtr` 24) rqk
