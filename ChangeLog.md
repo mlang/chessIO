@@ -1,5 +1,9 @@
 # Releases
 
+## chessIO 0.9.3.1
+
+- Update internal book
+
 ## chessIO 0.9.3.0
 
 - Builds with GHC 9.2.1
