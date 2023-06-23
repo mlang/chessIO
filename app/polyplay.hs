@@ -135,13 +135,12 @@ draw pos = insufficientMaterial pos || stalemate pos
 play :: Runtime -> IO ([Ply], Outcome)
 play rt@Runtime{book, history, active, passive, clock} = do
   let pos = uncurry (foldl' unsafeDoPly) history
-  let poss = snd $ uncurry (mapAccumL (\p pl -> (unsafeDoPly p pl, p))) history
   clockRemaining clock (color pos) >>= \case
     Nothing -> pure (snd history, Win . opponent . color $ pos)
     Just _ ->
       if | draw pos    -> pure (snd history, Draw)
          | checkmate pos -> pure (snd history, Win . opponent . color $ pos)
-         | Just (n, _) <- repetitions poss
+         | n <- repetitions pos
          , n >= 3        -> pure (snd history, Draw)
          | otherwise     -> case bookPly book pos of
              Just r -> do
