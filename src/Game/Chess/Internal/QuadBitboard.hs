@@ -72,14 +72,13 @@ data QuadBitboard = QBB { black, pbq, nbk, rqk :: {-# UNPACK #-} !Word64 }
 
 instance NFData QuadBitboard
 
-occupied, pnr, white, pawns, knights, bishops, rooks, queens, kings :: QuadBitboard -> Word64
+occupied, white, pawns, knights, bishops, rooks, queens, kings :: QuadBitboard -> Word64
 occupied = liftA2 (.|.) pbq $ liftA2 (.|.) nbk rqk
-pnr      = liftA2  xor  pbq $ liftA2  xor  nbk rqk
 white    = liftA2  xor  occupied black
-pawns    = liftA2 (.&.) pnr pbq
-knights  = liftA2 (.&.) pnr nbk
+pawns    = liftA2 (.&.) pbq $ liftA2 (.&.) (complement . nbk) (complement . rqk)
+knights  = liftA2 (.&.) (complement . pbq) $ liftA2 (.&.) nbk (complement . rqk)
 bishops  = liftA2 (.&.) pbq nbk
-rooks    = liftA2 (.&.) pnr rqk
+rooks    = liftA2 (.&.) (complement . pbq) $ liftA2 (.&.) (complement . nbk) rqk
 queens   = liftA2 (.&.) pbq rqk
 kings    = liftA2 (.&.) nbk rqk
 
@@ -99,7 +98,6 @@ bRooks   = liftA2 (.&.) rooks black
 bQueens  = liftA2 (.&.) queens black
 bKings   = liftA2 (.&.) kings black
 
-{-# INLINE pnr #-}
 {-# INLINE occupied #-}
 {-# INLINE white #-}
 {-# INLINE pawns #-}
