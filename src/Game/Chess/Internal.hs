@@ -250,9 +250,9 @@ occupiedBy Black = QBB.black
 occupied :: QuadBitboard -> Bitboard
 occupied = QBB.occupied
 
-bitScanForward, bitScanReverse :: Word64 -> Int
+bitScanForward, bitScanReverse :: Bitboard -> Int
 bitScanForward = countTrailingZeros
-bitScanReverse bb = 63 - countLeadingZeros bb
+bitScanReverse = (63 -) . countLeadingZeros
 
 {-# INLINE bitScanForward #-}
 {-# INLINE bitScanReverse #-}
@@ -592,13 +592,13 @@ piecePlies !knights !bishops !rooks !queens !occ !notUs add = do
     forBits (knightAttacks `unsafeIndex` src .&. notUs) $ \dst -> do
       add $ move (Sq src) (Sq dst)
   forBits bishops $ \src -> do
-    forBits (bishopTargets src occ .&. notUs) $ \dst -> do
+    forBits (diagonal src occ .&. notUs) $ \dst -> do
       add $ move (Sq src) (Sq dst)
   forBits rooks $ \src -> do
-    forBits (rookTargets src occ .&. notUs) $ \dst -> do
+    forBits (orthogonal src occ .&. notUs) $ \dst -> do
       add $ move (Sq src) (Sq dst)
   forBits queens $ \src -> do
-    forBits (queenTargets src occ .&. notUs) $ \dst -> do
+    forBits ((orthogonal src occ .|. diagonal src occ) .&. notUs) $ \dst -> do
       add $ move (Sq src) (Sq dst)
 {-# INLINE piecePlies #-}
 
@@ -660,22 +660,18 @@ bKscm = move E8 G8
 bQscm = move E8 C8
 
 attackedBy :: Color -> QuadBitboard -> Word64 -> Square -> Bool
-attackedBy White !qbb !occ (Sq sq)
-  | unsafeIndex wPawnAttacks sq .&. QBB.wPawns qbb /= 0 = True
-  | unsafeIndex knightAttacks sq .&. QBB.wKnights qbb /= 0 = True
-  | bishopTargets sq occ .&. QBB.wBishops qbb /= 0 = True
-  | rookTargets sq occ .&.   QBB.wRooks qbb /= 0 = True
-  | queenTargets sq occ .&. QBB.wQueens qbb /= 0 = True
-  | unsafeIndex kingAttacks sq .&. QBB.wKings qbb /= 0   = True
-  | otherwise                        = False
-attackedBy Black !qbb !occ (Sq sq)
-  | unsafeIndex bPawnAttacks sq .&. QBB.bPawns qbb /= 0 = True
-  | unsafeIndex knightAttacks sq .&. QBB.bKnights qbb /= 0 = True
-  | bishopTargets sq occ .&. QBB.bBishops qbb /= 0 = True
-  | rookTargets sq occ .&.   QBB.bRooks qbb /= 0 = True
-  | queenTargets sq occ .&.  QBB.bQueens qbb /= 0 = True
-  | unsafeIndex kingAttacks sq .&. QBB.bKings qbb /= 0   = True
-  | otherwise                        = False
+attackedBy White !qbb !occ (Sq sq) =
+  (unsafeIndex wPawnAttacks sq .&. QBB.wPawns qbb) .|.
+  (unsafeIndex knightAttacks sq .&. QBB.wKnights qbb) .|.
+  (diagonal sq occ .&. QBB.wDiagonals qbb) .|.
+  (orthogonal sq occ .&.   QBB.wOrthogonals qbb) .|.
+  (unsafeIndex kingAttacks sq .&. QBB.wKings qbb) /= 0
+attackedBy Black !qbb !occ (Sq sq) =
+  (unsafeIndex bPawnAttacks sq .&. QBB.bPawns qbb) .|.
+  (unsafeIndex knightAttacks sq .&. QBB.bKnights qbb) .|.
+  (diagonal sq occ .&. QBB.bDiagonals qbb) .|.
+  (orthogonal sq occ .&.   QBB.bOrthogonals qbb) .|.
+  (unsafeIndex kingAttacks sq .&. QBB.bKings qbb) /= 0
 
 {-# INLINE attackedBy #-}
 
@@ -723,52 +719,35 @@ wPawnAttacks = Vector.generate 64 $ \sq -> let b = bit sq in
 bPawnAttacks = Vector.generate 64 $ \sq -> let b = bit sq in
   shiftNE b .|. shiftNW b
 
-rookTargets, bishopTargets, queenTargets :: Int -> Word64 -> Word64
-rookTargets !sq !occ = rayN occ sq .|. rayE occ sq
-                   .|. rayS occ sq .|. rayW occ sq
-bishopTargets !sq !occ = rayNW occ sq .|. rayNE occ sq
-                     .|. raySE occ sq .|. raySW occ sq
-queenTargets !sq !occ = rookTargets sq occ .|. bishopTargets sq occ
+orthogonal, diagonal :: Int -> Bitboard -> Bitboard
+orthogonal !sq !occ = mask .&. ((up .&. down) .|. (left .&. right)) where
+  mask = complement $ unsafeShiftL 1 sq
+  occ' = occ .&. mask
+  up = unsafeShiftR hFile $ (63 -) $ bitScanForward $
+       unsafeShiftL aFile sq .&. (occ' .|. rank8)
+  down = unsafeShiftL aFile $ bitScanReverse $
+         unsafeShiftR hFile (63 - sq) .&. (occ' .|. rank1)
+  right = unsafeShiftR rank8 $ (63 -) $ bitScanForward $
+          unsafeShiftL rank1 sq .&. (occ' .|. hFile)
+  left = unsafeShiftL rank1 $ bitScanReverse $
+         unsafeShiftR rank8 (63 - sq) .&. (occ' .|. aFile)
+diagonal !sq !occ = mask .&. ((up .&. down) .|. (left .&. right)) where
+  mask = complement $ unsafeShiftL 1 sq
+  occ' = occ .&. mask
+  up = unsafeShiftR a1h8 $ (63 -) $ bitScanForward $
+       unsafeShiftL a1h8 sq .&. (occ' .|. rank8 .|. hFile)
+  down = unsafeShiftL a1h8 $ bitScanReverse $
+         unsafeShiftR a1h8 (63 - sq) .&. (occ' .|. rank1 .|. aFile)
+  right = unsafeShiftL h1a8 $ bitScanReverse $
+          unsafeShiftR h1a8 (63 - sq) .&. (occ' .|. rank1 .|. hFile)
+  left = unsafeShiftR h1a8 $ (63 -) $ bitScanForward $
+         unsafeShiftL h1a8 sq .&. (occ' .|. aFile .|. rank8)
 
-rayTargets :: Vector Word64 -> (Word64 -> Int) -> Word64 -> Int -> Word64
-rayTargets !ray !bitScan !occ (unsafeIndex ray -> a) = case a .&. occ of
-  0               -> a
-  (bitScan -> sq) -> a `xor` unsafeIndex ray sq
-
-{-# INLINE rayTargets #-}
-
-rayNW, rayN, rayNE, rayE, raySE, rayS, raySW, rayW :: Word64 -> Int -> Word64
-rayNW = rayTargets attackNW bitScanForward
-rayN  = rayTargets attackN  bitScanForward
-rayNE = rayTargets attackNE bitScanForward
-rayE  = rayTargets attackE  bitScanForward
-raySE = rayTargets attackSE bitScanReverse
-rayS  = rayTargets attackS  bitScanReverse
-raySW = rayTargets attackSW bitScanReverse
-rayW  = rayTargets attackW  bitScanReverse
-
-{-# INLINE rayNW #-}
-{-# INLINE rayN #-}
-{-# INLINE rayNE #-}
-{-# INLINE rayE #-}
-{-# INLINE raySE #-}
-{-# INLINE rayS #-}
-{-# INLINE raySW #-}
-{-# INLINE rayW #-}
-
-attackDir :: (Word64 -> Word64) -> Vector Word64
-attackDir s = Vector.generate 64 $ \sq ->
-  foldr (.|.) 0 $ take 7 $ tail $ iterate s (bit sq)
-
-attackNW, attackN, attackNE, attackE, attackSE, attackS, attackSW, attackW :: Vector Word64
-attackNW = attackDir shiftNW
-attackN  = attackDir shiftN
-attackNE = attackDir shiftNE
-attackE  = attackDir shiftE
-attackSE = attackDir shiftSE
-attackS  = attackDir shiftS
-attackSW = attackDir shiftSW
-attackW  = attackDir shiftW
+aFile, hFile, a1h8, h1a8 :: Bitboard
+aFile = 0x0101010101010101
+hFile = 0x8080808080808080
+a1h8 = 0x8040201008040201
+h1a8 = 0x8102040810204081
 
 clearMask :: Bits a => a -> a -> a
 clearMask a b = a .&. complement b

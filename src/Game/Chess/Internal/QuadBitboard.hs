@@ -15,6 +15,7 @@ module Game.Chess.Internal.QuadBitboard (
 , pawns, knights, bishops, rooks, queens, kings
 , wPawns, wKnights, wBishops, wRooks, wQueens, wKings
 , bPawns, bKnights, bBishops, bRooks, bQueens, bKings
+, wOrthogonals, bOrthogonals, wDiagonals, bDiagonals
 , insufficientMaterial
 , toString
   -- * Square codes
@@ -98,6 +99,15 @@ bRooks   = liftA2 (.&.) rooks black
 bQueens  = liftA2 (.&.) queens black
 bKings   = liftA2 (.&.) kings black
 
+orthogonals, diagonals, wOrthogonals, bOrthogonals, wDiagonals, bDiagonals :: QuadBitboard -> Word64
+diagonals = liftA2 (.&.) pbq (complement . pawns)
+orthogonals = liftA2 (.&.) rqk (complement . kings)
+wOrthogonals = liftA2 (.&.) orthogonals (complement . black)
+bOrthogonals = liftA2 (.&.) orthogonals black
+wDiagonals = liftA2 (.&.) diagonals (complement . black)
+bDiagonals = liftA2 (.&.) diagonals black
+
+
 {-# INLINE occupied #-}
 {-# INLINE white #-}
 {-# INLINE pawns #-}
@@ -118,6 +128,14 @@ bKings   = liftA2 (.&.) kings black
 {-# INLINE bRooks #-}
 {-# INLINE bQueens #-}
 {-# INLINE bKings #-}
+{-# INLINE diagonals #-}
+{-# INLINE orthogonals #-}
+{-# INLINE wOrthogonals #-}
+{-# INLINE bOrthogonals #-}
+{-# INLINE wDiagonals #-}
+{-# INLINE bDiagonals #-}
+
+
 
 pattern NoPiece :: Word4
 pattern NoPiece     = 0
