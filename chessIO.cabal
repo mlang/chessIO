@@ -5,7 +5,7 @@ cabal-version: 1.12
 -- see: https://github.com/sol/hpack
 
 name:           chessIO
-version:        0.9.4.0
+version:        0.9.5.0
 synopsis:       Basic chess library
 description:    A simple and fast library for generating legal chess moves. Also includes a module for communication with external processes that speak the UCI (Universal Chess Interface) protocol, a PGN parser/pretty printer, and Polyglot opening book support. On top of that, provides a console frontend program (cboard) that can be used to interactively play against UCI engines.
 category:       Game
@@ -13,7 +13,7 @@ homepage:       https://github.com/mlang/chessIO#readme
 bug-reports:    https://github.com/mlang/chessIO/issues
 author:         Mario Lang
 maintainer:     mlang@blind.guru
-copyright:      2021 Mario Lang
+copyright:      2024 Mario Lang
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple

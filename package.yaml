@@ -1,10 +1,10 @@
 name:        chessIO
-version:     0.9.4.0
+version:     0.9.5.0
 github:      "mlang/chessIO"
 license:     BSD3
 author:      "Mario Lang"
 maintainer:  "mlang@blind.guru"
-copyright:   "2021 Mario Lang"
+copyright:   "2024 Mario Lang"
 
 synopsis:    Basic chess library
 category:    Game
