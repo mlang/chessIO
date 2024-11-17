@@ -660,18 +660,17 @@ bKscm = move E8 G8
 bQscm = move E8 C8
 
 attackedBy :: Color -> QuadBitboard -> Word64 -> Square -> Bool
-attackedBy White !qbb !occ (Sq sq) =
-  (unsafeIndex wPawnAttacks sq .&. QBB.wPawns qbb) .|.
-  (unsafeIndex knightAttacks sq .&. QBB.wKnights qbb) .|.
-  (diagonal sq occ .&. QBB.wDiagonals qbb) .|.
-  (orthogonal sq occ .&.   QBB.wOrthogonals qbb) .|.
-  (unsafeIndex kingAttacks sq .&. QBB.wKings qbb) /= 0
-attackedBy Black !qbb !occ (Sq sq) =
-  (unsafeIndex bPawnAttacks sq .&. QBB.bPawns qbb) .|.
-  (unsafeIndex knightAttacks sq .&. QBB.bKnights qbb) .|.
-  (diagonal sq occ .&. QBB.bDiagonals qbb) .|.
-  (orthogonal sq occ .&.   QBB.bOrthogonals qbb) .|.
-  (unsafeIndex kingAttacks sq .&. QBB.bKings qbb) /= 0
+attackedBy c !qbb !occ (Sq sq) =
+   (  pawnAttacks sq               .&. QBB.pawns qbb
+  .|. unsafeIndex knightAttacks sq .&. QBB.knights qbb
+  .|. diagonal sq occ              .&. QBB.diagonals qbb
+  .|. orthogonal sq occ            .&. QBB.orthogonals qbb
+  .|. unsafeIndex kingAttacks sq   .&. QBB.kings qbb
+   ) .&. us /= 0
+ where
+  (# !pawnAttacks, !us #) = case c of
+    White -> (# unsafeIndex wPawnAttacks, QBB.white qbb #)
+    Black -> (# unsafeIndex bPawnAttacks, QBB.black qbb #)
 
 {-# INLINE attackedBy #-}
 
@@ -720,7 +719,7 @@ bPawnAttacks = Vector.generate 64 $ \sq -> let b = bit sq in
   shiftNE b .|. shiftNW b
 
 orthogonal, diagonal :: Int -> Bitboard -> Bitboard
-orthogonal !sq !occ = mask .&. ((up .&. down) .|. (left .&. right)) where
+orthogonal !sq !occ = mask .&. (up .&. down .|. left .&. right) where
   mask = complement $ unsafeShiftL 1 sq
   occ' = occ .&. mask
   up = unsafeShiftR hFile $ (63 -) $ bitScanForward $
@@ -731,7 +730,7 @@ orthogonal !sq !occ = mask .&. ((up .&. down) .|. (left .&. right)) where
           unsafeShiftL rank1 sq .&. (occ' .|. hFile)
   left = unsafeShiftL rank1 $ bitScanReverse $
          unsafeShiftR rank8 (63 - sq) .&. (occ' .|. aFile)
-diagonal !sq !occ = mask .&. ((up .&. down) .|. (left .&. right)) where
+diagonal !sq !occ = mask .&. (up .&. down .|. left .&. right) where
   mask = complement $ unsafeShiftL 1 sq
   occ' = occ .&. mask
   up = unsafeShiftR a1h8 $ (63 -) $ bitScanForward $
