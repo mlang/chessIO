@@ -1,42 +1,7 @@
-{-# LANGUAGE PatternSynonyms #-}
-module Game.Chess.Polyglot.Hash (hashPosition) where
+module Game.Chess.Internal.HashConstants (pieceKeys, castleKeys, epKeys, turnKey) where
 
-import           Data.Bits                  (Bits (xor))
-import           Data.Coerce                (coerce)
-import           Data.Ix                    (Ix (index))
-import           Data.Maybe                 (mapMaybe)
 import           Data.Vector.Unboxed        (Vector, fromList, unsafeIndex)
 import           Data.Word                  (Word64)
-import           Game.Chess.Internal        (Castle (..), Color (..), PieceType,
-                                             Position (color), attackedByPawn,
-                                             castlingRights, enPassantSquare,
-                                             opponent, pattern King,
-                                             pattern Pawn, pieceAt)
-import           Game.Chess.Internal.Square (File (..), Square, file,
-                                             pattern A1, pattern H8)
-
-
-hashPosition :: Position -> Word64
-hashPosition pos = piece `xor` castling `xor` ep `xor` turn where
-  piece = foldr xor 0 $ mapMaybe f [A1 .. H8] where
-    f sq = (\(c, p) -> pieceKey (p, c, sq)) <$> pieceAt pos sq
-  castling = foldr (xor . castleKey) 0 $ castlingRights pos
-  ep = case enPassantSquare pos of
-    Just sq | attackedByPawn sq pos -> epKey (file sq)
-    _                               -> 0
-  turn = case color pos of
-    White -> turnKey
-    Black -> 0
-
-pieceKey :: (PieceType, Color, Square) -> Word64
-pieceKey = unsafeIndex pieceKeys . index ((Pawn,Black,A1),(King,White,H8))
-
-castleKey :: (Color, Castle) -> Word64
-castleKey (c, s) = unsafeIndex castleKeys $
-  index ((Black, Kingside), (White, Queenside)) (opponent c, s)
-
-epKey :: File -> Word64
-epKey = unsafeIndex epKeys . coerce
 
 pieceKeys, castleKeys, epKeys :: Vector Word64
 pieceKeys = fromList

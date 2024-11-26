@@ -36,14 +36,15 @@ import           Control.Lens.Iso                 (from)
 import           Control.Monad                    (when)
 import           Control.Monad.ST
 import           Data.Binary
-import           Data.Bits                        (Bits (bit, complement, testBit, unsafeShiftL, unsafeShiftR, xor, (.&.), (.|.)),
+import           Data.Bits                        (Bits (bit, complement, testBit, unsafeShiftL, unsafeShiftR, xor, zeroBits, (.&.), (.|.)),
                                                    FiniteBits (countLeadingZeros, countTrailingZeros))
 import           Data.Char                        (chr, ord)
+import           Data.Coerce                      (coerce)
 import           Data.Foldable                    (for_)
 import           Data.Hashable
-import           Data.Ix                          (Ix (inRange))
-import           Data.List                        (nub, sortOn)
-import           Data.Maybe                       (fromJust, listToMaybe)
+import           Data.Ix                          (Ix (inRange), index)
+import           Data.List                        (nub, sortOn, find)
+import           Data.Maybe                       (fromJust, listToMaybe, mapMaybe, fromMaybe)
 import           Data.Ord                         (Down (..))
 import           Data.STRef
 import           Data.String                      (IsString (..))
@@ -56,14 +57,19 @@ import qualified Data.Vector.Unboxed.Mutable      as VUM
 import           Foreign.Storable
 import           GHC.Generics                     (Generic)
 import           GHC.Stack                        (HasCallStack)
+import           Game.Chess.Internal.HashConstants as HC
 import           Game.Chess.Internal.QuadBitboard (QuadBitboard)
 import qualified Game.Chess.Internal.QuadBitboard as QBB
 import           Game.Chess.Internal.Square
 import           Language.Haskell.TH.Syntax       (Lift)
 import           Text.Read                        (readMaybe)
 
+
 ep :: Word64 -> Word64
 ep flags = flags .&. 0x0000ff0000ff0000
+
+castle :: Word64 -> Word64
+castle flags = flags .&. 0x9100000000000091
 
 {-# INLINE ep #-}
 
@@ -124,7 +130,10 @@ instance NFData Color
 instance Hashable Color
 
 pieceAt :: Position -> Square -> Maybe (Color, PieceType)
-pieceAt Position{qbb} sq = case qbb QBB.! sq of
+pieceAt Position{qbb} = pieceAt' qbb
+
+pieceAt' :: QuadBitboard -> Square -> Maybe (Color, PieceType)
+pieceAt' qbb sq = case qbb QBB.! sq of
   QBB.NoPiece -> Nothing
   nb          -> Just
     ( if testBit nb 0 then Black else White
@@ -135,6 +144,16 @@ opponent :: Color -> Color
 opponent White = Black
 opponent Black = White
 
+-- For {three/five}fold repetition checking. A pair of position key (zobrist hash)
+-- and the number of times this position has repeated.
+data RepetitionInfo = RepetitionInfo {
+  rKey   :: {-# UNPACK #-} !Word64
+, rCount :: {-# UNPACK #-} !Int
+} deriving (Generic, Lift, Show)
+
+instance Binary RepetitionInfo
+instance NFData RepetitionInfo
+
 data Position = Position {
   qbb           :: {-# UNPACK #-} !QuadBitboard
 , color         :: !Color
@@ -143,6 +162,10 @@ data Position = Position {
 , halfMoveClock :: {-# UNPACK #-} !Int
 , moveNumber    :: {-# UNPACK #-} !Int
   -- ^ number of the full move
+, key           :: {-# UNPACK #-} !Word64
+  -- ^ zobrist hash of this position
+, repetitionInfo :: ![RepetitionInfo]
+  -- ^ linked list of past position hashes + repetition counts
 } deriving (Generic, Lift)
 
 instance Binary Position
@@ -167,9 +190,43 @@ instance Hashable Position where
     `hashWithSalt` color
     `hashWithSalt` flags
 
-repetitions :: [Position] -> Maybe (Int, Position)
-repetitions xs = listToMaybe . sortOn (Down . fst) $ f <$> nub xs where
-  f x = (length . filter (== x) $ xs, x)
+epKey :: File -> Word64
+epKey = unsafeIndex HC.epKeys . coerce
+
+getPosBoardHash :: Position -> Word64
+getPosBoardHash pos = foldr xor 0 $ mapMaybe f [A1 .. H8] where
+    f sq = (\(c, p) -> pieceKey (p, c, sq)) <$> pieceAt pos sq
+
+getPosCastlingHash :: Position -> Word64
+getPosCastlingHash pos = foldr (xor . castleKey) 0 $ castlingRights pos
+
+getPosEpHash :: Position -> Word64
+getPosEpHash pos = case enPassantSquare pos of
+  Just sq | attackedByPawn sq pos -> epKey (file sq)
+  _                               -> 0
+
+getPosColorHash :: Position -> Word64
+getPosColorHash pos = case color pos of
+  White -> turnKey
+  Black -> 0
+
+hashPosition :: Position -> Word64
+hashPosition pos = piece `xor` castling `xor` ep `xor` turn
+  where
+    piece = getPosBoardHash pos
+    castling = getPosCastlingHash pos
+    ep = getPosEpHash pos
+    turn = getPosColorHash pos
+
+pieceKey :: (PieceType, Color, Square) -> Word64
+pieceKey = unsafeIndex HC.pieceKeys . index ((Pawn,Black,A1),(King,White,H8))
+
+castleKey :: (Color, Castle) -> Word64
+castleKey (c, s) = unsafeIndex HC.castleKeys $
+  index ((Black, Kingside), (White, Queenside)) (opponent c, s)
+
+repetitions :: Position -> Int
+repetitions pos = getRepetitionCount (key pos) (repetitionInfo pos) + 1
 
 instance Show Position where
   show p = '"' : toFEN p <> ['"']
@@ -179,19 +236,26 @@ insufficientMaterial = QBB.insufficientMaterial . qbb
 
 -- | Construct a position from Forsyth-Edwards-Notation.
 fromFEN :: String -> Maybe Position
-fromFEN fen
+fromFEN fen = (\po -> po {key=hashPosition po}) <$> fromFEN' fen
+
+fromFEN' :: String -> Maybe Position
+fromFEN' fen
   | length parts == 6
   = Position <$> pure (fromString (parts !! 0))
              <*> readColor (parts !! 1)
              <*> readFlags (parts !! 2) (parts !! 3)
              <*> readMaybe (parts !! 4)
              <*> readMaybe (parts !! 5)
+             <*> pure 0 -- Caller fromFEN will set the right hash
+             <*> pure []
   | length parts == 4
   = Position <$> pure (fromString (parts !! 0))
              <*> readColor (parts !! 1)
              <*> readFlags (parts !! 2) (parts !! 3)
              <*> pure 0
              <*> pure 1
+             <*> pure 0
+             <*> pure []
   | otherwise = Nothing
  where
   parts = words fen
@@ -389,20 +453,62 @@ doPly p m
   | m `Vector.elem` legalPlies' p = unsafeDoPly p m
   | otherwise        = error "Game.Chess.doPly: Illegal move"
 
+getRepetitionCount :: Word64 -> [RepetitionInfo] -> Int
+getRepetitionCount key = maybe 0 rCount . find ((== key) . rKey)
+
 -- | An unsafe version of 'doPly'.  Only use this if you are sure the given move
 -- can be applied to the position.  This is useful if the move has been generated
 -- by the 'legalPlies' function.
 unsafeDoPly :: Position -> Ply -> Position
-unsafeDoPly pos@Position{color, halfMoveClock, moveNumber} m =
-  (unsafeDoPly' pos m)
-  { color = opponent color
-  , halfMoveClock = if isCapture pos m || isPawnPush pos m
+unsafeDoPly pos@Position{color, halfMoveClock, moveNumber, key, repetitionInfo} m =
+  let pos'  = (unsafeDoPly' pos m) {color = opponent color}
+   in pos' {
+    halfMoveClock = if isCapture pos m || isPawnPush pos m
                     then 0
                     else halfMoveClock + 1
   , moveNumber = if color == Black
                  then moveNumber + 1
                  else moveNumber
+  , key = key `xor` getPlyHash pos pos'
+  , repetitionInfo = if isCapture pos m || isPawnPush pos m
+      then []
+      else let ri = RepetitionInfo {
+        rKey = key,
+        rCount = getRepetitionCount key repetitionInfo + 1
+      } in ri:repetitionInfo
   }
+
+-- | Calculates the difference in board state across a ply, by comparing the pre and post qbb/flags state.
+-- Then returns the Zobrist hash of that difference.
+getPlyHash :: Position -> Position -> Word64
+getPlyHash pos@Position{qbb, flags} pos'@Position{qbb=qbb', flags=flags'} =
+  let !flagsDiff = flags `xor` flags'
+      !castleHash =
+        if castle flagsDiff == zeroBits then 0
+          -- Something may have changed in the castling state, but we can't be sure just from the diff between
+          -- pre and post flags. The reason is that it is possible to lose e.g. kingside castling rights in two ways:
+          -- by moving one's king and by moving one's rook. Both of these get represented as separate bits in the flags
+          -- array. If we detected the rook move as a negation of kingside castling rights, and then the king move
+          -- as another negation, the hashes of these two would cancel out -- but actually loss of castling rights is idempotent.
+          -- So to be sure, we recompute the pre and post castling rights and see what the changes are.
+          -- Since xor is its own negation we can just XOR the pre and post castling rights hashes together to get any changes.
+          else foldl (\h r -> h `xor` castleKey r) 0 $ castlingRights pos ++ castlingRights pos'
+      !epHash = if ep flagsDiff == zeroBits then 0 else getPosEpHash pos `xor` getPosEpHash pos'
+      !boardHash =
+        -- XOR together the pre and post QBB. Any 1 bits indicate squares that changed. Because of captures we can't
+        -- just treat these 1 values as the difference in pieces -- e.g. if a queen captures a rook, qbb xor qbb'
+        -- will reflect (Queen xor Rook) which may not code to a valid piece/piece hash.
+        -- So instead, just use the xor results to locate which squares changed, then read the pre and post values
+        -- of those squares to compute the hashes.
+        let boardDiff = qbb <> qbb'
+            hashSquare pos sq = case pieceAt pos sq of
+              Just (c, p) -> pieceKey (p, c, sq)
+              Nothing -> 0
+        in if boardDiff == mempty
+          then 0
+          else foldl (\h sq -> h `xor` hashSquare pos sq `xor` hashSquare pos' sq) 0 $ getChangedSquares boardDiff
+
+  in castleHash `xor` epHash `xor` boardHash `xor` turnKey
 
 unsafeDoPly' :: Position -> Ply -> Position
 unsafeDoPly' pos@Position{qbb, flags} m@(unpack -> (src, dst, promo))
@@ -625,7 +731,7 @@ castlingRights Position{flags} = wks . wqs . bks . bqs $ [] where
          | otherwise              = xs
 
 enPassantSquare :: Position -> Maybe Square
-enPassantSquare Position{flags} = case ep flags of
+enPassantSquare pos@Position{flags} = case ep flags of
   0 -> Nothing
   x -> Just . Sq . bitScanForward $ x
 
@@ -755,3 +861,12 @@ testMask :: Bits a => a -> a -> Bool
 testMask a b = a .&. b == b
 
 {-# INLINE testMask #-}
+
+getChangedSquares :: QuadBitboard -> [Square]
+getChangedSquares !qbb =
+  let loop 0 acc = acc
+      loop !occ acc =
+        let !n = countTrailingZeros occ
+            !mask = complement $ 1 `unsafeShiftL` n
+          in loop (occ .&. mask) (Sq n:acc)
+    in loop (QBB.anyBits qbb) []
