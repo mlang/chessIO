@@ -163,12 +163,12 @@ loop = do
         b <- lift $ gets book
         pos <- currentPosition e
         let plies = _bePly <$> bookPlies b pos
-        if not . null $ plies
-          then do
-            addPly e (head plies)
+        case plies of
+          (ply:_) -> do
+            addPly e ply
             outputBoard
             searchBestMove
-          else pure ()
+          _ -> pure ()
         loop
       | "midgame" == input -> do
         void $ setPosition e startpos []

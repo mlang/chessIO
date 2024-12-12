@@ -37,6 +37,7 @@ import           Data.FileEmbed             (embedFile)
 import           Data.Foldable              (fold)
 import           Data.Hashable              (Hashable)
 import           Data.List                  (sort)
+import qualified Data.List.NonEmpty         as NonEmpty
 import           Data.Ord                   (Down (Down))
 import           Data.String                (IsString (fromString))
 import           Data.Tree                  (Tree (Node), foldTree)
@@ -45,8 +46,6 @@ import qualified Data.Vector.Storable       as VS
 import           Data.Word                  (Word16, Word32, Word64, Word8)
 import           Foreign.ForeignPtr         (castForeignPtr, plusForeignPtr)
 import           Foreign.Storable           (Storable (alignment, peek, poke, pokeElemOff, sizeOf))
-import           GHC.Generics               (Generic)
-import           GHC.Ptr                    (Ptr, castPtr, plusPtr)
 import           Game.Chess.Internal        (Color (..), Ply (..),
                                              Position (color, halfMoveClock),
                                              bKscm, bQscm, canCastleKingside,
@@ -57,6 +56,8 @@ import           Game.Chess.Internal.Square
 import           Game.Chess.PGN             (Outcome (Undecided), PGN (..),
                                              gameFromForest, weightedForest)
 import           Game.Chess.Polyglot.Hash   (hashPosition)
+import           GHC.Generics               (Generic)
+import           GHC.Ptr                    (Ptr, castPtr, plusPtr)
 import           System.Random              (RandomGen)
 
 data BookEntry a = BE {
@@ -153,11 +154,11 @@ makeBook = fromList . concatMap (foldTree f . annot startpos) . weightedForest
     = concat xs
 
 bookForest :: PolyglotBook -> Position -> [Tree Ply]
-bookForest b = (fmap . fmap) (snd . head) . forest [] where
-  forest pls p = tree pls p <$> filter (not . seen pls) (plies p)
-  tree pls p (pl, p') = Node pls' $ forest pls' p' where pls' = (p, pl) : pls
+bookForest b = forest [] where
+  forest ps p = tree ps p <$> filter (not . seen ps) (plies p)
+  tree ps p (pl, p') = Node pl $ forest (p:ps) p'
   plies p = f <$> bookPlies b p where f (_bePly -> pl) = (pl, doPly p pl)
-  seen pls (_, p') = p' `elem` map fst pls
+  seen ps (_, p') = p' `elem` ps
 
 -- | Pick a random ply from the book.
 bookPly :: RandomGen g => PolyglotBook -> Position -> Maybe (Rand g Ply)

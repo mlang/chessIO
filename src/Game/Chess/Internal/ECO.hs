@@ -112,9 +112,11 @@ fromPGN' (PGN games) = map mkCO games where
     coCode = fromMaybe "" $ lt "ECO"
     coName = fromMaybe "" $ lt "Opening"
     coVariation = lt "Variation"
-    coPlies = Unboxed.fromList . head . concatMap (foldTree g) $ _cgForest where
+    coPlies = Unboxed.fromList . mainline . concatMap (foldTree g) $ _cgForest where
       g a [] = [[_annPly a]]
       g a xs = (_annPly a :) <$> fold xs
+    mainline [] = []
+    mainline (main:_) = main
 
 opening :: Parser Opening
 opening = CO <$> lexeme code <*> lexeme var <*> pure Nothing <*> lexeme (plies startpos)

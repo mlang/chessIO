@@ -51,20 +51,21 @@ import           Data.Bits                   (Bits (clearBit, complement, popCou
 import           Data.Char                   (ord, toLower)
 import           Data.Hashable
 import           Data.Ix                     (Ix (inRange))
-import           Data.List                   (groupBy, intercalate)
+import           Data.List                   (intercalate)
+import qualified Data.List.NonEmpty          as NonEmpty
 import           Data.String                 (IsString (..))
 import qualified Data.Vector.Generic         as G
 import qualified Data.Vector.Generic.Mutable as M
 import           Data.Vector.Unboxed         (MVector, Unbox, Vector)
 import           Data.Word                   (Word64, Word8)
 import           Foreign.Storable
+import           Game.Chess.Internal.Square
 import           GHC.Enum                    (boundedEnumFrom,
                                               boundedEnumFromThen, predError,
                                               succError, toEnumError)
 import           GHC.Exts                    (IsList (Item, fromList, toList))
 import           GHC.Generics                (Generic)
 import           GHC.Ptr                     (castPtr, plusPtr)
-import           Game.Chess.Internal.Square
 import           Language.Haskell.TH.Syntax  (Lift)
 import           Numeric                     (showHex)
 
@@ -334,9 +335,9 @@ instance Show QuadBitboard where
 
 toString :: QuadBitboard -> String
 toString qbb = intercalate "/" $ rnk <$> [Rank8, Rank7 .. Rank1] where
-  rnk r = concatMap countEmpty . groupBy spaces $ charAt r <$> [FileA .. FileH]
-  countEmpty xs | head xs == spc = show $ length xs
-                | otherwise      = xs
+  rnk r = concatMap countEmpty . NonEmpty.groupBy spaces $ charAt r <$> [FileA .. FileH]
+  countEmpty xs | NonEmpty.head xs == spc = show $ length xs
+                | otherwise               = NonEmpty.toList xs
   spaces x y = x == spc && x == y
   charAt r f = maybe spc (if odd nb then toLower else id) $
     lookup (nb `div` 2) $ zip [1..] "PNBRQK"

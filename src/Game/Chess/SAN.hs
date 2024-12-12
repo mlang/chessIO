@@ -242,11 +242,11 @@ varToSAN :: (MonoFoldable variation, Element variation ~ Ply, IsString string)
          => Position -> variation -> string
 varToSAN p = fromString . go p . otoList where
   go _ [] = ""
-  go pos plies
-    | color pos == Black && length plies == 1
-    = show (moveNumber pos) <> "..." <> toSAN pos (head plies)
+  go pos plies@(ply:plies')
+    | color pos == Black && plies' == []
+    = show (moveNumber pos) <> "..." <> toSAN pos ply
     | color pos == Black
-    = show (moveNumber pos) <> "..." <> toSAN pos (head plies) <> " " <> fromWhite (doPly pos (head plies)) (tail plies)
+    = show (moveNumber pos) <> "..." <> toSAN pos ply <> " " <> fromWhite (doPly pos ply) plies'
     | otherwise
     = fromWhite pos plies
   fromWhite pos = unwords . concat
