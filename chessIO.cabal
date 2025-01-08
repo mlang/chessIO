@@ -159,13 +159,13 @@ executable polyplay
     , vector-instances
   default-language: Haskell2010
 
-test-suite perft
+test-suite tests
   type: exitcode-stdio-1.0
-  main-is: Perft.hs
+  main-is: tests.hs
   other-modules:
       Paths_chessIO
   hs-source-dirs:
-      test/perft
+      test
   ghc-options: -O2 -threaded -rtsopts "-with-rtsopts=-N -s"
   build-depends:
       MonadRandom
@@ -176,48 +176,6 @@ test-suite perft
     , chessIO
     , containers
     , deepseq
-    , directory
-    , extra
-    , file-embed
-    , hashable
-    , lens
-    , megaparsec >=9.0
-    , mono-traversable
-    , o-clock
-    , parallel
-    , prettyprinter >=1.7.0
-    , process
-    , random
-    , stm
-    , template-haskell >=2.9.0.0
-    , text
-    , th-compat >=0.1.2
-    , th-lift-instances
-    , time
-    , unordered-containers
-    , vector
-    , vector-binary-instances
-    , vector-instances
-  default-language: Haskell2010
-
-test-suite polyglot
-  type: exitcode-stdio-1.0
-  main-is: Polyglot.hs
-  other-modules:
-      Paths_chessIO
-  hs-source-dirs:
-      test/polyglot
-  ghc-options: -O2
-  build-depends:
-      HUnit
-    , MonadRandom
-    , attoparsec
-    , base >=4.10 && <5
-    , binary
-    , bytestring
-    , chessIO
-    , containers
-    , deepseq
     , extra
     , file-embed
     , hashable
@@ -229,6 +187,8 @@ test-suite polyglot
     , process
     , random
     , stm
+    , tasty
+    , tasty-hunit
     , template-haskell >=2.9.0.0
     , text
     , th-compat >=0.1.2

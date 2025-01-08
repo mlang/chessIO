@@ -89,18 +89,11 @@ executables:
     - time
 
 tests:
-  perft:
-    main:                Perft.hs
-    source-dirs:  test/perft
+  tests:
+    main: tests.hs
+    source-dirs:  test
     ghc-options: -threaded -rtsopts "-with-rtsopts=-N -s"
     dependencies:
     - chessIO
-    - directory
-    - parallel
-    - time
-  polyglot:
-    main:         Polyglot.hs
-    source-dirs:  test/polyglot
-    dependencies:
-    - HUnit
-    - chessIO
+    - tasty
+    - tasty-hunit
