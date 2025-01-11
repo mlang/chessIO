@@ -21,9 +21,9 @@ polyglot = testGroup "Polyglot" [
 
 perftSuite :: TestTree
 perftSuite = testGroup "PerftSuite" $ map f info where
-  f (fen, ds) = testGroup fen $ zipWith g [1..] ds where
-    g n d = testCase ("Depth=" ++ show n ++ ", Nodes=" ++ show d) $
-            perft n <$> fromFEN fen @?= Just d
+  f (fen, ns) = testGroup fen $ zipWith g [1..] ns where
+    g d n = testCase ("Depth=" ++ show d ++ ", Nodes=" ++ show n) $
+            perft d <$> fromFEN fen @?= Just n
   info = [
     ("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", [20, 400, 8902, 197281, 4865609, 119060324]),
     ("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1", [48, 2039, 97862, 4085603, 193690690]),
@@ -158,4 +158,4 @@ type Nodes = Int
 
 perft :: Depth -> Position -> Nodes
 perft 1 p = Vector.length $ legalPlies' p
-perft n p = Vector.sum $ Vector.map (perft (pred n) . unsafeDoPly p) (legalPlies' p)
+perft d p = Vector.sum $ Vector.map (perft (pred d) . unsafeDoPly p) (legalPlies' p)
