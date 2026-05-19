@@ -1,5 +1,10 @@
 # Releases
 
+## chessIO 1.0.0.0
+
+- Update internal book
+- Fix some GHC warnings
+
 ## chessIO 0.9.3.1
 
 - Update internal book
