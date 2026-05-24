@@ -33,7 +33,7 @@ module Game.Chess.Internal where
 import           Control.DeepSeq
 import           Control.Lens                     (view)
 import           Control.Lens.Iso                 (from)
-import           Control.Monad                    (when)
+import           Control.Monad                    (when, guard)
 import           Control.Monad.ST
 import           Data.Binary
 import           Data.Bits                        (Bits (bit, complement, testBit, unsafeShiftL, unsafeShiftR, xor, (.&.), (.|.)),
@@ -350,9 +350,26 @@ toUCI (unpack -> (src, dst, promo)) = coord src <> coord dst <> p where
     Just Knight -> "n"
     _           -> ""
 
+-- | Castling in the UCI format can sometimes be represented as king capturing
+-- its own rook. UCI specifies this for Chess960, but e.g. Lichess seems to do
+-- this even for normal, non-960 variants.
+--
+-- So when a move seems like it's illegal, we check if it's just a different
+-- representation of castling.
+correctUciCastle :: Position -> Ply -> Maybe Ply
+correctUciCastle pos m = do
+  guard $ pieceAt pos (plySource m) == Just (color pos, King)
+  case (plySource m, plyTarget m) of
+    (E1, H1) -> Just wKscm
+    (E1, A1) -> Just wQscm
+    (E8, H8) -> Just bKscm
+    (E8, A8) -> Just bQscm
+    _        -> Nothing
+
 -- | Validate that a certain move is legal in the given position.
 relativeTo :: Position -> Ply -> Maybe Ply
 relativeTo pos m | m `Vector.elem` legalPlies' pos = Just m
+                 | Just m' <- correctUciCastle pos m, m' `Vector.elem` legalPlies' pos = Just m'
                  | otherwise = Nothing
 
 shiftN, shiftNN, shiftNNE, shiftNE, shiftENE, shiftE, shiftESE, shiftSE, shiftSSE, shiftS, shiftSS, shiftSSW, shiftSW, shiftWSW, shiftW, shiftWNW, shiftNW, shiftNNW :: Bitboard -> Bitboard
